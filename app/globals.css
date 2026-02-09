@@ -1,0 +1,80 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: #F0F1F5;
+  --color-foreground: #0C0033;
+  --color-card: #FFFFFF;
+  --color-card-foreground: #1a1a2e;
+  --color-popover: #FFFFFF;
+  --color-popover-foreground: #1a1a2e;
+  --color-primary: #10069F;
+  --color-primary-foreground: #FFFFFF;
+  --color-secondary: #E8E8EE;
+  --color-secondary-foreground: #0C0033;
+  --color-muted: #E8E8EE;
+  --color-muted-foreground: #64748b;
+  --color-accent: #E0E1EC;
+  --color-accent-foreground: #0C0033;
+  --color-destructive: #D32F2F;
+  --color-destructive-foreground: #FFFFFF;
+  --color-border: #D0D1DC;
+  --color-input: #D0D1DC;
+  --color-ring: #10069F;
+  --color-chart-1: #10069F;
+  --color-chart-2: #1565C0;
+  --color-chart-3: #2E7D32;
+  --color-chart-4: #EF6C00;
+  --color-chart-5: #C62828;
+  --color-sidebar: #0C0033;
+  --color-sidebar-foreground: #E0E0F0;
+  --color-sidebar-primary: #10069F;
+  --color-sidebar-primary-foreground: #FFFFFF;
+  --color-sidebar-accent: rgba(255, 255, 255, 0.08);
+  --color-sidebar-accent-foreground: #FFFFFF;
+  --color-sidebar-border: rgba(255, 255, 255, 0.1);
+  --color-sidebar-ring: #10069F;
+  --radius: 0.625rem;
+  --color-rr-navy: #10069F;
+  --color-rr-dark: #0C0033;
+  --color-rr-silver: #C0C0C0;
+  --color-rr-light: #E8E8EE;
+  --color-rr-gold: #B8860B;
+  --color-rr-red: #D32F2F;
+  --color-rr-green: #2E7D32;
+  --color-rr-blue2: #1565C0;
+  --color-rr-amber: #F9A825;
+  --font-sans: var(--font-inter);
+}
+
+/*
+  The default page background is --color-background.
+  The dark theme isn't used here as this is a corporate dashboard.
+*/
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
+/* Scrollbar styling for the data tables */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #C0C0C0;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #999;
+}
