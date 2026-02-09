@@ -1,0 +1,10 @@
+{"t":0,"agent":"a68db73","agent_type":"unknown","event":"agent_stop","success":true}
+{"t":0,"agent":"system","event":"keyword_detected","keyword":"ultrapilot"}
+{"t":0,"agent":"system","event":"mode_change","mode_from":"none","mode_to":"ultrapilot"}
+{"t":0,"agent":"a4fdeb0","agent_type":"executor","event":"agent_start","parent_mode":"ultrapilot"}
+{"t":0,"agent":"a6c30b3","agent_type":"executor-high","event":"agent_start","parent_mode":"ultrapilot"}
+{"t":0,"agent":"a4fdeb0","agent_type":"executor","event":"agent_stop","success":true,"duration_ms":69105}
+{"t":0,"agent":"a6c30b3","agent_type":"executor-high","event":"agent_stop","success":true,"duration_ms":324583}
+{"t":0,"agent":"af4e51c","agent_type":"architect-medium","event":"agent_start","parent_mode":"ultrapilot"}
+{"t":0,"agent":"af4e51c","agent_type":"architect-medium","event":"agent_stop","success":true,"duration_ms":60453}
+{"t":0,"agent":"system","event":"skill_invoked","skill_name":"oh-my-claudecode:cancel"}

@@ -1,0 +1,10 @@
+{
+  "active": false,
+  "current_phase": "completed",
+  "completed_at": "2026-02-06T13:25:00Z",
+  "_meta": {
+    "mode": "ultrapilot",
+    "updatedAt": "2026-02-06T13:22:24.881Z",
+    "updatedBy": "state_write_tool"
+  }
+}
