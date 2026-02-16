@@ -182,14 +182,21 @@ var RRAIChat = (() => {
             const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 
             if (!response.ok) {
-                const err = await response.json();
-                _log('error', `API error (${response.status}): ${err.error || 'Unknown'}`);
-                throw new Error(err.error || 'Chat request failed');
+                const err = await response.json().catch(() => ({}));
+                const errMsg = err.error || `Server Error (${response.status})`;
+                _log('error', `API error: ${errMsg}`);
+                throw new Error(errMsg);
             }
 
             _log('receive', `Response received in ${elapsed}s — parsing...`);
 
-            const data = await response.json();
+            let data;
+            try {
+                data = await response.json();
+            } catch (e) {
+                console.error("JSON Parse Error:", e);
+                throw new Error("Connection Error: The server took too long to respond or returned an invalid response. Please try again.");
+            }
 
             _log('render', `Rendering: ${data.content?.length || 0} chars, ${data.charts?.length || 0} chart(s), ${data.emails?.length || 0} email(s)`);
 

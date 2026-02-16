@@ -15,8 +15,11 @@ from datetime import datetime
 # ─────────────────────────────────────────────────────────────
 
 OPENROUTER_API_KEY = "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"
-OPENROUTER_MODEL = "openai/gpt-oss-120b:free"
+OPENROUTER_MODEL = "qwen/qwen3-vl-235b-a22b-thinking" # Default for OpenRouter fallback
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+
+DIGITALOCEAN_API_KEY = "sk-do-XHpuIEuOXTMiSJKC-E-C-ZFdY_-MhO3tk9vYq7G77y2Ifq7102jwkvWoGY"
+DIGITALOCEAN_URL = "https://inference.do-ai.run/v1/chat/completions" 
 
 MAX_HISTORY_MESSAGES = 20  # Keep last N messages in context
 
@@ -193,9 +196,12 @@ def build_system_prompt(parsed_data_dict: dict) -> str:
 
 def call_openrouter(messages: list, system_prompt: str, model: str = None) -> dict:
     """
-    Call OpenRouter API with the given messages and system prompt.
+    Call OpenRouter or DigitalOcean API depending on the model.
     Returns dict with 'content', 'charts', 'emails', 'error'.
     """
+    if model and model.startswith("digitalocean/"):
+        return call_digitalocean(messages, system_prompt, model.replace("digitalocean/", ""))
+        
     api_messages = [{"role": "system", "content": system_prompt}]
 
     # Add conversation history (limited)
@@ -253,6 +259,57 @@ def call_openrouter(messages: list, system_prompt: str, model: str = None) -> di
         return {"content": None, "error": "Could not connect to AI service. Check internet connection."}
     except Exception as e:
         return {"content": None, "error": f"Unexpected error: {str(e)}"}
+
+
+def call_digitalocean(messages: list, system_prompt: str, model: str) -> dict:
+    """
+    Call Digital Ocean GenAI API.
+    """
+    api_messages = [{"role": "system", "content": system_prompt}]
+    
+    # Add conversation history
+    for msg in messages[-MAX_HISTORY_MESSAGES:]:
+        api_messages.append({
+            "role": msg.get("role", "user"),
+            "content": msg.get("content", ""),
+        })
+
+    headers = {
+        "Authorization": f"Bearer {DIGITALOCEAN_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    
+    # Map model names if necessary, otherwise use passed model
+    # For digitalocean/openai-gpt-oss-120b, we receive "openai-gpt-oss-120b" here
+    
+    payload = {
+        "model": model, 
+        "messages": api_messages,
+        "max_tokens": 8192,
+        "temperature": 0.3,
+    }
+
+    try:
+        response = requests.post(
+            DIGITALOCEAN_URL,
+            headers=headers,
+            json=payload,
+            timeout=120,
+        )
+
+        if response.status_code != 200:
+            return {"content": None, "error": f"DigitalOcean API error ({response.status_code}): {response.text[:200]}"}
+
+        data = response.json()
+        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+
+        if not content:
+            return {"content": None, "error": "Empty response from DigitalOcean"}
+
+        return parse_ai_response(content)
+
+    except Exception as e:
+        return {"content": None, "error": f"DigitalOcean error: {str(e)}"}
 
 
 # ─────────────────────────────────────────────────────────────
