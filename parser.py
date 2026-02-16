@@ -508,9 +508,12 @@ def parse_soa_workbook(file) -> dict:
             if record["Days Late"] is None and record["Due Date"] is not None:
                 try:
                     due = record["Due Date"]
-                    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-                    if due < today:
-                        record["Days Late"] = (today - due).days
+                    # Use report date if available, else today
+                    anchor_date = metadata.get("report_date") or datetime.now()
+                    anchor_date = anchor_date.replace(hour=0, minute=0, second=0, microsecond=0)
+                    
+                    if due < anchor_date:
+                        record["Days Late"] = (anchor_date - due).days
                     else:
                         record["Days Late"] = 0
                 except Exception:

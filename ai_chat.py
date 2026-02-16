@@ -148,9 +148,14 @@ def build_system_prompt(parsed_data_dict: dict) -> str:
             prompt_parts.append(f"  Overdue items: {len(overdue)}")
             if overdue:
                 overdue_amt = sum(i.get("Amount", 0) for i in overdue)
-                avg_days = sum(i.get("Days Late", 0) for i in overdue) / len(overdue)
-                prompt_parts.append(f"  Total overdue amount: {overdue_amt:.2f}")
-                prompt_parts.append(f"  Average days late (overdue items): {avg_days:.1f}")
+                
+                # Use metadata average if available, else compute
+                avg_days_meta = data.get("metadata", {}).get("avg_days_late")
+                if avg_days_meta:
+                     prompt_parts.append(f"  Average days late (overdue items): {avg_days_meta} (Official from Metadata)")
+                else:
+                    avg_days = sum(i.get("Days Late", 0) for i in overdue) / len(overdue)
+                    prompt_parts.append(f"  Average days late (overdue items): {avg_days:.1f} (Calculated)")
 
             # Aging breakdown
             aging = {}

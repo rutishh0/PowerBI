@@ -13,6 +13,7 @@ import io
 import os
 import uuid
 import math
+import base64
 from datetime import datetime
 from collections import OrderedDict
 
@@ -98,41 +99,63 @@ def logout():
 @app.route("/api/upload", methods=["POST"])
 @login_required
 def upload_files():
-    """Accept one or more .xlsx files, parse them, return JSON data."""
-    if "files" not in request.files:
-        return jsonify({"error": "No files provided"}), 400
+    """Accept one or more .xlsx files (Multipart or Base64 JSON), parse them, return JSON data."""
+    files_to_process = []
+    
+    # Check for JSON Base64 upload (NetSkope Bypass)
+    if request.is_json:
+        data = request.get_json()
+        if "files" in data:
+            for f in data["files"]:
+                fname = f.get("name")
+                fdata = f.get("data") # data:application/vnd...;base64,....
+                if fname and fdata:
+                    try:
+                        # Strip header if present
+                        if "," in fdata:
+                            _, b64data = fdata.split(",", 1)
+                        else:
+                            b64data = fdata
+                        file_bytes = base64.b64decode(b64data)
+                        files_to_process.append({"filename": fname, "bytes": file_bytes})
+                    except Exception:
+                        pass # Skip malformed
 
-    files = request.files.getlist("files")
-    if not files or all(f.filename == "" for f in files):
-        return jsonify({"error": "No files selected"}), 400
+    # Fallback to standard Multipart upload
+    if not files_to_process and "files" in request.files:
+         for f in request.files.getlist("files"):
+            if f.filename:
+                files_to_process.append({"filename": f.filename, "bytes": f.read()})
+
+    if not files_to_process:
+        return jsonify({"error": "No files provided"}), 400
 
     sid = _get_session_id()
     results = {}
     errors = []
 
-    for f in files:
-        if not f.filename:
-            continue
-        if not f.filename.lower().endswith((".xlsx", ".xls")):
-            errors.append({"file": f.filename, "error": "Unsupported file type. Only .xlsx files are accepted."})
-            continue
-
+    for f in files_to_process:
+        fname = f["filename"]
+        if not fname.lower().endswith((".xlsx", ".xls")):
+             errors.append({"file": fname, "error": "Unsupported file type. Only .xlsx files are accepted."})
+             continue
+        
         try:
-            file_bytes = f.read()
+            file_bytes = f["bytes"]
             buf = io.BytesIO(file_bytes)
             parsed = parse_soa_workbook(buf)
             serialized = serialize_parsed_data(parsed)
-            results[f.filename] = serialized
+            results[fname] = serialized
 
-            # Store raw parsed data for PDF export
+            # Store raw parsed data (byte ref)
             if sid not in _parsed_store:
                 _parsed_store[sid] = {}
-            _parsed_store[sid][f.filename] = {
+            _parsed_store[sid][fname] = {
                 "parsed": parsed,
                 "file_bytes": file_bytes,
             }
         except Exception as e:
-            errors.append({"file": f.filename, "error": str(e)})
+            errors.append({"file": fname, "error": str(e)})
 
     if not results and errors:
         return jsonify({"error": "All files failed to parse", "details": errors}), 400
