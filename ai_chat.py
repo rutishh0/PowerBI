@@ -191,7 +191,7 @@ def build_system_prompt(parsed_data_dict: dict) -> str:
 # OPENROUTER API CALL
 # ─────────────────────────────────────────────────────────────
 
-def call_openrouter(messages: list, system_prompt: str) -> dict:
+def call_openrouter(messages: list, system_prompt: str, model: str = None) -> dict:
     """
     Call OpenRouter API with the given messages and system prompt.
     Returns dict with 'content', 'charts', 'emails', 'error'.
@@ -213,7 +213,7 @@ def call_openrouter(messages: list, system_prompt: str) -> dict:
     }
 
     payload = {
-        "model": OPENROUTER_MODEL,
+        "model": model if model else OPENROUTER_MODEL,
         "messages": api_messages,
         "max_tokens": 8192,
         "temperature": 0.3,  # Low temperature for factual accuracy

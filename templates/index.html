@@ -338,6 +338,14 @@
                         <i data-lucide="bot"></i>
                     </div>
                     <h2 class="ai-welcome-title">AI Data Assistant</h2>
+
+                    <div class="ai-model-selector-container" style="margin-bottom: 2rem;">
+                        <select id="aiModelSelector" class="ai-model-select">
+                            <option value="openai/gpt-oss-120b:free">GPT OSS 120b (Default)</option>
+                            <option value="qwen/qwen3-vl-235b-a22b-thinking">Qwen 3 VL 235B (Thinking)</option>
+                        </select>
+                    </div>
+
                     <p class="ai-welcome-desc">
                         Ask me anything about your Statement of Account data. I can analyze trends,
                         draft emails, create charts, and generate reports &mdash; all grounded in your uploaded data.

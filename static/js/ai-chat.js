@@ -166,13 +166,17 @@ var RRAIChat = (() => {
         const startTime = Date.now();
         _startTimer(startTime);
 
+        // Get selected model
+        const modelSelect = $('aiModelSelector');
+        const model = modelSelect ? modelSelect.value : null;
+
         try {
             _log('api', 'POST /api/chat — connecting to OpenRouter AI...');
 
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message }),
+                body: JSON.stringify({ message, model }),
             });
 
             const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);

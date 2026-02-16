@@ -189,6 +189,7 @@ def chat():
 
     data = request.get_json(silent=True) or {}
     user_message = data.get("message", "").strip()
+    model_choice = data.get("model", None)
 
     if not user_message:
         return jsonify({"error": "No message provided"}), 400
@@ -208,7 +209,7 @@ def chat():
     _chat_history[sid].append({"role": "user", "content": user_message})
 
     # Call OpenRouter
-    result = call_openrouter(_chat_history[sid], system_prompt)
+    result = call_openrouter(_chat_history[sid], system_prompt, model=model_choice)
 
     if result.get("error"):
         # Remove the user message from history on error

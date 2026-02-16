@@ -119,7 +119,6 @@ body {
     color: var(--text-primary);
     line-height: 1.6;
     overflow-x: hidden;
-    display: flex;
     min-height: 100vh;
 }
 
@@ -1979,6 +1978,40 @@ strong {
 
 
 /* ─── Quick Actions ─── */
+
+.ai-model-selector-container {
+    position: relative;
+    display: inline-block;
+}
+
+.ai-model-select {
+    appearance: none;
+    background: var(--surface-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-full);
+    padding: var(--space-2) var(--space-8) var(--space-2) var(--space-4);
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    box-shadow: var(--shadow-sm);
+}
+
+.ai-model-select:hover {
+    border-color: var(--rr-navy);
+    box-shadow: var(--shadow-md);
+}
+
+.ai-model-select:focus {
+    outline: none;
+    border-color: var(--rr-navy);
+    box-shadow: 0 0 0 3px rgba(var(--rr-navy-rgb), 0.1);
+}
 
 .ai-quick-actions {
     display: grid;
