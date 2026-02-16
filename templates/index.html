@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rolls-Royce Civil Aerospace &middot; SOA Dashboard</title>
+    <title>Rolls-Royce Civil Aerospace &middot; Financial Dashboard</title>
     <link rel="icon"
         href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✈</text></svg>">
 
@@ -83,6 +83,7 @@
                     </button>
                     <button class="view-pill" data-view="ai">
                         <i data-lucide="bot"></i> AI Assistant
+                        <span class="badge-experimental">(Experimental)</span>
                     </button>
                 </div>
             </div>
@@ -138,7 +139,7 @@
 
             <!-- Sidebar Footer -->
             <div class="sidebar-footer">
-                <p>Statement of Account Dashboard</p>
+                <p>Financial Dashboard</p>
                 <p class="sidebar-footer-sub">Finance & Receivables</p>
             </div>
         </div>
@@ -151,7 +152,7 @@
         <header class="dashboard-header" id="dashboardHeader">
             <div class="header-content">
                 <div class="header-left">
-                    <h1 class="header-title">Statement of Account Dashboard</h1>
+                    <h1 class="header-title">Financial Dashboard</h1>
                     <p class="header-subtitle">Rolls-Royce Civil Aerospace &mdash; Finance & Receivables</p>
                 </div>
                 <div class="header-right">
@@ -179,15 +180,14 @@
                                 stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
                         </svg>
                     </div>
-                    <h2 class="welcome-title">Welcome to the RR SOA Dashboard</h2>
+                    <h2 class="welcome-title">Welcome to the RR Financial Dashboard</h2>
                     <p class="welcome-desc">
-                        Upload any Rolls-Royce Statement of Account workbook. The dashboard automatically
-                        detects sections like <strong>TotalCare</strong>, <strong>CRC Payments</strong>,
-                        <strong>Spare Parts</strong>, <strong>Late Payment Interest</strong>, and more.
+                        Upload any Rolls-Royce financial workbook. The dashboard automatically
+                        detects sections, headers, and financial data regardless of layout variations.
                     </p>
                     <button class="welcome-upload-btn" id="welcomeUploadBtn">
                         <i data-lucide="upload-cloud"></i>
-                        Upload SOA Workbook
+                        Upload Workbook
                     </button>
                 </div>
                 <div class="welcome-features">
@@ -347,8 +347,12 @@
                     </div>
 
                     <p class="ai-welcome-desc">
-                        Ask me anything about your Statement of Account data. I can analyze trends,
-                        draft emails, create charts, and generate reports &mdash; all grounded in your uploaded data.
+                        Ask me anything about your financial data. I can analyze trends,
+                        draft emails, create charts, and generate reports.
+                        <br><br>
+                        <span class="ai-disclaimer"><i data-lucide="alert-triangle"
+                                style="width:14px;height:14px;vertical-align:text-top;"></i> Experimental Feature: This
+                            is a non-compliant tool. Use at your own risk and responsibility.</span>
                     </p>
                 </div>
 
@@ -395,7 +399,7 @@
 
         <!-- Footer -->
         <footer class="dashboard-footer">
-            <p><strong>ROLLS-ROYCE</strong> CIVIL AEROSPACE &mdash; Statement of Account Dashboard</p>
+            <p><strong>ROLLS-ROYCE</strong> CIVIL AEROSPACE &mdash; Financial Dashboard</p>
             <p>Data sourced from uploaded workbook(s) &bull; For internal use only</p>
         </footer>
     </main>

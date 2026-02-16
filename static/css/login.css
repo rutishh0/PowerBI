@@ -1,0 +1,176 @@
+/* Login Page Styles */
+:root {
+    --bg-color: #f0f2f5;
+    --card-bg: #ffffff;
+    --primary-color: #6c757d;
+    /* Grey button as in screenshot */
+    --primary-hover: #5a6268;
+    --text-color: #333;
+    --border-color: #ced4da;
+    --logo-color: #00205b;
+    /* RR Blue */
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--bg-color);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+}
+
+.login-container {
+    width: 100%;
+    max-width: 400px;
+    padding: 20px;
+}
+
+.login-card {
+    background: var(--card-bg);
+    padding: 40px;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    text-align: center;
+}
+
+/* Logo Area */
+.logo-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.rr-logo-icon {
+    width: 48px;
+    height: 48px;
+    background-color: #001934;
+    /* Dark Blue */
+    border-radius: 8px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.logo-text h1 {
+    font-size: 14px;
+    font-weight: 700;
+    color: #1a1a1a;
+    letter-spacing: 1px;
+    margin: 0;
+}
+
+.logo-text p {
+    font-size: 10px;
+    color: #666;
+    letter-spacing: 2px;
+    margin: 4px 0 0;
+    text-transform: uppercase;
+}
+
+/* Header */
+.login-header h2 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin: 0 0 8px;
+}
+
+.login-header p {
+    font-size: 13px;
+    color: #8c98a4;
+    margin: 0 0 24px;
+}
+
+/* Form */
+.form-group {
+    text-align: left;
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin-bottom: 6px;
+}
+
+.input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.input-wrapper input {
+    width: 100%;
+    padding: 10px 12px;
+    padding-right: 40px;
+    /* Space for eye icon */
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 14px;
+    transition: border-color 0.2s;
+}
+
+.input-wrapper input:focus {
+    outline: none;
+    border-color: #001934;
+}
+
+.toggle-password {
+    position: absolute;
+    right: 10px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #8c98a4;
+    padding: 0;
+}
+
+.toggle-password:hover {
+    color: #333;
+}
+
+.login-btn {
+    width: 100%;
+    padding: 12px;
+    background-color: #7b8591;
+    /* Screenshot greyish blue */
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.login-btn:hover {
+    background-color: #656f7a;
+}
+
+.error-message {
+    background-color: #FEF2F2;
+    color: #DC2626;
+    padding: 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-align: left;
+}
+
+/* Footer */
+.footer-text {
+    margin-top: 24px;
+    font-size: 10px;
+    color: #adb5bd;
+    line-height: 1.4;
+    padding: 0 20px;
+}

@@ -18,7 +18,8 @@ from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
-from flask import Flask, render_template, request, jsonify, send_file, session
+from flask import Flask, render_template, request, jsonify, send_file, session, redirect, url_for
+from functools import wraps
 from flask_cors import CORS
 
 from parser import parse_soa_workbook, serialize_parsed_data, aging_bucket, fmt_currency, AGING_ORDER, AGING_COLORS
@@ -50,17 +51,52 @@ def _get_session_id():
     return session["sid"]
 
 
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get("authenticated"):
+            return redirect(url_for("login"))
+        return f(*args, **kwargs)
+    return decorated_function
+
+
 # ─────────────────────────────────────────────────────────────
 # ROUTES
 # ─────────────────────────────────────────────────────────────
 
 @app.route("/")
+@login_required
 def index():
     """Serve the main dashboard SPA."""
     return render_template("index.html")
 
 
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    """Handle login page and authentication."""
+    if request.method == "POST":
+        password = request.form.get("password")
+        # In production, use a secure hash comparison and env var
+        expected_password = os.environ.get("APP_PASSWORD", "rollsroyce")
+        
+        if password == expected_password:
+            session["authenticated"] = True
+            return redirect(url_for("index"))
+        else:
+            return render_template("login.html", error="Invalid access code")
+    
+    return render_template("login.html")
+
+
+@app.route("/logout")
+def logout():
+    """Clear session and logout."""
+    session.clear()
+    return redirect(url_for("login"))
+
+
 @app.route("/api/upload", methods=["POST"])
+@login_required
 def upload_files():
     """Accept one or more .xlsx files, parse them, return JSON data."""
     if "files" not in request.files:
@@ -108,6 +144,7 @@ def upload_files():
 
 
 @app.route("/api/export-pdf", methods=["POST"])
+@login_required
 def export_pdf():
     """Generate a PDF report from the uploaded data."""
     sid = _get_session_id()
@@ -179,6 +216,7 @@ def export_pdf():
 # ─────────────────────────────────────────────────────────────
 
 @app.route("/api/chat", methods=["POST"])
+@login_required
 def chat():
     """Handle AI chat messages."""
     sid = _get_session_id()
@@ -227,6 +265,7 @@ def chat():
 
 
 @app.route("/api/chat/clear", methods=["POST"])
+@login_required
 def clear_chat():
     """Clear chat history for current session."""
     sid = _get_session_id()

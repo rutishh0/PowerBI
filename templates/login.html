@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Rolls-Royce Financial Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/login.css') }}">
+    <!-- Load Remix Icon -->
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+</head>
+
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <div class="logo-area">
+                <div class="rr-logo-icon">
+                    <!-- Simple SVG representation or use font icon -->
+                    <i class="ri-lock-line" style="font-size: 24px; color: white;"></i>
+                </div>
+                <div class="logo-text">
+                    <h1>ROLLS-ROYCE</h1>
+                    <p>CIVIL AEROSPACE</p>
+                </div>
+            </div>
+
+            <div class="login-header">
+                <h2>Financial Dashboard</h2>
+                <p>Enter your access code to continue</p>
+            </div>
+
+            <form method="POST" action="{{ url_for('login') }}">
+                <div class="form-group">
+                    <label for="password">Access Code</label>
+                    <div class="input-wrapper">
+                        <input type="password" id="password" name="password" placeholder="Enter passcode" required>
+                        <button type="button" class="toggle-password" onclick="togglePassword()">
+                            <i class="ri-eye-line" id="toggleIcon"></i>
+                        </button>
+                    </div>
+                </div>
+
+                {% if error %}
+                <div class="error-message">
+                    <i class="ri-error-warning-line"></i> {{ error }}
+                </div>
+                {% endif %}
+
+                <button type="submit" class="login-btn">Access Dashboard</button>
+            </form>
+
+            <div class="footer-text">
+                <p>For authorized users only. Contact your Rolls-Royce representative for access.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function togglePassword() {
+            const passwordInput = document.getElementById('password');
+            const toggleIcon = document.getElementById('toggleIcon');
+
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                toggleIcon.classList.remove('ri-eye-line');
+                toggleIcon.classList.add('ri-eye-off-line');
+            } else {
+                passwordInput.type = 'password';
+                toggleIcon.classList.remove('ri-eye-off-line');
+                toggleIcon.classList.add('ri-eye-line');
+            }
+        }
+    </script>
+</body>
+
+</html>
