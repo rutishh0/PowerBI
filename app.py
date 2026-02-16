@@ -12,6 +12,7 @@ The parser detects sections, headers, and amounts dynamically.
 import io
 import re
 import math
+import json
 from datetime import datetime, timedelta
 from collections import OrderedDict
 
@@ -20,6 +21,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+import streamlit.components.v1 as components
 from openpyxl import load_workbook
 from pdf_export import generate_pdf_report
 
@@ -808,6 +810,60 @@ def make_bar(df_plot, x, y, title, color=RR_NAVY, horizontal=False, color_col=No
     return fig
 
 
+def make_chartjs_pie(labels: list, values: list, title: str, colors: list = None, height: int = 350) -> str:
+    """Return an HTML string containing a Chart.js pie chart (rendered via st.components.v1.html)."""
+    if colors is None:
+        colors = SECTION_COLOURS[:len(labels)]
+    labels_js = json.dumps(labels)
+    values_js = json.dumps(values)
+    colors_js = json.dumps(colors)
+    return f"""
+    <html><head>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+      body {{ margin:0; padding:0; background:transparent; font-family:Inter,sans-serif; }}
+      .chart-wrap {{ position:relative; width:100%; height:{height - 10}px; }}
+    </style>
+    </head><body>
+    <div class="chart-wrap"><canvas id="pie"></canvas></div>
+    <script>
+    new Chart(document.getElementById('pie'), {{
+      type: 'pie',
+      data: {{
+        labels: {labels_js},
+        datasets: [{{
+          data: {values_js},
+          backgroundColor: {colors_js},
+          borderColor: '#FFF',
+          borderWidth: 2
+        }}]
+      }},
+      options: {{
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: {{ duration: 500, easing: 'easeInOutQuart' }},
+        plugins: {{
+          title: {{
+            display: true,
+            text: '{title}',
+            font: {{ size: 15, weight: 'bold', family: 'Inter, sans-serif' }},
+            color: '#1a1a2e'
+          }},
+          legend: {{
+            position: 'right',
+            labels: {{
+              font: {{ size: 11, family: 'Inter, sans-serif' }},
+              color: '#333',
+              padding: 12
+            }}
+          }}
+        }}
+      }}
+    }});
+    </script>
+    </body></html>"""
+
+
 def aging_bucket(days) -> str:
     if days is None or (isinstance(days, float) and math.isnan(days)):
         return "Unknown"
@@ -914,7 +970,8 @@ def _merge_parsed_files(parsed_files: dict, selected_sources: list) -> tuple:
 def _apply_global_filters(df: pd.DataFrame, selected_sections: list,
                           selected_types: list, selected_statuses: list,
                           selected_currencies: list, selected_customers: list,
-                          parsed_files: dict, selected_sources: list) -> pd.DataFrame:
+                          parsed_files: dict, selected_sources: list,
+                          selected_overdue_status: list = None) -> pd.DataFrame:
     """Apply global sidebar filters to the combined DataFrame."""
     if df.empty:
         return df
@@ -945,6 +1002,13 @@ def _apply_global_filters(df: pd.DataFrame, selected_sections: list,
         filtered = filtered[
             filtered["Currency"].isna() | filtered["Currency"].isin(selected_currencies)
         ]
+
+    # Overdue / Current filter
+    if selected_overdue_status and len(selected_overdue_status) < 2 and "Days Late" in filtered.columns:
+        if "Overdue" in selected_overdue_status and "Current" not in selected_overdue_status:
+            filtered = filtered[filtered["Days Late"].fillna(0).apply(lambda x: int(x) if x else 0) > 0]
+        elif "Current" in selected_overdue_status and "Overdue" not in selected_overdue_status:
+            filtered = filtered[filtered["Days Late"].fillna(0).apply(lambda x: int(x) if x else 0) <= 0]
 
     return filtered
 
@@ -1008,25 +1072,99 @@ def render_customer_info(meta_list: list):
             """, unsafe_allow_html=True)
 
 
-def render_kpi_cards(df: pd.DataFrame, grand: dict, avg_late):
-    """Render the 6 KPI metric cards."""
+def render_kpi_cards(df: pd.DataFrame, grand: dict, avg_late, sections_dict: dict = None):
+    """Render the 6 KPI metric cards + credit highlight bar."""
     total_charges = grand.get("total_charges", 0)
     total_credits = grand.get("total_credits", 0)
     net_balance   = grand.get("net_balance", 0)
     total_overdue = grand.get("total_overdue", net_balance)
     item_count    = grand.get("item_count", 0)
 
+    # Initialize session state for overdue filter
+    if "filter_overdue_only" not in st.session_state:
+        st.session_state["filter_overdue_only"] = False
+
     kpi_cols = st.columns(6)
     kpis = [
         ("Total Charges", fmt_currency(total_charges, short=True), ""),
         ("Total Credits", fmt_currency(total_credits, short=True), "positive" if total_credits < 0 else ""),
         ("Net Balance", fmt_currency(net_balance, short=True), "negative" if net_balance > 0 else "positive"),
-        ("Total Overdue", fmt_currency(total_overdue, short=True), "negative"),
+        None,  # Placeholder — Total Overdue handled separately
         ("Avg Days Late", str(avg_late) if avg_late else "\u2014", ""),
         ("Open Items", str(item_count), ""),
     ]
-    for col, (label, value, cls) in zip(kpi_cols, kpis):
-        col.markdown(metric_card(label, value, cls), unsafe_allow_html=True)
+    for i, col in enumerate(kpi_cols):
+        if i == 3:
+            # Total Overdue — clickable
+            with col:
+                st.markdown(metric_card("Total Overdue", fmt_currency(total_overdue, short=True), "negative"),
+                            unsafe_allow_html=True)
+                is_active = st.session_state.get("filter_overdue_only", False)
+                btn_label = "Clear overdue filter" if is_active else "Show overdue only"
+                if st.button(btn_label, key="overdue_toggle_btn", use_container_width=True):
+                    st.session_state["filter_overdue_only"] = not is_active
+                    st.rerun()
+        elif kpis[i] is not None:
+            label, value, cls = kpis[i]
+            col.markdown(metric_card(label, value, cls), unsafe_allow_html=True)
+
+    # --- Credit Available Highlight Card ---
+    if total_credits != 0:
+        credit_parts = ""
+        if sections_dict:
+            for sn, sd in sections_dict.items():
+                avail = sd.get("totals", {}).get("available credit")
+                sec_cr = sum(r["Amount"] for r in sd.get("rows", []) if r.get("Amount", 0) < 0)
+                if avail is not None:
+                    credit_parts += f'<span class="info-chip" style="border-left:3px solid #2E7D32"><b>{sn}:</b> {fmt_currency(avail, True)}</span>'
+                elif sec_cr < 0:
+                    credit_parts += f'<span class="info-chip" style="border-left:3px solid #2E7D32"><b>{sn}:</b> {fmt_currency(sec_cr, True)}</span>'
+        st.markdown(f"""
+        <div style="background:#FFFFFF; padding:.9rem 1.5rem; border-radius:10px; margin:.8rem 0;
+                    border-left:5px solid #2E7D32; box-shadow:0 2px 10px rgba(0,0,0,.06);
+                    display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;">
+            <div>
+                <span style="font-weight:700; color:#2E7D32; font-size:1.1rem;">Credit Available: {fmt_currency(abs(total_credits), True)}</span>
+            </div>
+            <div style="display:flex; gap:.4rem; flex-wrap:wrap;">{credit_parts}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+
+def render_debt_decomposition(df: pd.DataFrame):
+    """Render a debt decomposition card showing total debt broken down by invoice type (section)."""
+    if df.empty:
+        return
+    # Compute charges per section
+    charges_by_section = df[df["Amount"] > 0].groupby("Section")["Amount"].sum()
+    if charges_by_section.empty:
+        return
+    total_debt = charges_by_section.sum()
+    if total_debt <= 0:
+        return
+
+    # Build stacked bar segments and text
+    segments_html = ""
+    breakdown_chips = ""
+    colors = SECTION_COLOURS
+    for i, (sec_name, amount) in enumerate(charges_by_section.sort_values(ascending=False).items()):
+        pct = (amount / total_debt) * 100 if total_debt > 0 else 0
+        color = colors[i % len(colors)]
+        segments_html += f'<div style="width:{pct:.1f}%;background:{color};height:100%;display:inline-block" title="{sec_name}: {fmt_currency(amount, True)} ({pct:.0f}%)"></div>'
+        breakdown_chips += f'<span style="display:inline-block;margin:.2rem .4rem;font-size:.82rem;color:#1a1a2e"><span style="display:inline-block;width:10px;height:10px;background:{color};border-radius:2px;margin-right:4px"></span><b>{sec_name}:</b> {fmt_currency(amount, True)} ({pct:.0f}%)</span>'
+
+    st.markdown(f"""
+    <div style="background:#FFFFFF; padding:1rem 1.5rem; border-radius:10px; margin:.5rem 0 1rem 0;
+                border-left:5px solid #10069F; box-shadow:0 2px 10px rgba(0,0,0,.06);">
+        <div style="font-weight:700; color:#0C0033; font-size:1rem; margin-bottom:.5rem;">
+            Total Debt: {fmt_currency(total_debt, True)}
+        </div>
+        <div style="background:#E8E8EE; border-radius:4px; height:18px; overflow:hidden; margin-bottom:.6rem; display:flex;">
+            {segments_html}
+        </div>
+        <div style="display:flex; flex-wrap:wrap; gap:0;">{breakdown_chips}</div>
+    </div>
+    """, unsafe_allow_html=True)
 
 
 def render_executive_overview(df: pd.DataFrame):
@@ -1077,6 +1215,26 @@ def render_executive_overview(df: pd.DataFrame):
                                   **CHART_LAYOUT)
             st.plotly_chart(fig_age, use_container_width=True)
 
+        # ---- Aging Drill-Down: invoices per bucket ----
+        with st.expander("View Invoices by Aging Bucket", expanded=False):
+            active_buckets = [b for b in AGING_ORDER if b in df_aging["Aging Bucket"].values]
+            if active_buckets:
+                age_tabs = st.tabs(active_buckets)
+                for age_tab, bucket in zip(age_tabs, active_buckets):
+                    with age_tab:
+                        bucket_df = df_aging[df_aging["Aging Bucket"] == bucket]
+                        st.markdown(f"**{len(bucket_df)} invoices** | Total: **{fmt_currency(bucket_df['Amount'].sum(), True)}**")
+                        age_display_cols = [c for c in ["Reference", "Text", "Amount", "Due Date",
+                                                        "Days Late", "Section", "Status"]
+                                            if c in bucket_df.columns and bucket_df[c].notna().any()]
+                        age_disp = bucket_df[age_display_cols].copy()
+                        if "Amount" in age_disp.columns:
+                            age_disp["Amount"] = age_disp["Amount"].apply(lambda x: fmt_currency(x))
+                        if "Due Date" in age_disp.columns:
+                            age_disp["Due Date"] = age_disp["Due Date"].apply(
+                                lambda x: x.strftime("%d/%m/%Y") if pd.notna(x) and hasattr(x, "strftime") else str(x) if x else "\u2014")
+                        st.dataframe(age_disp, use_container_width=True, height=min(350, 35 * len(age_disp) + 60))
+
 
 def render_bilateral_position(df: pd.DataFrame):
     """Render the bilateral position charts."""
@@ -1118,6 +1276,83 @@ def render_bilateral_position(df: pd.DataFrame):
                                  legend=dict(font=dict(size=12, color="#333")),
                                  **CHART_LAYOUT)
             st.plotly_chart(fig_sn, use_container_width=True)
+
+
+def render_llp_analysis(df: pd.DataFrame):
+    """Render LLP CRC / ULW net value analysis. Matches CRC charges to ULW credits by ESN or part number."""
+    if df.empty or "Text" not in df.columns:
+        return
+
+    # Look for ESN-like identifiers in Text and Assignment columns
+    # Common patterns: ESN followed by digits, "ESN" keyword, part numbers like "72-xxxx"
+    esn_pattern = re.compile(
+        r'(?:ESN[:\s#-]*(\w{3,20}))'         # "ESN 12345" or "ESN: ABC123"
+        r'|(?:(?:LLP|CRC|ULW)[:\s#-]*(\w{3,20}))'  # "LLP 12345"
+        r'|(?:\b(\d{2,3}-\d{3,6})\b)',        # Part numbers like "72-1234"
+        re.IGNORECASE
+    )
+
+    records = []
+    for _, row in df.iterrows():
+        text_fields = str(row.get("Text", "")) + " " + str(row.get("Assignment", ""))
+        matches = esn_pattern.findall(text_fields)
+        if matches:
+            # Take first non-empty match group
+            identifier = None
+            for m in matches:
+                for g in m:
+                    if g:
+                        identifier = g.upper()
+                        break
+                if identifier:
+                    break
+            if identifier:
+                records.append({
+                    "Identifier": identifier,
+                    "Amount": row["Amount"],
+                    "Section": row.get("Section", ""),
+                    "Text": row.get("Text", ""),
+                    "Reference": row.get("Reference", ""),
+                    "Entry Type": row.get("Entry Type", ""),
+                })
+
+    if not records:
+        return  # No LLP-like data found — silently skip
+
+    llp_df = pd.DataFrame(records)
+
+    # Group by identifier: separate CRC charges from ULW credits
+    grouped = llp_df.groupby("Identifier").agg(
+        CRC_Amount=("Amount", lambda x: x[x > 0].sum()),
+        ULW_Amount=("Amount", lambda x: x[x < 0].sum()),
+        Total_Items=("Amount", "count"),
+    ).reset_index()
+    grouped["Net Value"] = grouped["CRC_Amount"] + grouped["ULW_Amount"]
+
+    # Only show if we have pairs (both charges and credits for at least one identifier)
+    has_pairs = ((grouped["CRC_Amount"] > 0) & (grouped["ULW_Amount"] < 0)).any()
+    if not has_pairs:
+        return
+
+    st.markdown('<div class="section-hdr">LLP CRC / ULW Analysis</div>', unsafe_allow_html=True)
+
+    # Summary card
+    total_crc = grouped["CRC_Amount"].sum()
+    total_ulw = grouped["ULW_Amount"].sum()
+    total_net = grouped["Net Value"].sum()
+    sk = st.columns(3)
+    sk[0].markdown(metric_card("CRC Charges", fmt_currency(total_crc, True)), unsafe_allow_html=True)
+    sk[1].markdown(metric_card("ULW Credits", fmt_currency(total_ulw, True), "positive"), unsafe_allow_html=True)
+    sk[2].markdown(metric_card("Net Value", fmt_currency(total_net, True),
+                               "negative" if total_net > 0 else "positive"), unsafe_allow_html=True)
+
+    # Detail table
+    disp = grouped.copy()
+    disp["CRC_Amount"] = disp["CRC_Amount"].apply(lambda x: fmt_currency(x))
+    disp["ULW_Amount"] = disp["ULW_Amount"].apply(lambda x: fmt_currency(x))
+    disp["Net Value"] = disp["Net Value"].apply(lambda x: fmt_currency(x))
+    disp.columns = ["ESN / Part", "CRC Amount", "ULW Amount", "Items", "Net Value"]
+    st.dataframe(disp, use_container_width=True, height=min(300, 35 * len(disp) + 60))
 
 
 def render_section_tabs(df: pd.DataFrame, sections_dict: dict, show_credits: bool):
@@ -1188,18 +1423,14 @@ def render_section_tabs(df: pd.DataFrame, sections_dict: dict, show_credits: boo
                     status_counts = status_df["Status Clean"].value_counts().reset_index()
                     status_counts.columns = ["Status", "Count"]
                     if len(status_counts) > 0:
-                        fig_st = px.pie(status_counts, names="Status", values="Count",
-                                        title="<b>Status Distribution</b>",
-                                        color_discrete_sequence=SECTION_COLOURS)
-                        fig_st.update_layout(height=350, margin=dict(t=55, b=25, l=25, r=25),
-                                             paper_bgcolor="rgba(0,0,0,0)",
-                                             font=dict(size=12, color="#1a1a2e"),
-                                             title=dict(font=dict(size=15, color="#1a1a2e")),
-                                             showlegend=True,
-                                             legend=dict(font=dict(size=11, color="#333")))
-                        fig_st.update_traces(textposition="inside", textinfo="value",
-                                             textfont=dict(size=12, color="#FFF"))
-                        st.plotly_chart(fig_st, use_container_width=True)
+                        pie_html = make_chartjs_pie(
+                            labels=status_counts["Status"].tolist(),
+                            values=status_counts["Count"].tolist(),
+                            title="Status Distribution",
+                            colors=SECTION_COLOURS[:len(status_counts)],
+                            height=350,
+                        )
+                        components.html(pie_html, height=350)
 
             with chart_cols[1]:
                 avail_cols = [c for c in ["Text", "Amount", "Reference"] if c in sec_df.columns]
@@ -1271,28 +1502,44 @@ def render_invoice_register(df: pd.DataFrame):
         st.info("No data to display in the invoice register.")
         return
 
-    filter_cols = st.columns(4)
+    # Apply overdue-only filter from clickable KPI
+    if st.session_state.get("filter_overdue_only") and "Days Late" in df.columns:
+        df = df[df["Days Late"].fillna(0).apply(lambda x: int(x) if x else 0) > 0].copy()
+        st.info("Showing **overdue invoices only** (filtered from Total Overdue KPI). Click 'Clear overdue filter' above to show all.")
+
+    filter_cols = st.columns(5)
     with filter_cols[0]:
         sec_options = sorted(df["Section"].unique())
-        sec_filter = st.multiselect("Section", sec_options, default=sec_options, key="reg_section")
+        sec_filter = st.multiselect("Invoice Type (Section)", sec_options, default=sec_options, key="reg_section")
     with filter_cols[1]:
         type_options = sorted(df["Entry Type"].unique())
         type_filter = st.multiselect("Type", type_options, default=type_options, key="reg_type")
     with filter_cols[2]:
+        reg_overdue_filter = st.multiselect("Overdue Status", ["Overdue", "Current"],
+                                            default=["Overdue", "Current"], key="reg_overdue")
+    with filter_cols[3]:
         if "Status" in df.columns:
             statuses = sorted(df["Status"].dropna().unique())
             status_filter = st.multiselect("Status", statuses, default=[], key="reg_status")
         else:
             status_filter = []
-    with filter_cols[3]:
+    with filter_cols[4]:
         max_amt = float(df["Amount"].abs().max()) if not df.empty else 1e6
         amount_range = st.slider("Amount Range (absolute)", 0.0, max_amt, (0.0, max_amt), key="reg_amount")
 
     filtered = df.copy()
-    filtered = filtered[filtered["Section"].isin(sec_filter)]
-    filtered = filtered[filtered["Entry Type"].isin(type_filter)]
+    if sec_filter:
+        filtered = filtered[filtered["Section"].isin(sec_filter)]
+    if type_filter:
+        filtered = filtered[filtered["Entry Type"].isin(type_filter)]
     if status_filter:
         filtered = filtered[filtered["Status"].isin(status_filter)]
+    # Overdue / Current filter
+    if reg_overdue_filter and len(reg_overdue_filter) < 2 and "Days Late" in filtered.columns:
+        if "Overdue" in reg_overdue_filter and "Current" not in reg_overdue_filter:
+            filtered = filtered[filtered["Days Late"].fillna(0).apply(lambda x: int(x) if x else 0) > 0]
+        elif "Current" in reg_overdue_filter and "Overdue" not in reg_overdue_filter:
+            filtered = filtered[filtered["Days Late"].fillna(0).apply(lambda x: int(x) if x else 0) <= 0]
     filtered = filtered[
         (filtered["Amount"].abs() >= amount_range[0]) & (filtered["Amount"].abs() <= amount_range[1])
     ]
@@ -1303,6 +1550,10 @@ def render_invoice_register(df: pd.DataFrame):
                              "Customer Comments", "Customer Name", "PO Reference",
                              "LPI Cumulated", "Entry Type", "Interest Method"]
                  if c in filtered.columns and filtered[c].notna().any()]
+
+    # Hide Source File column when only one file is uploaded
+    if "Source File" in show_cols and filtered["Source File"].nunique() <= 1:
+        show_cols.remove("Source File")
 
     disp = filtered[show_cols].copy()
 
@@ -1324,6 +1575,85 @@ def render_invoice_register(df: pd.DataFrame):
     else:
         overdue_total = 0
     sum_cols[2].metric("Filtered Overdue", fmt_currency(overdue_total))
+
+
+def render_presentation_mode(df, grand, avg_late, meta_list, sections_dict, show_credits):
+    """Slide-by-slide presentation mode for Teams call screen-sharing."""
+    # Build list of slides
+    slide_names = ["Customer Overview", "Key Metrics", "Executive Charts", "Bilateral Position"]
+    sec_names = list(sections_dict.keys()) if sections_dict else []
+    for sn in sec_names:
+        slide_names.append(f"Section: {sn}")
+    slide_names.append("Invoice Summary")
+
+    # Session state for current slide
+    if "pres_slide" not in st.session_state:
+        st.session_state["pres_slide"] = 0
+    current = st.session_state["pres_slide"]
+    total = len(slide_names)
+
+    # Navigation bar
+    nav_cols = st.columns([1, 6, 1])
+    with nav_cols[0]:
+        if st.button("Previous", disabled=(current == 0), key="pres_prev", use_container_width=True):
+            st.session_state["pres_slide"] = max(0, current - 1)
+            st.rerun()
+    with nav_cols[1]:
+        st.markdown(f"""<div style="text-align:center; color:#555; font-size:.95rem; padding:.4rem 0;">
+            <b>{slide_names[current]}</b> &nbsp;&mdash;&nbsp; Slide {current + 1} of {total}
+        </div>""", unsafe_allow_html=True)
+    with nav_cols[2]:
+        if st.button("Next", disabled=(current >= total - 1), key="pres_next", use_container_width=True):
+            st.session_state["pres_slide"] = min(total - 1, current + 1)
+            st.rerun()
+
+    st.markdown("---")
+
+    # Render the current slide
+    slide = slide_names[current]
+
+    if slide == "Customer Overview":
+        render_customer_info(meta_list)
+        render_debt_decomposition(df)
+
+    elif slide == "Key Metrics":
+        render_kpi_cards(df, grand, avg_late, sections_dict)
+
+    elif slide == "Executive Charts":
+        render_executive_overview(df)
+
+    elif slide == "Bilateral Position":
+        render_bilateral_position(df)
+
+    elif slide == "Invoice Summary":
+        # Show high-level totals and overdue summary
+        st.markdown('<div class="section-hdr">Invoice Summary</div>', unsafe_allow_html=True)
+        total_items = len(df) if not df.empty else 0
+        total_overdue_items = len(df[df["Days Late"].fillna(0).apply(lambda x: int(x) if x else 0) > 0]) if not df.empty and "Days Late" in df.columns else 0
+        sc = st.columns(3)
+        sc[0].metric("Total Invoices", total_items)
+        sc[1].metric("Overdue Invoices", total_overdue_items)
+        sc[2].metric("Net Balance", fmt_currency(grand.get("net_balance", 0), True))
+
+    elif slide.startswith("Section: "):
+        sec_name = slide[len("Section: "):]
+        if sec_name in sections_dict:
+            sec = sections_dict[sec_name]
+            sec_rows = sec.get("rows", [])
+            if sec_rows:
+                sec_df = pd.DataFrame(sec_rows)
+                sec_totals = sec.get("totals", {})
+                st.markdown(f'<div class="section-hdr">{sec_name}</div>', unsafe_allow_html=True)
+                sec_total = sec_totals.get("total", sec_df["Amount"].sum())
+                sec_charges = sec_df.loc[sec_df["Amount"] > 0, "Amount"].sum() if not sec_df.empty else 0
+                sec_credits = sec_df.loc[sec_df["Amount"] < 0, "Amount"].sum() if not sec_df.empty else 0
+                sk = st.columns(4)
+                sk[0].markdown(metric_card("Section Total", fmt_currency(sec_total, True)), unsafe_allow_html=True)
+                sk[1].markdown(metric_card("Charges", fmt_currency(sec_charges, True)), unsafe_allow_html=True)
+                sk[2].markdown(metric_card("Credits", fmt_currency(sec_credits, True), "positive"), unsafe_allow_html=True)
+                sk[3].markdown(metric_card("Items", str(len(sec_df))), unsafe_allow_html=True)
+            else:
+                st.info(f"No line items in **{sec_name}**.")
 
 
 def render_comparison_mode(parsed_files: dict, selected_sources: list):
@@ -1461,9 +1791,13 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("##### Dashboard Settings")
-    dashboard_view = st.selectbox("Dashboard View", ["Standard", "Executive Summary", "Comparison Mode"], index=0)
+    dashboard_view = st.selectbox("Dashboard View", ["Standard", "Executive Summary", "Presentation Mode", "Comparison Mode"], index=0)
     currency_symbol = st.selectbox("Currency Display", ["USD", "GBP", "EUR"], index=0)
     show_credits_in_tables = st.checkbox("Show credits in line tables", value=True)
+
+    st.markdown("---")
+    st.markdown("##### Share with Customer")
+    sidebar_export_clicked = st.button("📄 Export PDF Report", type="primary", use_container_width=True, key="sidebar_pdf_btn")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -1559,9 +1893,10 @@ g_selected_types = sorted(df_all["Entry Type"].unique().tolist()) if not df_all.
 g_selected_statuses = []
 g_selected_currencies = []
 g_selected_customers = []
+g_selected_overdue_status = ["Overdue", "Current"]
 
 with st.sidebar:
-    with st.expander("Global Filters", expanded=False):
+    with st.expander("Global Filters", expanded=True):
         # Customer Name filter
         customer_names = list(set(
             m.get("customer_name", "Unknown") for m in all_metadata
@@ -1572,11 +1907,11 @@ with st.sidebar:
                 "Customer", sorted(customer_names), default=sorted(customer_names), key="gf_customer"
             )
 
-        # Section filter
+        # Section / Invoice Type filter
         sections_available = sorted(df_all["Section"].unique().tolist()) if not df_all.empty else []
         if sections_available:
             g_selected_sections = st.multiselect(
-                "Section", sections_available, default=sections_available, key="gf_section"
+                "Invoice Type (Section)", sections_available, default=sections_available, key="gf_section"
             )
 
         # Type filter
@@ -1585,6 +1920,12 @@ with st.sidebar:
             g_selected_types = st.multiselect(
                 "Type", type_options, default=type_options, key="gf_type"
             )
+
+        # Overdue Status filter
+        g_selected_overdue_status = st.multiselect(
+            "Overdue Status", ["Overdue", "Current"],
+            default=["Overdue", "Current"], key="gf_overdue"
+        )
 
         # Status filter
         if not df_all.empty and "Status" in df_all.columns:
@@ -1606,7 +1947,8 @@ with st.sidebar:
 df_filtered = _apply_global_filters(
     df_all, g_selected_sections, g_selected_types,
     g_selected_statuses, g_selected_currencies,
-    g_selected_customers, parsed_files, selected_sources
+    g_selected_customers, parsed_files, selected_sources,
+    g_selected_overdue_status
 )
 
 # Recompute grand totals from filtered data
@@ -1628,25 +1970,34 @@ else:
 
 if dashboard_view == "Standard":
     render_customer_info(all_metadata)
-    render_kpi_cards(df_filtered, filtered_grand, avg_late_combined)
+    render_kpi_cards(df_filtered, filtered_grand, avg_late_combined, merged_sections)
+    render_debt_decomposition(df_filtered)
     render_executive_overview(df_filtered)
     render_bilateral_position(df_filtered)
+    render_llp_analysis(df_filtered)
     render_section_tabs(df_filtered, merged_sections, show_credits_in_tables)
     render_invoice_register(df_filtered)
 
 elif dashboard_view == "Executive Summary":
     render_customer_info(all_metadata)
-    render_kpi_cards(df_filtered, filtered_grand, avg_late_combined)
+    render_kpi_cards(df_filtered, filtered_grand, avg_late_combined, merged_sections)
+    render_debt_decomposition(df_filtered)
     render_executive_overview(df_filtered)
     # Executive Summary: charts only, no tables, no section tabs, no invoice register
+
+elif dashboard_view == "Presentation Mode":
+    render_presentation_mode(df_filtered, filtered_grand, avg_late_combined, all_metadata,
+                             merged_sections, show_credits_in_tables)
 
 elif dashboard_view == "Comparison Mode":
     if len(selected_sources) < 2:
         st.warning("Comparison Mode requires at least 2 uploaded files. Showing Standard view instead.")
         render_customer_info(all_metadata)
-        render_kpi_cards(df_filtered, filtered_grand, avg_late_combined)
+        render_kpi_cards(df_filtered, filtered_grand, avg_late_combined, merged_sections)
+        render_debt_decomposition(df_filtered)
         render_executive_overview(df_filtered)
         render_bilateral_position(df_filtered)
+        render_llp_analysis(df_filtered)
         render_section_tabs(df_filtered, merged_sections, show_credits_in_tables)
         render_invoice_register(df_filtered)
     else:
@@ -1657,50 +2008,61 @@ elif dashboard_view == "Comparison Mode":
 # 9.  PDF EXPORT
 # ─────────────────────────────────────────────────────────────
 
-st.markdown('<div class="section-hdr">Export Report</div>', unsafe_allow_html=True)
+# --- PDF Generation Helper (shared by sidebar and bottom buttons) ---
+def _generate_pdf():
+    _sections_summary = {}
+    for _sec_name in merged_sections:
+        _sec = merged_sections[_sec_name]
+        _sec_df = df_filtered[df_filtered["Section"] == _sec_name] if not df_filtered.empty else pd.DataFrame()
+        _sections_summary[_sec_name] = {
+            "total": _sec.get("totals", {}).get("total", _sec_df["Amount"].sum() if not _sec_df.empty else 0),
+            "charges": _sec_df.loc[_sec_df["Amount"] > 0, "Amount"].sum() if not _sec_df.empty else 0,
+            "credits": _sec_df.loc[_sec_df["Amount"] < 0, "Amount"].sum() if not _sec_df.empty else 0,
+            "overdue": _sec.get("totals", {}).get("overdue", 0),
+            "items": len(_sec_df),
+        }
+    _pdf_meta = all_metadata[0] if all_metadata else {}
+    try:
+        _pdf_bytes = generate_pdf_report(
+            metadata=_pdf_meta, grand_totals=filtered_grand,
+            filtered_df=df_filtered, sections_summary=_sections_summary,
+            source_files=selected_sources if len(selected_sources) > 1 else None,
+            currency_symbol=currency_symbol,
+        )
+        st.session_state["pdf_bytes"] = _pdf_bytes
+        st.session_state["pdf_ready"] = True
+    except Exception as e:
+        st.error(f"PDF generation failed: {e}")
 
+# Trigger from sidebar button
+if sidebar_export_clicked:
+    _generate_pdf()
+
+# Show sidebar download button if ready
+with st.sidebar:
+    if st.session_state.get("pdf_ready"):
+        _cust = all_metadata[0].get("customer_name", "Report") if all_metadata else "Report"
+        st.download_button(
+            label="⬇ Download PDF",
+            data=st.session_state["pdf_bytes"],
+            file_name=f"SOA_Report_{_cust.replace(' ', '_')}.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+            key="sidebar_pdf_download",
+        )
+
+st.markdown('<div class="section-hdr">Export Report</div>', unsafe_allow_html=True)
 _pdf_col1, _pdf_col2 = st.columns([1, 3])
 with _pdf_col1:
     if st.button("Generate PDF Report", type="primary", use_container_width=True):
-        # Build sections_summary for the PDF
-        _sections_summary = {}
-        for _sec_name in merged_sections:
-            _sec = merged_sections[_sec_name]
-            _sec_df = df_filtered[df_filtered["Section"] == _sec_name] if not df_filtered.empty else pd.DataFrame()
-            _sections_summary[_sec_name] = {
-                "total": _sec.get("totals", {}).get("total", _sec_df["Amount"].sum() if not _sec_df.empty else 0),
-                "charges": _sec_df.loc[_sec_df["Amount"] > 0, "Amount"].sum() if not _sec_df.empty else 0,
-                "credits": _sec_df.loc[_sec_df["Amount"] < 0, "Amount"].sum() if not _sec_df.empty else 0,
-                "overdue": _sec.get("totals", {}).get("overdue", 0),
-                "items": len(_sec_df),
-            }
-
-        # Use first metadata for single-file, merge for multi
-        _pdf_meta = all_metadata[0] if all_metadata else {}
-
-        try:
-            _pdf_bytes = generate_pdf_report(
-                metadata=_pdf_meta,
-                grand_totals=filtered_grand,
-                filtered_df=df_filtered,
-                sections_summary=_sections_summary,
-                source_files=selected_sources if len(selected_sources) > 1 else None,
-                currency_symbol=currency_symbol,
-            )
-            st.session_state["pdf_bytes"] = _pdf_bytes
-            st.session_state["pdf_ready"] = True
-        except Exception as e:
-            st.error(f"PDF generation failed: {e}")
-
+        _generate_pdf()
 with _pdf_col2:
     if st.session_state.get("pdf_ready"):
         _cust = all_metadata[0].get("customer_name", "Report") if all_metadata else "Report"
         st.download_button(
-            label="Download PDF",
-            data=st.session_state["pdf_bytes"],
+            label="Download PDF", data=st.session_state["pdf_bytes"],
             file_name=f"SOA_Report_{_cust.replace(' ', '_')}.pdf",
-            mime="application/pdf",
-            use_container_width=False,
+            mime="application/pdf", use_container_width=False,
         )
         st.success("PDF report generated successfully.")
 

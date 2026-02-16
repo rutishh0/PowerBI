@@ -1,1 +1,1 @@
-streamlit run app.py
+python server.py 2>&1

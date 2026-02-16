@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rolls-Royce Civil Aerospace &middot; SOA Dashboard</title>
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✈</text></svg>">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+
+    <!-- ApexCharts -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/apexcharts@3.49.0/dist/apexcharts.css">
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@0.344.0/dist/umd/lucide.js"></script>
+
+    <!-- Dashboard CSS -->
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+
+<body>
+
+    <!-- ═══════════════ SIDEBAR ═══════════════ -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-inner">
+            <!-- Logo -->
+            <div class="sidebar-logo">
+                <div class="logo-lockup">
+                    <span class="logo-text">ROLLS-ROYCE</span>
+                    <span class="logo-sub">CIVIL AEROSPACE</span>
+                </div>
+            </div>
+
+            <div class="sidebar-divider"></div>
+
+            <!-- File Upload -->
+            <div class="sidebar-section">
+                <h3 class="sidebar-section-title">
+                    <i data-lucide="upload-cloud" class="sidebar-icon"></i>
+                    Upload Files
+                </h3>
+                <div class="upload-zone" id="uploadZone">
+                    <div class="upload-zone-content">
+                        <i data-lucide="file-spreadsheet" class="upload-icon"></i>
+                        <p class="upload-text">Drop .xlsx files here</p>
+                        <p class="upload-subtext">or click to browse</p>
+                    </div>
+                    <div class="upload-progress" id="uploadProgress">
+                        <div class="upload-progress-bar" id="uploadProgressBar"></div>
+                    </div>
+                    <input type="file" id="fileInput" accept=".xlsx,.xls" multiple hidden>
+                </div>
+                <div class="uploaded-files" id="uploadedFiles"></div>
+            </div>
+
+            <div class="sidebar-divider"></div>
+
+            <!-- View Mode -->
+            <div class="sidebar-section">
+                <h3 class="sidebar-section-title">
+                    <i data-lucide="layout-dashboard" class="sidebar-icon"></i>
+                    Dashboard View
+                </h3>
+                <div class="view-pills" id="viewPills">
+                    <button class="view-pill active" data-view="standard">
+                        <i data-lucide="bar-chart-3"></i> Standard
+                    </button>
+                    <button class="view-pill" data-view="executive">
+                        <i data-lucide="briefcase"></i> Executive
+                    </button>
+                    <button class="view-pill" data-view="presentation">
+                        <i data-lucide="presentation"></i> Slides
+                    </button>
+                    <button class="view-pill" data-view="comparison">
+                        <i data-lucide="columns"></i> Compare
+                    </button>
+                    <button class="view-pill" data-view="ai">
+                        <i data-lucide="bot"></i> AI Assistant
+                    </button>
+                </div>
+            </div>
+
+            <div class="sidebar-divider"></div>
+
+            <!-- Filters -->
+            <div class="sidebar-section" id="filtersSection" style="display:none;">
+                <h3 class="sidebar-section-title sidebar-accordion-trigger" data-target="filterContent">
+                    <i data-lucide="filter" class="sidebar-icon"></i>
+                    Filters
+                    <span class="filter-badge" id="filterBadge" style="display:none;">0</span>
+                    <i data-lucide="chevron-down" class="accordion-chevron"></i>
+                </h3>
+                <div class="sidebar-accordion-content" id="filterContent">
+                    <!-- Section Filter -->
+                    <div class="filter-group">
+                        <label class="filter-label">Invoice Type</label>
+                        <div class="filter-checkboxes" id="sectionFilters"></div>
+                    </div>
+
+                    <!-- Entry Type Filter -->
+                    <div class="filter-group">
+                        <label class="filter-label">Entry Type</label>
+                        <div class="filter-checkboxes" id="typeFilters"></div>
+                    </div>
+
+                    <!-- Overdue Status -->
+                    <div class="filter-group">
+                        <label class="filter-label">Overdue Status</label>
+                        <div class="filter-checkboxes" id="overdueFilters"></div>
+                    </div>
+
+                    <button class="filter-reset-btn" id="filterResetBtn">
+                        <i data-lucide="rotate-ccw"></i> Reset All Filters
+                    </button>
+                </div>
+            </div>
+
+            <div class="sidebar-divider"></div>
+
+            <!-- Export -->
+            <div class="sidebar-section" id="exportSection" style="display:none;">
+                <h3 class="sidebar-section-title">
+                    <i data-lucide="download" class="sidebar-icon"></i>
+                    Export
+                </h3>
+                <button class="export-btn" id="exportPdfBtn">
+                    <i data-lucide="file-text"></i>
+                    Export PDF Report
+                </button>
+            </div>
+
+            <!-- Sidebar Footer -->
+            <div class="sidebar-footer">
+                <p>Statement of Account Dashboard</p>
+                <p class="sidebar-footer-sub">Finance & Receivables</p>
+            </div>
+        </div>
+    </aside>
+
+    <!-- ═══════════════ MAIN CONTENT ═══════════════ -->
+    <main class="main-content" id="mainContent">
+
+        <!-- Header Bar -->
+        <header class="dashboard-header" id="dashboardHeader">
+            <div class="header-content">
+                <div class="header-left">
+                    <h1 class="header-title">Statement of Account Dashboard</h1>
+                    <p class="header-subtitle">Rolls-Royce Civil Aerospace &mdash; Finance & Receivables</p>
+                </div>
+                <div class="header-right">
+                    <div class="header-logo-mark">ROLLS-ROYCE</div>
+                </div>
+            </div>
+            <div class="header-breadcrumb" id="headerBreadcrumb">
+                <span class="breadcrumb-item"><i data-lucide="home"></i></span>
+                <span class="breadcrumb-sep">/</span>
+                <span class="breadcrumb-item active" id="breadcrumbView">Standard View</span>
+            </div>
+        </header>
+
+        <!-- Dashboard Body -->
+        <div class="dashboard-body" id="dashboardBody">
+
+            <!-- ══════ WELCOME STATE ══════ -->
+            <div class="welcome-state" id="welcomeState">
+                <div class="welcome-hero">
+                    <div class="welcome-icon-wrap">
+                        <svg class="welcome-plane" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M58 28L36 32L14 20L18 24L8 22L12 28L2 26L22 36L18 56L24 48L28 56L32 36L58 28Z"
+                                fill="currentColor" opacity="0.15" />
+                            <path d="M58 28L36 32L14 20L18 24L8 22L12 28L2 26L22 36L18 56L24 48L28 56L32 36L58 28Z"
+                                stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+                        </svg>
+                    </div>
+                    <h2 class="welcome-title">Welcome to the RR SOA Dashboard</h2>
+                    <p class="welcome-desc">
+                        Upload any Rolls-Royce Statement of Account workbook. The dashboard automatically
+                        detects sections like <strong>TotalCare</strong>, <strong>CRC Payments</strong>,
+                        <strong>Spare Parts</strong>, <strong>Late Payment Interest</strong>, and more.
+                    </p>
+                    <button class="welcome-upload-btn" id="welcomeUploadBtn">
+                        <i data-lucide="upload-cloud"></i>
+                        Upload SOA Workbook
+                    </button>
+                </div>
+                <div class="welcome-features">
+                    <div class="welcome-feature-card">
+                        <div class="feature-icon"><i data-lucide="scan-search"></i></div>
+                        <h4>Smart Detection</h4>
+                        <p>Automatically identifies sections, headers, and financial data regardless of layout
+                            variations.</p>
+                    </div>
+                    <div class="welcome-feature-card">
+                        <div class="feature-icon"><i data-lucide="bar-chart-3"></i></div>
+                        <h4>Rich Analytics</h4>
+                        <p>Interactive charts, aging analysis, bilateral positions, and section breakdowns at a glance.
+                        </p>
+                    </div>
+                    <div class="welcome-feature-card">
+                        <div class="feature-icon"><i data-lucide="files"></i></div>
+                        <h4>Multi-File Compare</h4>
+                        <p>Upload multiple SOA files to compare across customers or reporting periods.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ══════ DASHBOARD CONTENT (hidden until data loaded) ══════ -->
+            <div class="dashboard-content" id="dashboardContent" style="display:none;">
+
+                <!-- Customer Info -->
+                <section class="customer-info-section" id="customerInfoSection"></section>
+
+                <!-- KPI Cards -->
+                <section class="kpi-section" id="kpiSection"></section>
+
+                <!-- Debt Decomposition -->
+                <section class="debt-section" id="debtSection"></section>
+
+                <!-- Executive Overview -->
+                <section class="chart-section" id="executiveSection">
+                    <div class="section-header">
+                        <div class="section-header-pill">
+                            <i data-lucide="pie-chart"></i>
+                            Executive Overview
+                        </div>
+                    </div>
+                    <div class="chart-grid chart-grid-3" id="executiveCharts">
+                        <div class="chart-card">
+                            <div class="chart-card-header">Breakdown by Section</div>
+                            <div id="chartDonut" class="chart-container"></div>
+                        </div>
+                        <div class="chart-card">
+                            <div class="chart-card-header">Charges vs Credits</div>
+                            <div id="chartChargesCredits" class="chart-container"></div>
+                        </div>
+                        <div class="chart-card">
+                            <div class="chart-card-header">Aging Analysis</div>
+                            <div id="chartAging" class="chart-container"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Bilateral Position -->
+                <section class="chart-section" id="bilateralSection">
+                    <div class="section-header">
+                        <div class="section-header-pill">
+                            <i data-lucide="arrow-left-right"></i>
+                            Bilateral Position
+                        </div>
+                    </div>
+                    <div class="chart-grid chart-grid-2" id="bilateralCharts">
+                        <div class="chart-card">
+                            <div class="chart-card-header">Customer vs RR Position</div>
+                            <div id="chartBilateral" class="chart-container"></div>
+                        </div>
+                        <div class="chart-card">
+                            <div class="chart-card-header">Net Balance by Section</div>
+                            <div id="chartNetBalance" class="chart-container"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Section Breakdown -->
+                <section class="chart-section" id="sectionBreakdown">
+                    <div class="section-header">
+                        <div class="section-header-pill">
+                            <i data-lucide="layers"></i>
+                            Section Breakdown
+                        </div>
+                    </div>
+                    <div class="section-tabs" id="sectionTabs">
+                        <div class="tab-bar" id="tabBar"></div>
+                        <div class="tab-content" id="tabContent"></div>
+                    </div>
+                </section>
+
+                <!-- Invoice Register -->
+                <section class="chart-section" id="invoiceRegister">
+                    <div class="section-header">
+                        <div class="section-header-pill">
+                            <i data-lucide="table"></i>
+                            Invoice Register
+                        </div>
+                    </div>
+                    <div class="register-filters" id="registerFilters"></div>
+                    <div class="register-table-wrap" id="registerTableWrap">
+                        <table class="data-table" id="registerTable">
+                            <thead id="registerThead"></thead>
+                            <tbody id="registerTbody"></tbody>
+                        </table>
+                    </div>
+                    <div class="register-footer" id="registerFooter"></div>
+                </section>
+
+                <!-- Export Section -->
+                <section class="export-section" id="exportFooterSection">
+                    <div class="section-header">
+                        <div class="section-header-pill">
+                            <i data-lucide="download"></i>
+                            Export Report
+                        </div>
+                    </div>
+                    <div class="export-actions">
+                        <button class="btn btn-primary" id="footerExportBtn">
+                            <i data-lucide="file-text"></i>
+                            Generate PDF Report
+                        </button>
+                    </div>
+                </section>
+
+            </div>
+
+            <!-- Presentation Mode Container -->
+            <div class="presentation-container" id="presentationContainer" style="display:none;">
+                <div class="pres-nav" id="presNav">
+                    <button class="pres-nav-btn" id="presPrev"><i data-lucide="chevron-left"></i> Previous</button>
+                    <div class="pres-indicator" id="presIndicator">Slide 1 of 1</div>
+                    <button class="pres-nav-btn" id="presNext">Next <i data-lucide="chevron-right"></i></button>
+                </div>
+                <div class="pres-slide" id="presSlide"></div>
+            </div>
+
+            <!-- Comparison Mode Container -->
+            <div class="comparison-container" id="comparisonContainer" style="display:none;"></div>
+
+            <!-- AI Chat Container -->
+            <div class="ai-chat-container" id="aiChatContainer" style="display:none;">
+                <!-- AI Welcome State -->
+                <div class="ai-welcome-state" id="aiWelcomeState">
+                    <div class="ai-welcome-icon">
+                        <i data-lucide="bot"></i>
+                    </div>
+                    <h2 class="ai-welcome-title">AI Data Assistant</h2>
+                    <p class="ai-welcome-desc">
+                        Ask me anything about your Statement of Account data. I can analyze trends,
+                        draft emails, create charts, and generate reports &mdash; all grounded in your uploaded data.
+                    </p>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="ai-quick-actions" id="aiQuickActions"></div>
+
+                <!-- Chat Messages -->
+                <div class="ai-chat-messages" id="aiChatMessages"></div>
+
+                <!-- Typing Indicator -->
+                <div class="ai-typing-indicator" id="aiTypingIndicator" style="display:none;">
+                    <div class="ai-msg-avatar ai-msg-avatar-ai"><i data-lucide="bot"></i></div>
+                    <div class="ai-typing-dots">
+                        <span></span><span></span><span></span>
+                    </div>
+                    <span class="ai-timer-display" id="aiTimerDisplay"></span>
+                </div>
+
+                <!-- Status Log Panel -->
+                <div class="ai-log-wrapper">
+                    <button class="ai-log-toggle" id="aiLogToggle">
+                        <i data-lucide="terminal"></i> <span>Activity Log</span>
+                        <i data-lucide="chevron-up" class="ai-log-chevron"></i>
+                    </button>
+                    <div class="ai-log-panel" id="aiLogPanel">
+                        <div class="ai-log-body" id="aiLogBody"></div>
+                    </div>
+                </div>
+
+                <!-- Chat Input -->
+                <div class="ai-chat-input-bar">
+                    <button class="ai-chat-clear-btn" id="aiChatClearBtn" title="Clear chat">
+                        <i data-lucide="trash-2"></i>
+                    </button>
+                    <textarea class="ai-chat-input" id="aiChatInput" placeholder="Ask about your SOA data..."
+                        rows="1"></textarea>
+                    <button class="ai-chat-send-btn" id="aiChatSendBtn">
+                        <i data-lucide="send"></i>
+                    </button>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Footer -->
+        <footer class="dashboard-footer">
+            <p><strong>ROLLS-ROYCE</strong> CIVIL AEROSPACE &mdash; Statement of Account Dashboard</p>
+            <p>Data sourced from uploaded workbook(s) &bull; For internal use only</p>
+        </footer>
+    </main>
+
+    <!-- ═══════════════ SCRIPTS ═══════════════ -->
+    <!-- GSAP + ScrollTrigger -->
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+
+    <!-- ApexCharts -->
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.49.0/dist/apexcharts.min.js"></script>
+
+    <!-- Dashboard JS -->
+    <script src="/static/js/charts.js"></script>
+    <script src="/static/js/components.js"></script>
+    <script src="/static/js/ai-chat.js"></script>
+    <script src="/static/js/app.js"></script>
+
+</body>
+
+</html>
