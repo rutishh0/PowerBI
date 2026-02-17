@@ -177,7 +177,21 @@ const SecretChat = (() => {
             // but for now let's just render the text content primarily.
             // We can reuse RRAIChat's renderer if globally available, or simple markdown here.
 
-            _addMessage('ai', data.content || 'No response content.');
+            let content = data.content || 'No response content.';
+
+            // Remove placeholders that are used in the main UI
+            content = content.replace(/\[EMAIL_PLACEHOLDER\]/g, '');
+            content = content.replace(/\[CHART_PLACEHOLDER\]/g, '');
+
+            // Append emails if available (since we don't have the UI widget here, just show text)
+            if (data.emails && data.emails.length > 0) {
+                content += '\n\n**Generated Email:**\n';
+                data.emails.forEach(email => {
+                    content += '```\n' + email + '\n```\n';
+                });
+            }
+
+            _addMessage('ai', content);
 
         } catch (err) {
             _addMessage('error', err.message);
