@@ -138,29 +138,95 @@ def upload_files():
 
     for f in files_to_process:
         fname = f["filename"]
-        if not fname.lower().endswith((".xlsx", ".xls")):
-             errors.append({"file": fname, "error": "Unsupported file type. Only .xlsx files are accepted."})
-             continue
+        lower_fname = fname.lower()
         
-        try:
-            file_bytes = f["bytes"]
-            buf = io.BytesIO(file_bytes)
-            parsed = parse_soa_workbook(buf)
-            serialized = serialize_parsed_data(parsed)
-            results[fname] = serialized
+        # ─── EXCEL ───
+        if lower_fname.endswith((".xlsx", ".xls")):
+            try:
+                file_bytes = f["bytes"]
+                buf = io.BytesIO(file_bytes)
+                parsed = parse_soa_workbook(buf)
+                serialized = serialize_parsed_data(parsed)
+                results[fname] = serialized
 
-            # Store raw parsed data (byte ref)
-            if sid not in _parsed_store:
-                _parsed_store[sid] = {}
-            _parsed_store[sid][fname] = {
-                "parsed": parsed,
-                "file_bytes": file_bytes,
-            }
-        except Exception as e:
-            errors.append({"file": fname, "error": str(e)})
+                # Store raw parsed data
+                if sid not in _parsed_store:
+                    _parsed_store[sid] = {}
+                _parsed_store[sid][fname] = {
+                    "type": "excel",
+                    "parsed": parsed,
+                    "file_bytes": file_bytes,
+                }
+            except Exception as e:
+                errors.append({"file": fname, "error": str(e)})
+
+        # ─── PDF ───
+        elif lower_fname.endswith(".pdf"):
+            try:
+                import pypdf
+                file_bytes = f["bytes"]
+                buf = io.BytesIO(file_bytes)
+                reader = pypdf.PdfReader(buf)
+                text = ""
+                for page in reader.pages:
+                    text += page.extract_text() + "\n"
+                
+                if sid not in _parsed_store:
+                    _parsed_store[sid] = {}
+                _parsed_store[sid][fname] = {
+                    "type": "pdf",
+                    "text": text,
+                    "file_bytes": file_bytes
+                }
+                results[fname] = {"text_preview": text[:200] + "..."}
+            except Exception as e:
+                errors.append({"file": fname, "error": f"PDF Error: {str(e)}"})
+
+        # ─── WORD DOC ───
+        elif lower_fname.endswith(".docx"):
+            try:
+                import docx
+                file_bytes = f["bytes"]
+                buf = io.BytesIO(file_bytes)
+                doc = docx.Document(buf)
+                text = "\n".join([para.text for para in doc.paragraphs])
+                
+                if sid not in _parsed_store:
+                    _parsed_store[sid] = {}
+                _parsed_store[sid][fname] = {
+                    "type": "docx",
+                    "text": text,
+                    "file_bytes": file_bytes
+                }
+                results[fname] = {"text_preview": text[:200] + "..."}
+            except Exception as e:
+                errors.append({"file": fname, "error": f"Docx Error: {str(e)}"})
+
+        # ─── IMAGES ───
+        elif lower_fname.endswith((".png", ".jpg", ".jpeg")):
+            try:
+                file_bytes = f["bytes"]
+                # Convert to base64 for AI usage
+                b64_img = base64.b64encode(file_bytes).decode('utf-8')
+                
+                if sid not in _parsed_store:
+                    _parsed_store[sid] = {}
+                _parsed_store[sid][fname] = {
+                    "type": "image",
+                    "base64": b64_img,
+                    "mime": "image/png" if lower_fname.endswith(".png") else "image/jpeg",
+                    "file_bytes": file_bytes
+                }
+                results[fname] = {"status": "Image stored for AI analysis"}
+            except Exception as e:
+                errors.append({"file": fname, "error": f"Image Error: {str(e)}"})
+
+        else:
+             errors.append({"file": fname, "error": "Unsupported file type."})
+             continue
 
     if not results and errors:
-        return jsonify({"error": "All files failed to parse", "details": errors}), 400
+        return jsonify({"error": "All files failed to process", "details": errors}), 400
 
     return jsonify({
         "files": results,
@@ -259,8 +325,24 @@ def chat():
 
     # Build serialized data dict for system prompt
     serialized_data = {}
+    images_to_attach = []
+
     for fname, fstore in stored.items():
-        serialized_data[fname] = serialize_parsed_data(fstore["parsed"])
+        # Handle non-Excel types in serialization for system prompt
+        if fstore.get("type") in ["pdf", "docx"]:
+             serialized_data[fname] = {"type": fstore["type"], "text": fstore.get("text")}
+        elif fstore.get("type") == "image":
+             serialized_data[fname] = {"type": "image"}
+             # Collect images to send to model
+             images_to_attach.append({
+                 "type": "image_url",
+                 "image_url": {
+                     "url": f"data:{fstore['mime']};base64,{fstore['base64']}"
+                 }
+             })
+        else:
+             # Default Excel
+             serialized_data[fname] = serialize_parsed_data(fstore["parsed"])
 
     system_prompt = build_system_prompt(serialized_data)
 
@@ -268,8 +350,20 @@ def chat():
     if sid not in _chat_history:
         _chat_history[sid] = []
 
+    # Construct User Message (Text + Images)
+    user_content = []
+    if user_message:
+        user_content.append({"type": "text", "text": user_message})
+    
+    # Attach all uploaded images to the LATEST message (simple approach)
+    # Ideally we'd track which images are "new", but sending them all ensures context.
+    # However, sending too many might hit limits. Let's send them.
+    user_content.extend(images_to_attach)
+
     # Add user message to history
-    _chat_history[sid].append({"role": "user", "content": user_message})
+    # Note: we store complex object for multimodal, simple string for text.
+    # _chat_history needs to handle this.
+    _chat_history[sid].append({"role": "user", "content": user_content})
 
     # Call OpenRouter
     result = call_openrouter(_chat_history[sid], system_prompt, model=model_choice)

@@ -91,6 +91,22 @@ def build_system_prompt(parsed_data_dict: dict) -> str:
         prompt_parts.append(f"── FILE: {filename} ──")
         prompt_parts.append("")
 
+        # Check file type
+        ftype = data.get("type", "excel") # Default to excel for backward compat
+
+        if ftype == "pdf" or ftype == "docx":
+            prompt_parts.append("DOCUMENT CONTENT (Text Extracted):")
+            prompt_parts.append(data.get("text", "[No text extracted]"))
+            prompt_parts.append("")
+            continue
+        
+        if ftype == "image":
+            prompt_parts.append("[IMAGE CONTENT ATTACHED]")
+            prompt_parts.append("Note: This file is an image. I can see it.")
+            prompt_parts.append("")
+            continue
+
+        # ─── EXCEL HANDLING (Existing Logic) ───
         # Metadata
         meta = data.get("metadata", {})
         if meta:

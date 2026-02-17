@@ -221,26 +221,46 @@ const SecretChat = (() => {
         const btn = $('secretSendBtn');
         if (btn) btn.disabled = loading;
 
+        const typingIndicator = $('secretTypingIndicator');
+        const timerDisplay = $('secretTimerDisplay');
+
         if (loading) {
-            // Add temp loading bubble
-            const container = $('secretChatMessages');
-            const loader = document.createElement('div');
-            loader.id = 'secretTempLoader';
-            loader.className = 'ai-chat-message ai-chat-assistant';
-            loader.innerHTML = `
-                <div class="ai-msg-avatar ai-msg-avatar-ai"><i data-lucide="bot"></i></div>
-                <div class="ai-msg-content">
-                    <div class="ai-msg-body">
-                        <div class="typing-indicator"><span></span><span></span><span></span></div>
-                    </div>
-                </div>`;
-            container.appendChild(loader);
+            if (typingIndicator) {
+                typingIndicator.style.display = 'flex';
+                // Ensure icons are rendered in the new indicator
+                if (window.lucide) lucide.createIcons();
+            }
             _scrollToBottom();
+            _startTimer();
         } else {
-            const loader = $('secretTempLoader');
-            if (loader) loader.remove();
+            if (typingIndicator) typingIndicator.style.display = 'none';
+            _stopTimer();
         }
-        if (window.lucide) lucide.createIcons();
+    }
+
+    let _timerInterval = null;
+    let _startTime = 0;
+
+    function _startTimer() {
+        const display = $('secretTimerDisplay');
+        if (!display) return;
+
+        _startTime = Date.now();
+        display.innerText = "0.0s";
+
+        if (_timerInterval) clearInterval(_timerInterval);
+
+        _timerInterval = setInterval(() => {
+            const elapsed = ((Date.now() - _startTime) / 1000).toFixed(1);
+            display.innerText = `${elapsed}s`;
+        }, 100);
+    }
+
+    function _stopTimer() {
+        if (_timerInterval) {
+            clearInterval(_timerInterval);
+            _timerInterval = null;
+        }
     }
 
     function _scrollToBottom() {
@@ -258,6 +278,7 @@ const SecretChat = (() => {
 
         if (btn && input) {
             btn.addEventListener('click', () => input.click());
+            input.setAttribute('accept', '.xlsx,.xls,.pdf,.docx,.png,.jpg,.jpeg'); // Update accept
             input.addEventListener('change', () => {
                 if (input.files.length > 0) _handleUpload(input.files);
             });
@@ -278,14 +299,17 @@ const SecretChat = (() => {
 
     async function _handleUpload(fileList) {
         const validFiles = [];
+        const allowedExtensions = ['.xlsx', '.xls', '.pdf', '.docx', '.png', '.jpg', '.jpeg'];
+
         for (const file of fileList) {
-            if (file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls')) {
+            const ext = "." + file.name.split('.').pop().toLowerCase();
+            if (allowedExtensions.includes(ext)) {
                 validFiles.push(file);
             }
         }
 
         if (validFiles.length === 0) {
-            RRComponents.showToast('Only .xlsx files are supported', 'error');
+            RRComponents.showToast('Unsupported file type. Allowed: Excel, PDF, Word, Images', 'error');
             return;
         }
 
