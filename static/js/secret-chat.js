@@ -42,9 +42,14 @@ const SecretChat = (() => {
 
     function _bindTrigger() {
         const btn = $('secretButton');
-        if (!btn) return;
+        if (!btn) {
+            console.error('Secret Button NOT found in DOM');
+            return;
+        }
 
+        console.log('Secret Button found, binding click event');
         btn.addEventListener('click', () => {
+            console.log('Secret Button Clicked');
             if (_isAuthenticated) {
                 _openChatWindow();
             } else {
@@ -339,6 +344,12 @@ const SecretChat = (() => {
             $('secretFileInput').value = '';
         }
     }
+
+    // ═══════════════════════════════════════════
+    // BOOT
+    // ═══════════════════════════════════════════
+
+    document.addEventListener('DOMContentLoaded', init);
 
     return { init };
 
