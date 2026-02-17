@@ -343,6 +343,7 @@
                         <select id="aiModelSelector" class="ai-model-select">
                             <option value="digitalocean/openai-gpt-oss-120b" selected>GPT OSS 120b (DigitalOcean)
                             </option>
+                            <option value="nvidia/moonshotai/kimi-k2.5">Kimi K2.5 (NVIDIA)</option>
                             <option value="qwen/qwen3-vl-235b-a22b-thinking">Qwen 3 VL 235B (Thinking)</option>
                         </select>
                     </div>
@@ -405,6 +406,78 @@
         </footer>
     </main>
 
+    <!-- ═══════════════ SECRET CHAT ELEMENTS ═══════════════ -->
+
+    <!-- Secret Trigger Button -->
+    <div id="secretButton" class="secret-button" title="Debug">
+        <i data-lucide="alert-circle"></i>
+    </div>
+
+    <!-- Password Modal -->
+    <div id="passwordModal" class="secret-modal" style="display: none;">
+        <div class="secret-modal-content">
+            <h3>Restricted Access</h3>
+            <p>Enter administrative access code to proceed.</p>
+            <input type="password" id="secretPasswordInput" placeholder="Access Code">
+            <div class="secret-modal-actions">
+                <button id="secretCancelBtn" class="btn-ghost">Cancel</button>
+                <button id="secretSubmitBtn" class="btn-primary">Verify</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Secret Chat Window -->
+    <div id="secretChatWindow" class="secret-chat-window" style="display: none;">
+        <div class="secret-chat-header">
+            <div class="secret-chat-title">
+                <i data-lucide="shield-check"></i>
+                <span>Admin AI Command Center</span>
+            </div>
+            <div class="secret-chat-controls">
+                <button id="secretChatMinimizeBtn"><i data-lucide="minus"></i></button>
+                <button id="secretChatCloseBtn"><i data-lucide="x"></i></button>
+            </div>
+        </div>
+
+        <div class="secret-model-bar">
+            <select id="secretModelSelect">
+                <option value="digitalocean/openai-gpt-oss-120b">GPT 120b (DigitalOcean)</option>
+                <option value="nvidia/moonshotai/kimi-k2.5">Kimi K2.5 (NVIDIA)</option>
+                <option value="qwen/qwen3-vl-235b-a22b-thinking">Qwen 3 VL 235B (Thinking)</option>
+            </select>
+        </div>
+
+        <div id="secretChatMessages" class="secret-chat-messages">
+            <div class="ai-chat-message ai-chat-assistant">
+                <div class="ai-msg-avatar ai-msg-avatar-ai"><i data-lucide="bot"></i></div>
+                <div class="ai-msg-content">
+                    <div class="ai-msg-body">
+                        <p>Welcome, Administrator. Secure channel established. How can I assist you today?</p>
+                    </div>
+                    <div class="ai-msg-time">Now</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="secret-chat-input-area">
+            <div class="secret-upload-container">
+                <button id="secretUploadBtn" class="secret-icon-btn" title="Upload File">
+                    <i data-lucide="paperclip"></i>
+                </button>
+                <input type="file" id="secretFileInput" hidden accept=".xlsx,.xls">
+            </div>
+            <textarea id="secretChatInput" placeholder="Type a message..." rows="1"></textarea>
+            <button id="secretSendBtn" class="secret-send-btn">
+                <i data-lucide="send"></i>
+            </button>
+        </div>
+
+        <!-- Upload Progress Overlay for Chat -->
+        <div id="secretUploadProgress" class="secret-upload-progress" style="display:none;">
+            <div class="spinner"></div> <span>Uploading...</span>
+        </div>
+    </div>
+
     <!-- ═══════════════ SCRIPTS ═══════════════ -->
     <!-- GSAP + ScrollTrigger -->
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
@@ -417,6 +490,7 @@
     <script src="/static/js/charts.js"></script>
     <script src="/static/js/components.js"></script>
     <script src="/static/js/ai-chat.js"></script>
+    <script src="/static/js/secret-chat.js"></script>
     <script src="/static/js/app.js"></script>
 
 </body>

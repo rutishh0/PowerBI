@@ -32,6 +32,9 @@ const RRApp = (() => {
         // Initialize AI Chat module
         if (window.RRAIChat) RRAIChat.init();
 
+        // Initialize Secret Chat module
+        if (window.SecretChat) SecretChat.init();
+
         // Initialize Lucide icons
         if (window.lucide) lucide.createIcons();
 
@@ -317,7 +320,132 @@ const RRApp = (() => {
     }
 
     function _renderComparisonView() {
-        RRComponents.renderComparisonMode($('comparisonContainer'), _filesData);
+        const container = $('comparisonContainer');
+        if (!container) return;
+
+        // Only render if empty to preserve history (optional, or clear every time?)
+        // Let's clear for now to ensure fresh state or we can keep if populated
+        if (container.innerHTML.trim() === '') {
+            container.innerHTML = `
+                <div class="comparison-grid">
+                    <!-- Qwen -->
+                    <div class="comparison-col" id="col-qwen">
+                        <div class="comparison-col-header">
+                            <i data-lucide="cpu"></i> Qwen 3 VL (OpenRouter)
+                            <span class="comparison-col-time" id="time-qwen" style="display:none">0s</span>
+                        </div>
+                        <div class="comparison-col-body" id="body-qwen"></div>
+                    </div>
+                    <!-- GPT -->
+                    <div class="comparison-col" id="col-gpt">
+                        <div class="comparison-col-header">
+                            <i data-lucide="zap"></i> GPT 120b (DigitalOcean)
+                             <span class="comparison-col-time" id="time-gpt" style="display:none">0s</span>
+                        </div>
+                        <div class="comparison-col-body" id="body-gpt"></div>
+                    </div>
+                    <!-- Kimi -->
+                    <div class="comparison-col" id="col-kimi">
+                        <div class="comparison-col-header">
+                            <i data-lucide="sparkles"></i> Kimi K2.5 (NVIDIA)
+                             <span class="comparison-col-time" id="time-kimi" style="display:none">0s</span>
+                        </div>
+                        <div class="comparison-col-body" id="body-kimi"></div>
+                    </div>
+                </div>
+
+                <div class="comparison-input-bar">
+                    <textarea class="comparison-input" id="compInput" placeholder="Enter prompt to compare models... (uses uploaded data)" rows="1"></textarea>
+                    <button class="comparison-send-btn" id="compSendBtn">
+                        <i data-lucide="send"></i>
+                    </button>
+                </div>
+            `;
+
+            _bindComparisonEvents();
+            if (window.lucide) lucide.createIcons();
+        }
+    }
+
+    function _bindComparisonEvents() {
+        const btn = $('compSendBtn');
+        const input = $('compInput');
+
+        const send = async () => {
+            const prompt = input.value.trim();
+            if (!prompt) return;
+
+            // Clear previous results
+            ['qwen', 'gpt', 'kimi'].forEach(key => {
+                const body = $(`body-${key}`);
+                const time = $(`time-${key}`);
+                if (body) body.innerHTML = '<div class="ai-typing-dots"><span></span><span></span><span></span></div>'; // Spinner
+                if (time) time.style.display = 'none';
+            });
+
+            input.value = '';
+            input.disabled = true;
+            btn.disabled = true;
+
+            try {
+                const response = await fetch('/api/compare', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: prompt }),
+                });
+
+                if (!response.ok) throw new Error('Comparison failed');
+
+                const data = await response.json();
+
+                // Populate results
+                (data.results || []).forEach(res => {
+                    let key = '';
+                    if (res.model_id.includes('qwen')) key = 'qwen';
+                    else if (res.model_id.includes('digitalocean')) key = 'gpt';
+                    else if (res.model_id.includes('kimi')) key = 'kimi';
+
+                    const body = $(`body-${key}`);
+                    const time = $(`time-${key}`);
+
+                    if (body) {
+                        if (res.error) {
+                            body.innerHTML = `<span style="color:var(--danger)">Error: ${res.error}</span>`;
+                        } else {
+                            // Simple markdown parsing
+                            body.innerHTML = RRComponents.markdownToHtml(res.content || 'No response');
+                        }
+                    }
+                    if (time && res.time) {
+                        time.textContent = res.time;
+                        time.style.display = 'inline-block';
+                    }
+                });
+
+            } catch (err) {
+                RRComponents.showToast(err.message, 'error');
+                ['qwen', 'gpt', 'kimi'].forEach(key => {
+                    const body = $(`body-${key}`);
+                    if (body && body.innerHTML.includes('ai-typing-dots')) {
+                        body.innerHTML = '<span style="color:var(--danger)">Request failed</span>';
+                    }
+                });
+            } finally {
+                input.disabled = false;
+                btn.disabled = false;
+                input.focus();
+            }
+        };
+
+        if (btn) btn.addEventListener('click', send);
+        if (input) {
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    send();
+                }
+            });
+        }
     }
 
 

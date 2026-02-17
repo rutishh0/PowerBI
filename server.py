@@ -14,6 +14,8 @@ import os
 import uuid
 import math
 import base64
+import time
+import concurrent.futures
 from datetime import datetime
 from collections import OrderedDict
 
@@ -294,6 +296,79 @@ def clear_chat():
     sid = _get_session_id()
     _chat_history[sid] = []
     return jsonify({"status": "ok"})
+
+
+@app.route("/api/compare", methods=["POST"])
+@login_required
+def compare_models():
+    """Run the same prompt against all 3 models in parallel."""
+    sid = _get_session_id()
+    stored = _parsed_store.get(sid, {})
+
+    if not stored:
+        return jsonify({"error": "No data available. Please upload files first."}), 400
+
+    data = request.get_json(silent=True) or {}
+    user_message = data.get("message", "").strip()
+
+    if not user_message:
+        return jsonify({"error": "No message provided"}), 400
+
+    # Build system prompt
+    serialized_data = {}
+    for fname, fstore in stored.items():
+        serialized_data[fname] = serialize_parsed_data(fstore["parsed"])
+    
+    system_prompt = build_system_prompt(serialized_data)
+    
+    # Models to compare
+    models = [
+        {"id": "qwen/qwen3-vl-235b-a22b-thinking", "name": "Qwen 3 VL (OpenRouter)"},
+        {"id": "digitalocean/openai-gpt-oss-120b", "name": "GPT 120b (DigitalOcean)"},
+        {"id": "nvidia/moonshotai/kimi-k2.5", "name": "Kimi K2.5 (NVIDIA)"},
+    ]
+
+    results = []
+
+    def fetch_model_response(model_info):
+        start_t = time.time()
+        m_id = model_info["id"]
+        m_name = model_info["name"]
+        
+        # Use a temporary history with just this message for the comparison
+        temp_history = [{"role": "user", "content": user_message}]
+        
+        try:
+            # We reuse call_openrouter which handles routing based on prefix
+            resp = call_openrouter(temp_history, system_prompt, model=m_id)
+            duration = time.time() - start_t
+            
+            return {
+                "model_id": m_id,
+                "model_name": m_name,
+                "content": resp.get("content", ""),
+                "error": resp.get("error"),
+                "time": f"{duration:.2f}s"
+            }
+        except Exception as e:
+            return {
+                "model_id": m_id,
+                "model_name": m_name,
+                "content": None,
+                "error": str(e),
+                "time": f"{time.time() - start_t:.2f}s"
+            }
+
+    # Execute in parallel
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        future_to_model = {executor.submit(fetch_model_response, m): m for m in models}
+        for future in concurrent.futures.as_completed(future_to_model):
+            results.append(future.result())
+
+    # Sort results to match input order for consistency in UI
+    results.sort(key=lambda x: [m["id"] for m in models].index(x["model_id"]))
+
+    return jsonify({"results": results})
 
 
 # ─────────────────────────────────────────────────────────────

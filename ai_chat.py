@@ -14,12 +14,24 @@ from datetime import datetime
 # CONFIG
 # ─────────────────────────────────────────────────────────────
 
-OPENROUTER_API_KEY = "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"
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# ─────────────────────────────────────────────────────────────
+# CONFIG
+# ─────────────────────────────────────────────────────────────
+
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 OPENROUTER_MODEL = "qwen/qwen3-vl-235b-a22b-thinking" # Default for OpenRouter fallback
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-DIGITALOCEAN_API_KEY = "sk-do-XHpuIEuOXTMiSJKC-E-C-ZFdY_-MhO3tk9vYq7G77y2Ifq7102jwkvWoGY"
+DIGITALOCEAN_API_KEY = os.getenv("DIGITALOCEAN_API_KEY")
 DIGITALOCEAN_URL = "https://inference.do-ai.run/v1/chat/completions" 
+
+NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY")
+NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions" 
 
 MAX_HISTORY_MESSAGES = 20  # Keep last N messages in context
 
@@ -206,6 +218,9 @@ def call_openrouter(messages: list, system_prompt: str, model: str = None) -> di
     """
     if model and model.startswith("digitalocean/"):
         return call_digitalocean(messages, system_prompt, model.replace("digitalocean/", ""))
+
+    if model and model.startswith("nvidia/"):
+        return call_nvidia(messages, system_prompt, model.replace("nvidia/", ""))
         
     api_messages = [{"role": "system", "content": system_prompt}]
 
@@ -226,7 +241,7 @@ def call_openrouter(messages: list, system_prompt: str, model: str = None) -> di
     payload = {
         "model": model if model else OPENROUTER_MODEL,
         "messages": api_messages,
-        "max_tokens": 8192,
+        "max_tokens": 16384,
         "temperature": 0.3,  # Low temperature for factual accuracy
         "top_p": 0.9,
     }
@@ -315,6 +330,84 @@ def call_digitalocean(messages: list, system_prompt: str, model: str) -> dict:
 
     except Exception as e:
         return {"content": None, "error": f"DigitalOcean error: {str(e)}"}
+
+
+def call_nvidia(messages: list, system_prompt: str, model: str) -> dict:
+    """
+    Call NVIDIA API (e.g. for Kimi K2.5).
+    """
+    # NVIDIA/Kimi specific payload structure
+    api_messages = [{"role": "user", "content": system_prompt}] # Kimi might prefer system prompt as first user message or system
+    # Standard OpenAI format usually accepts system, but user snippet showed empty content. 
+    # Let's stick to standard role:system if possible, or fallback to user if it fails.
+    # The snippet showed: "messages": [{"role":"user","content":""}] which is odd, likely just a test.
+    # We will use standard [{"role": "system", ...}, ...]
+    
+    api_messages = [{"role": "system", "content": system_prompt}]
+
+    for msg in messages[-MAX_HISTORY_MESSAGES:]:
+        api_messages.append({
+            "role": msg.get("role", "user"),
+            "content": msg.get("content", ""),
+        })
+
+    headers = {
+        "Authorization": f"Bearer {NVIDIA_API_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
+    # "moonshotai/kimi-k2.5" - NVIDIA API requires streaming for this model?
+    # Based on testing, non-streaming requests timeout or return empty. We must stream.
+    payload = {
+        "model": model,
+        "messages": api_messages,
+        "max_tokens": 8196,
+        "temperature": 0.3,
+        "top_p": 1.0,
+        "stream": True,
+    }
+
+    try:
+        response = requests.post(
+            NVIDIA_URL,
+            headers=headers,
+            json=payload,
+            timeout=600, 
+            stream=True
+        )
+
+        if response.status_code != 200:
+            return {"content": None, "error": f"NVIDIA API error ({response.status_code}): {response.text[:200]}"}
+
+        # Accumulate streaming response
+        full_content = []
+        for line in response.iter_lines():
+            if line:
+                line_str = line.decode('utf-8').strip()
+                if line_str.startswith("data: "):
+                    json_str = line_str[6:] # Strip "data: "
+                    if json_str == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(json_str)
+                        if "choices" in chunk and len(chunk["choices"]) > 0:
+                            delta = chunk["choices"][0].get("delta", {})
+                            content_part = delta.get("content", "")
+                            if content_part:
+                                full_content.append(content_part)
+                    except json.JSONDecodeError:
+                        continue
+
+        final_text = "".join(full_content)
+
+        if not final_text:
+            return {"content": None, "error": "Empty response from NVIDIA (Streamed)"}
+
+        return parse_ai_response(final_text)
+
+    except Exception as e:
+        return {"content": None, "error": f"NVIDIA error: {str(e)}"}
 
 
 # ─────────────────────────────────────────────────────────────
