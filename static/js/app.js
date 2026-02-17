@@ -84,13 +84,13 @@ const RRApp = (() => {
 
         // Filter valid files
         for (const file of fileList) {
-            if (file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls')) {
+            if (file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls') || file.name.toLowerCase().endsWith('.pptx')) {
                 validFiles.push(file);
             }
         }
 
         if (validFiles.length === 0) {
-            RRComponents.showToast('Please upload .xlsx files only', 'error');
+            RRComponents.showToast('Please upload .xlsx or .pptx files only', 'error');
             return;
         }
 

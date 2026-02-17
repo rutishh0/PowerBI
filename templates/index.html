@@ -49,13 +49,13 @@
                 <div class="upload-zone" id="uploadZone">
                     <div class="upload-zone-content">
                         <i data-lucide="file-spreadsheet" class="upload-icon"></i>
-                        <p class="upload-text">Drop .xlsx files here</p>
+                        <p class="upload-text">Drop .xlsx or .pptx files here</p>
                         <p class="upload-subtext">or click to browse</p>
                     </div>
                     <div class="upload-progress" id="uploadProgress">
                         <div class="upload-progress-bar" id="uploadProgressBar"></div>
                     </div>
-                    <input type="file" id="fileInput" accept=".xlsx,.xls" multiple hidden>
+                    <input type="file" id="fileInput" accept=".xlsx,.xls,.pptx" multiple hidden>
                 </div>
                 <div class="uploaded-files" id="uploadedFiles"></div>
             </div>
@@ -346,6 +346,7 @@
                             <option value="nvidia/moonshotai/kimi-k2.5">Kimi K2.5 (NVIDIA)</option>
                             <option value="qwen/qwen3-vl-235b-a22b-thinking">Qwen 3 VL 235B (Thinking)</option>
                             <option value="google/zai-org/glm-5-maas">GLM-5 (Google Vertex)</option>
+                            <option value="gemini/gemini-3-pro-preview">Gemini 3 Pro (Google)</option>
                         </select>
                     </div>
 
@@ -446,6 +447,7 @@
                 <option value="nvidia/moonshotai/kimi-k2.5">Kimi K2.5 (NVIDIA)</option>
                 <option value="qwen/qwen3-vl-235b-a22b-thinking">Qwen 3 VL 235B (Thinking)</option>
                 <option value="google/zai-org/glm-5-maas">GLM-5 (Google Vertex)</option>
+                <option value="gemini/gemini-3-pro-preview">Gemini 3 Pro (Google)</option>
             </select>
         </div>
 

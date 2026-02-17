@@ -202,8 +202,47 @@ def upload_files():
             except Exception as e:
                 errors.append({"file": fname, "error": f"Docx Error: {str(e)}"})
 
+        # ─── POWERPOINT ───
+        elif lower_fname.endswith(".pptx"):
+            try:
+                from pptx import Presentation
+                file_bytes = f["bytes"]
+                buf = io.BytesIO(file_bytes)
+                prs = Presentation(buf)
+                
+                text_parts = []
+                for slide_num, slide in enumerate(prs.slides, 1):
+                    slide_texts = []
+                    for shape in slide.shapes:
+                        if shape.has_text_frame:
+                            for paragraph in shape.text_frame.paragraphs:
+                                para_text = paragraph.text.strip()
+                                if para_text:
+                                    slide_texts.append(para_text)
+                        if shape.has_table:
+                            table = shape.table
+                            for row in table.rows:
+                                row_text = " | ".join(cell.text.strip() for cell in row.cells)
+                                if row_text.strip(" |"):
+                                    slide_texts.append(row_text)
+                    if slide_texts:
+                        text_parts.append(f"[Slide {slide_num}]\n" + "\n".join(slide_texts))
+                
+                text = "\n\n".join(text_parts)
+                
+                if sid not in _parsed_store:
+                    _parsed_store[sid] = {}
+                _parsed_store[sid][fname] = {
+                    "type": "pptx",
+                    "text": text,
+                    "file_bytes": file_bytes
+                }
+                results[fname] = {"text_preview": text[:200] + "..."}
+            except Exception as e:
+                errors.append({"file": fname, "error": f"PPTX Error: {str(e)}"})
+
         # ─── IMAGES ───
-        elif lower_fname.endswith((".png", ".jpg", ".jpeg")):
+        elif lower_fname.endswith((".png", ".jpg", ".jpeg", ".webp", ".heic", ".heif", ".gif")):
             try:
                 file_bytes = f["bytes"]
                 # Convert to base64 for AI usage
@@ -325,24 +364,41 @@ def chat():
 
     # Build serialized data dict for system prompt
     serialized_data = {}
-    images_to_attach = []
+    images_to_attach = []           # For OpenAI-format models (Qwen etc.)
+    gemini_file_attachments = []    # For Gemini 3 Pro native multimodal
 
     for fname, fstore in stored.items():
-        # Handle non-Excel types in serialization for system prompt
-        if fstore.get("type") in ["pdf", "docx"]:
-             serialized_data[fname] = {"type": fstore["type"], "text": fstore.get("text")}
-        elif fstore.get("type") == "image":
-             serialized_data[fname] = {"type": "image"}
-             # Collect images to send to model
-             images_to_attach.append({
-                 "type": "image_url",
-                 "image_url": {
-                     "url": f"data:{fstore['mime']};base64,{fstore['base64']}"
-                 }
-             })
+        ftype = fstore.get("type", "excel")
+        
+        if ftype in ["pdf", "docx", "pptx"]:
+            serialized_data[fname] = {"type": ftype, "text": fstore.get("text")}
+            
+            # For Gemini: attach the raw PDF natively (Gemini can read PDFs directly)
+            if ftype == "pdf" and fstore.get("file_bytes"):
+                gemini_file_attachments.append({
+                    "mime_type": "application/pdf",
+                    "base64": base64.b64encode(fstore["file_bytes"]).decode("utf-8"),
+                    "filename": fname
+                })
+            
+        elif ftype == "image":
+            serialized_data[fname] = {"type": "image"}
+            # OpenAI-format image for non-Gemini models
+            images_to_attach.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:{fstore['mime']};base64,{fstore['base64']}"
+                }
+            })
+            # Gemini-native image attachment
+            gemini_file_attachments.append({
+                "mime_type": fstore["mime"],
+                "base64": fstore["base64"],
+                "filename": fname
+            })
         else:
-             # Default Excel
-             serialized_data[fname] = serialize_parsed_data(fstore["parsed"])
+            # Excel — use the parsed data in system prompt (text-based)
+            serialized_data[fname] = serialize_parsed_data(fstore["parsed"])
 
     system_prompt = build_system_prompt(serialized_data)
 
@@ -350,26 +406,24 @@ def chat():
     if sid not in _chat_history:
         _chat_history[sid] = []
 
-    # Construct User Message (Text + Images)
+    # Construct User Message (Text + Images for OpenAI-format models)
     user_content = []
     if user_message:
         user_content.append({"type": "text", "text": user_message})
-    
-    # Attach all uploaded images to the LATEST message (simple approach)
-    # Ideally we'd track which images are "new", but sending them all ensures context.
-    # However, sending too many might hit limits. Let's send them.
     user_content.extend(images_to_attach)
 
     # Add user message to history
-    # Note: we store complex object for multimodal, simple string for text.
-    # _chat_history needs to handle this.
     _chat_history[sid].append({"role": "user", "content": user_content})
 
-    # Call OpenRouter
-    result = call_openrouter(_chat_history[sid], system_prompt, model=model_choice)
+    # Call AI — pass file_attachments for Gemini models
+    result = call_openrouter(
+        _chat_history[sid],
+        system_prompt,
+        model=model_choice,
+        file_attachments=gemini_file_attachments if model_choice and model_choice.startswith("gemini/") else None
+    )
 
     if result.get("error"):
-        # Remove the user message from history on error
         _chat_history[sid].pop()
         return jsonify({"error": result["error"]}), 502
 
@@ -420,6 +474,7 @@ def compare_models():
         {"id": "qwen/qwen3-vl-235b-a22b-thinking", "name": "Qwen 3 VL (OpenRouter)"},
         {"id": "digitalocean/openai-gpt-oss-120b", "name": "GPT 120b (DigitalOcean)"},
         {"id": "nvidia/moonshotai/kimi-k2.5", "name": "Kimi K2.5 (NVIDIA)"},
+        {"id": "gemini/gemini-3-pro-preview", "name": "Gemini 3 Pro (Google)"},
     ]
 
     results = []
@@ -433,8 +488,25 @@ def compare_models():
         temp_history = [{"role": "user", "content": user_message}]
         
         try:
-            # We reuse call_openrouter which handles routing based on prefix
-            resp = call_openrouter(temp_history, system_prompt, model=m_id)
+            # Pass file attachments for Gemini models
+            # We need to reconstruct gemini_file_attachments here similar to /api/chat
+            # Use a helper or just inline simple reconstruction
+            gemini_atts = []
+            for fname, fstore in stored.items():
+                if m_id.startswith("gemini/") and fstore.get("type") == "pdf" and fstore.get("file_bytes"):
+                     gemini_atts.append({
+                        "mime_type": "application/pdf",
+                        "base64": base64.b64encode(fstore["file_bytes"]).decode("utf-8"),
+                        "filename": fname
+                    })
+                elif m_id.startswith("gemini/") and fstore.get("type") == "image":
+                     gemini_atts.append({
+                        "mime_type": fstore["mime"],
+                        "base64": fstore["base64"],
+                        "filename": fname
+                    })
+
+            resp = call_openrouter(temp_history, system_prompt, model=m_id, file_attachments=gemini_atts)
             duration = time.time() - start_t
             
             return {

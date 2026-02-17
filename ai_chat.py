@@ -227,7 +227,7 @@ def build_system_prompt(parsed_data_dict: dict) -> str:
 # OPENROUTER API CALL
 # ─────────────────────────────────────────────────────────────
 
-def call_openrouter(messages: list, system_prompt: str, model: str = None) -> dict:
+def call_openrouter(messages: list, system_prompt: str, model: str = None, file_attachments: list = None) -> dict:
     """
     Call OpenRouter or DigitalOcean API depending on the model.
     Returns dict with 'content', 'charts', 'emails', 'error'.
@@ -240,8 +240,167 @@ def call_openrouter(messages: list, system_prompt: str, model: str = None) -> di
 
     if model and model.startswith("google/"):
         return call_google_glm(messages, system_prompt, model.replace("google/", ""))
+
+    if model and model.startswith("gemini/"):
+        return call_gemini3pro(messages, system_prompt, model.replace("gemini/", ""), file_attachments)
+
+
+def call_gemini3pro(messages: list, system_prompt: str, model: str, file_attachments: list = None) -> dict:
+    """
+    Call Google Vertex AI Gemini 3 Pro using the google-genai SDK.
+    """
+    from google import genai
+    from google.genai import types
+    import os
+
+    # ─── Step 1: Initialize Client ───
+    try:
+        # User requested API Key auth
+        api_key = os.getenv("GOOGLE_CLOUD_API_KEY")
         
-    api_messages = [{"role": "system", "content": system_prompt}]
+        if api_key:
+            print("[Gemini-3-Pro] Using API Key auth.")
+            # When using API Key, do not specify project/location as they are mutually exclusive
+            # or handled differently by the SDK.
+            client = genai.Client(
+                vertexai=True,
+                api_key=api_key
+            )
+        else:
+            # Fallback to previous logic (env var json or local file)
+            print("[Gemini-3-Pro] No API Key found, checking Service Account.")
+            # ... existing service account logic could go here, but let's simplify 
+            # based on user request to "use my google cloud API key"
+            
+            # If no API key, try default default credentials but warn
+            print("[Gemini-3-Pro] Warning: GOOGLE_CLOUD_API_KEY not set. Trying default credentials.")
+            client = genai.Client(
+                vertexai=True,
+                project="notional-analog-486611-t3",
+                location="us-central1",
+            )
+            
+    except Exception as e:
+        return {"content": None, "error": f"GenAI Client Init Error: {str(e)}"}
+
+    # ─── Step 2: Prepare Content ───
+    contents = []
+    
+    # Add system instruction as a separate config
+    system_instruction = [types.Part.from_text(text=system_prompt)]
+
+    # Convert messages
+    for msg in messages[-MAX_HISTORY_MESSAGES:]:
+        role = msg.get("role", "user")
+        content = msg.get("content", "")
+        
+        # Map OpenAI roles to GenAI roles
+        # OpenAI: user, assistant, system
+        # GenAI: user, model
+        if role == "system":
+            continue # System prompt is handled separately
+            
+        genai_role = "model" if role == "assistant" else "user"
+        
+        parts = []
+        if isinstance(content, str):
+            if content.strip():
+                parts.append(types.Part.from_text(text=content))
+        elif isinstance(content, list):
+            for item in content:
+                if item.get("type") == "text":
+                    text_val = item.get("text", "")
+                    if text_val.strip():
+                        parts.append(types.Part.from_text(text=text_val))
+                elif item.get("type") == "image_url":
+                    url = item.get("image_url", {}).get("url", "")
+                    if url.startswith("data:"):
+                        try:
+                            header, b64data = url.split(",", 1)
+                            mime_type = header.split(":")[1].split(";")[0]
+                            parts.append(types.Part.from_bytes(data=base64.b64decode(b64data), mime_type=mime_type))
+                        except Exception:
+                            pass
+
+        if parts:
+            contents.append(types.Content(role=genai_role, parts=parts))
+
+    # ─── Step 3: Attach Files (to the last user message) ───
+    import base64
+    if file_attachments:
+        # Find last user message
+        last_user_idx = None
+        for i in range(len(contents) - 1, -1, -1):
+            if contents[i].role == "user":
+                last_user_idx = i
+                break
+        
+        if last_user_idx is not None:
+            for attachment in file_attachments:
+                mime = attachment.get("mime_type", "")
+                b64 = attachment.get("base64", "")
+                fname = attachment.get("filename", "unknown")
+                
+                if not b64 or not mime:
+                    continue
+                
+                try:
+                    # SDK expects bytes, not base64 string
+                    file_bytes = base64.b64decode(b64)
+                    contents[last_user_idx].parts.insert(0, types.Part.from_bytes(data=file_bytes, mime_type=mime))
+                    print(f"[Gemini-3-Pro] Attached file: {fname}")
+                except Exception as e:
+                    print(f"[Gemini-3-Pro] Error attaching {fname}: {e}")
+
+    # ─── Step 4: Configure and Generate ───
+    try:
+        generate_content_config = types.GenerateContentConfig(
+            temperature=0.3,
+            top_p=0.95,
+            max_output_tokens=16384,
+            system_instruction=system_instruction,
+            safety_settings=[
+                types.SafetySetting(
+                    category="HARM_CATEGORY_HATE_SPEECH",
+                    threshold="OFF"
+                ),
+                types.SafetySetting(
+                    category="HARM_CATEGORY_DANGEROUS_CONTENT",
+                    threshold="OFF"
+                ),
+                types.SafetySetting(
+                    category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                    threshold="OFF"
+                ),
+                types.SafetySetting(
+                    category="HARM_CATEGORY_HARASSMENT",
+                    threshold="OFF"
+                )
+            ]
+        )
+
+        # For Gemini 3 Pro Preview, we might need to specify the model exactly
+        model_id = "gemini-3-pro-preview" 
+
+        print(f"[Gemini-3-Pro] Sending request via SDK...")
+        
+        response = client.models.generate_content(
+            model=model_id,
+            contents=contents,
+            config=generate_content_config
+        )
+        
+        if not response.text:
+             return {"content": None, "error": "Empty response from Gemini 3 Pro (SDK)"}
+
+        # Usage metadata might be available in response.usage_metadata
+        # print(f"[Gemini-3-Pro] Usage: {response.usage_metadata}")
+
+        return parse_ai_response(response.text)
+
+    except Exception as e:
+        print(f"[Gemini-3-Pro] SDK Error: {e}")
+        return {"content": None, "error": f"Gemini 3 Pro SDK Error: {str(e)}"}
 
     # Add conversation history (limited)
     for msg in messages[-MAX_HISTORY_MESSAGES:]:
