@@ -237,6 +237,9 @@ def call_openrouter(messages: list, system_prompt: str, model: str = None) -> di
 
     if model and model.startswith("nvidia/"):
         return call_nvidia(messages, system_prompt, model.replace("nvidia/", ""))
+
+    if model and model.startswith("google/"):
+        return call_google_glm(messages, system_prompt, model.replace("google/", ""))
         
     api_messages = [{"role": "system", "content": system_prompt}]
 
@@ -297,6 +300,29 @@ def call_openrouter(messages: list, system_prompt: str, model: str = None) -> di
         return {"content": None, "error": f"Unexpected error: {str(e)}"}
 
 
+
+def _flatten_content(content):
+    """
+    Flatten multimodal content (list of dicts) into a single string for text-only models.
+    """
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        text_parts = []
+        img_count = 0
+        for item in content:
+            if item.get("type") == "text":
+                text_parts.append(item.get("text", ""))
+            elif item.get("type") == "image_url":
+                img_count += 1
+        
+        full_text = "\n".join(text_parts)
+        if img_count > 0:
+            full_text += f"\n\n[System: {img_count} image(s) uploaded but ignored. This model does not support image analysis. Please use Qwen 3 VL for image tasks.]"
+        return full_text
+    return str(content)
+
+
 def call_digitalocean(messages: list, system_prompt: str, model: str) -> dict:
     """
     Call Digital Ocean GenAI API.
@@ -307,16 +333,13 @@ def call_digitalocean(messages: list, system_prompt: str, model: str) -> dict:
     for msg in messages[-MAX_HISTORY_MESSAGES:]:
         api_messages.append({
             "role": msg.get("role", "user"),
-            "content": msg.get("content", ""),
+            "content": _flatten_content(msg.get("content", "")),
         })
 
     headers = {
         "Authorization": f"Bearer {DIGITALOCEAN_API_KEY}",
         "Content-Type": "application/json",
     }
-    
-    # Map model names if necessary, otherwise use passed model
-    # For digitalocean/openai-gpt-oss-120b, we receive "openai-gpt-oss-120b" here
     
     payload = {
         "model": model, 
@@ -352,19 +375,12 @@ def call_nvidia(messages: list, system_prompt: str, model: str) -> dict:
     """
     Call NVIDIA API (e.g. for Kimi K2.5).
     """
-    # NVIDIA/Kimi specific payload structure
-    api_messages = [{"role": "user", "content": system_prompt}] # Kimi might prefer system prompt as first user message or system
-    # Standard OpenAI format usually accepts system, but user snippet showed empty content. 
-    # Let's stick to standard role:system if possible, or fallback to user if it fails.
-    # The snippet showed: "messages": [{"role":"user","content":""}] which is odd, likely just a test.
-    # We will use standard [{"role": "system", ...}, ...]
-    
     api_messages = [{"role": "system", "content": system_prompt}]
 
     for msg in messages[-MAX_HISTORY_MESSAGES:]:
         api_messages.append({
             "role": msg.get("role", "user"),
-            "content": msg.get("content", ""),
+            "content": _flatten_content(msg.get("content", "")),
         })
 
     headers = {
@@ -374,7 +390,6 @@ def call_nvidia(messages: list, system_prompt: str, model: str) -> dict:
     }
 
     # "moonshotai/kimi-k2.5" - NVIDIA API requires streaming for this model?
-    # Based on testing, non-streaming requests timeout or return empty. We must stream.
     payload = {
         "model": model,
         "messages": api_messages,
@@ -424,6 +439,95 @@ def call_nvidia(messages: list, system_prompt: str, model: str) -> dict:
 
     except Exception as e:
         return {"content": None, "error": f"NVIDIA error: {str(e)}"}
+
+
+def call_google_glm(messages: list, system_prompt: str, model: str) -> dict:
+    """
+    Call Google Cloud Vertex AI for GLM-5.
+    """
+    import google.auth
+    import google.auth.transport.requests
+    from google.oauth2 import service_account
+    import os
+
+    try:
+        # Check for Render.com environment variable first
+        env_creds_json = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+        
+        if env_creds_json:
+            print("[GLM-5] Using credentials from environment variable.")
+            creds_dict = json.loads(env_creds_json)
+            credentials = service_account.Credentials.from_service_account_info(
+                creds_dict,
+                scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            )
+        else:
+            # Fallback to local file
+            print("[GLM-5] Using local credentials file.")
+            key_path = "notional-analog-486611-t3-459586a9ad37.json"
+            credentials = service_account.Credentials.from_service_account_file(
+                key_path,
+                scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            )
+
+        auth_req = google.auth.transport.requests.Request()
+        credentials.refresh(auth_req)
+        token = credentials.token
+    except Exception as e:
+        return {"content": None, "error": f"Google Auth error: {str(e)}"}
+
+    project_id = "notional-analog-486611-t3"
+    region = "global"
+    endpoint_url = f"https://aiplatform.googleapis.com/v1/projects/{project_id}/locations/{region}/endpoints/openapi/chat/completions"
+
+    api_messages = [{"role": "system", "content": system_prompt}]
+    
+    for msg in messages[-MAX_HISTORY_MESSAGES:]:
+        api_messages.append({
+            "role": msg.get("role", "user"),
+            "content": _flatten_content(msg.get("content", "")),
+        })
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "model": "zai-org/glm-5-maas", # Fixed model name for this endpoint
+        "stream": False,
+        "messages": api_messages,
+        "max_tokens": 4096,
+        "temperature": 0.3,
+    }
+
+    print(f"[GLM-5] Sending request to {endpoint_url}...")
+    try:
+        response = requests.post(
+            endpoint_url,
+            headers=headers,
+            json=payload,
+            timeout=120
+        )
+        print(f"[GLM-5] Response received: {response.status_code}")
+
+        if response.status_code != 200:
+            print(f"[GLM-5] Error: {response.text}")
+            return {"content": None, "error": f"Google GLM-5 error ({response.status_code}): {response.text[:200]}"}
+
+        data = response.json()
+        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+
+        if not content:
+            print("[GLM-5] Empty response content.")
+            return {"content": None, "error": "Empty response from GLM-5"}
+
+        return parse_ai_response(content)
+
+    except Exception as e:
+        print(f"[GLM-5] Exception: {e}")
+        return {"content": None, "error": f"GLM-5 Exception: {str(e)}"}
+
 
 
 # ─────────────────────────────────────────────────────────────
