@@ -502,19 +502,46 @@ def call_google_glm(messages: list, system_prompt: str, model: str) -> dict:
     }
 
     print(f"[GLM-5] Sending request to {endpoint_url}...")
-    try:
-        response = requests.post(
-            endpoint_url,
-            headers=headers,
-            json=payload,
-            timeout=120
-        )
-        print(f"[GLM-5] Response received: {response.status_code}")
+    
+    import time
+    max_retries = 3
+    response = None
+    
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(
+                endpoint_url,
+                headers=headers,
+                json=payload,
+                timeout=120
+            )
+            print(f"[GLM-5] Response received: {response.status_code}")
 
-        if response.status_code != 200:
+            if response.status_code == 200:
+                break # Success, exit retry loop
+            
+            if response.status_code in [429, 503]:
+                if attempt < max_retries - 1:
+                    wait_time = (attempt + 1) * 2 # 2s, 4s, 6s
+                    print(f"[GLM-5] Server busy ({response.status_code}), retrying in {wait_time}s...")
+                    time.sleep(wait_time)
+                    continue
+
             print(f"[GLM-5] Error: {response.text}")
             return {"content": None, "error": f"Google GLM-5 error ({response.status_code}): {response.text[:200]}"}
 
+        except Exception as e:
+            print(f"[GLM-5] Attempt {attempt+1} failed: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(2)
+                continue
+            return {"content": None, "error": f"GLM-5 Exception: {str(e)}"}
+
+    # Process response after loop
+    if not response:
+         return {"content": None, "error": "GLM-5 Connection Failed (No response)"}
+
+    try:
         data = response.json()
         content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
 
@@ -525,8 +552,8 @@ def call_google_glm(messages: list, system_prompt: str, model: str) -> dict:
         return parse_ai_response(content)
 
     except Exception as e:
-        print(f"[GLM-5] Exception: {e}")
-        return {"content": None, "error": f"GLM-5 Exception: {str(e)}"}
+        print(f"[GLM-5] Exception parsing response: {e}")
+        return {"content": None, "error": f"GLM-5 Response Parse Error: {str(e)}"}
 
 
 
