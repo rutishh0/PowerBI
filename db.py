@@ -2,26 +2,52 @@ import os
 import psycopg2
 import psycopg2.extras
 from psycopg2 import Error
+from psycopg2.pool import ThreadedConnectionPool
 from datetime import datetime
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
-def get_db_connection():
-    """Create a database connection."""
-    try:
-        # Connect using the DATABASE_URL
-        url = os.getenv("DATABASE_URL")
-        if not url:
-            print("DATABASE_URL not found in environment variables.")
-            return None
+# Global connection pool
+db_pool = None
+
+def init_connection_pool():
+    """Initialize the database connection pool."""
+    global db_pool
+    if db_pool is None:
+        try:
+            url = os.getenv("DATABASE_URL")
+            if not url:
+                print("DATABASE_URL not found in environment variables.")
+                return None
             
-        connection = psycopg2.connect(url)
-        return connection
-    except Error as e:
-        print(f"Error connecting to PostgreSQL: {e}")
+            # Create a pool with min 1 and max 20 connections
+            db_pool = ThreadedConnectionPool(1, 20, url)
+            print("Database connection pool created successfully.")
+        except Error as e:
+            print(f"Error creating connection pool: {e}")
+            db_pool = None
+
+def get_db_connection():
+    """Get a connection from the pool."""
+    global db_pool
+    if db_pool is None:
+        init_connection_pool()
+    
+    try:
+        if db_pool:
+            return db_pool.getconn()
         return None
+    except Error as e:
+        print(f"Error getting connection from pool: {e}")
+        return None
+
+def return_db_connection(connection):
+    """Return a connection to the pool."""
+    global db_pool
+    if db_pool and connection:
+        db_pool.putconn(connection)
 
 def init_db():
     """Initialize the database table if it doesn't exist."""
@@ -46,13 +72,11 @@ def init_db():
         except Error as e:
             print(f"Error initializing database: {e}")
         finally:
-            if connection:
-                cursor.close()
-                connection.close()
+            return_db_connection(connection)
     else:
         print("Failed to connect to database during initialization.")
 
-def save_file_to_db(filename, file_bytes, session_id):
+def save_file_to_db(filename, file_bytes, session_id=None):
     """Save a file to the database."""
     connection = get_db_connection()
     if connection:
@@ -63,7 +87,6 @@ def save_file_to_db(filename, file_bytes, session_id):
             VALUES (%s, %s, %s, %s, %s)
             """
             file_size = len(file_bytes)
-            # psycopg2 handles bytea automatically when passed bytes
             cursor.execute(query, (filename, file_bytes, file_size, session_id, datetime.now()))
             connection.commit()
             print(f"File '{filename}' saved to database successfully.")
@@ -72,9 +95,7 @@ def save_file_to_db(filename, file_bytes, session_id):
             print(f"Error saving file to database: {e}")
             return False
         finally:
-            if connection:
-                cursor.close()
-                connection.close()
+            return_db_connection(connection)
     return False
 
 def get_all_files():
@@ -86,8 +107,6 @@ def get_all_files():
             query = "SELECT id, filename, upload_date, file_size FROM file_uploads ORDER BY upload_date DESC"
             cursor.execute(query)
             files = cursor.fetchall()
-            # Convert datetime objects to string for JSON serialization if needed, 
-            # though Flask's jsonify might need help or we convert here.
             for f in files:
                 if isinstance(f['upload_date'], datetime):
                     f['upload_date'] = f['upload_date'].isoformat()
@@ -96,9 +115,7 @@ def get_all_files():
             print(f"Error fetching files: {e}")
             return []
         finally:
-            if connection:
-                cursor.close()
-                connection.close()
+            return_db_connection(connection)
     return []
 
 def get_file_by_id(file_id):
@@ -115,9 +132,7 @@ def get_file_by_id(file_id):
             print(f"Error fetching file {file_id}: {e}")
             return None
         finally:
-            if connection:
-                cursor.close()
-                connection.close()
+            return_db_connection(connection)
     return None
 
 def delete_file_by_id(file_id):
@@ -134,7 +149,5 @@ def delete_file_by_id(file_id):
             print(f"Error deleting file {file_id}: {e}")
             return False
         finally:
-            if connection:
-                cursor.close()
-                connection.close()
+            return_db_connection(connection)
     return False
