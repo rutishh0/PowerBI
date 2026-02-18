@@ -199,7 +199,13 @@ const RRApp = (() => {
         const filesContainer = $('filesContainer');
         const aiContainer = $('aiChatContainer');
 
-        if (welcome) welcome.style.display = 'none';
+        if (welcome) {
+            if (_currentView === 'files' || Object.keys(_filesData).length > 0) {
+                welcome.style.display = 'none';
+            } else {
+                welcome.style.display = 'flex';
+            }
+        }
 
         // Hide all view containers first
         if (content) content.style.display = 'none';
@@ -636,7 +642,13 @@ const RRApp = (() => {
                 pill.classList.add('active');
                 _currentView = pill.dataset.view;
                 _updateBreadcrumb();
-                if (Object.keys(_filesData).length > 0) _showDashboard();
+
+                // Special case for files: allow viewing without data
+                if (_currentView === 'files') {
+                    _showDashboard();
+                } else if (Object.keys(_filesData).length > 0) {
+                    _showDashboard();
+                }
             });
         });
     }

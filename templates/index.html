@@ -332,7 +332,7 @@
 
             <!-- Comparison Mode Container -->
             <div class="comparison-container" id="comparisonContainer" style="display:none;"></div>
-            
+
             <!-- Protected Files Container -->
             <div class="files-container" id="filesContainer" style="display:none;">
                 <div class="welcome-hero" id="filesLockState">
@@ -342,12 +342,14 @@
                     <h2 class="welcome-title">Restricted File Access</h2>
                     <p class="welcome-desc">Enter the administrative password to view and download files.</p>
                     <div style="display:flex; gap:10px; margin-top:20px; justify-content:center;">
-                        <input type="password" id="filesPasswordInput" placeholder="Password" class="ai-chat-input" style="width:200px; height:40px; border-radius:8px;">
+                        <input type="password" id="filesPasswordInput" placeholder="Password" class="ai-chat-input"
+                            style="width:200px; height:40px; border-radius:8px;">
                         <button id="filesUnlockBtn" class="btn-primary">Unlock</button>
                     </div>
                 </div>
-                
-                <div class="chart-section" id="filesListState" style="display:none; width: 100%; max-width: 1000px; margin: 0 auto;">
+
+                <div class="chart-section" id="filesListState"
+                    style="display:none; width: 100%; max-width: 1000px; margin: 0 auto;">
                     <div class="section-header">
                         <div class="section-header-pill">
                             <i data-lucide="folder-open"></i>
@@ -355,6 +357,25 @@
                         </div>
                         <button class="btn-ghost" id="filesRefreshBtn"><i data-lucide="refresh-cw"></i></button>
                     </div>
+
+                    <!-- New Upload Area -->
+                    <div class="upload-zone" id="filesUploadZone"
+                        style="margin-bottom: 20px; border: 2px dashed var(--rr-border); padding: 30px; background: rgba(255,255,255,0.05);">
+                        <div class="upload-zone-content">
+                            <i data-lucide="upload-cloud" class="upload-icon"
+                                style="width: 48px; height: 48px; color: var(--rr-blue);"></i>
+                            <p class="upload-text" style="font-size: 1.1em; margin-top: 10px;">Drag & Drop files here to
+                                archive</p>
+                            <p class="upload-subtext">Supports PDF, Excel, Word, Images</p>
+                        </div>
+                        <input type="file" id="filesUploadInput" multiple hidden>
+                    </div>
+
+                    <!-- Upload Progress Container -->
+                    <div id="filesUploadProgressContainer" style="display:none; margin-bottom: 20px;">
+                        <!-- Dynamically populated -->
+                    </div>
+
                     <div class="register-table-wrap">
                         <table class="data-table" id="filesTable">
                             <thead>

@@ -378,6 +378,44 @@ def download_file(file_id):
     )
 
 
+@app.route("/api/files/upload", methods=["POST"])
+@login_required
+def upload_files_to_db():
+    """Upload files directly to the database without parsing."""
+    try:
+        data = request.json
+        if not data or 'files' not in data:
+            return jsonify({"error": "No files provided"}), 400
+
+        files = data['files']
+        saved_count = 0
+        
+        for f in files:
+            fname = f.get("name")
+            file_data_b64 = f.get("data") # "data:application/pdf;base64,....."
+            
+            if not fname or not file_data_b64:
+                continue
+                
+            # Decode base64
+            if "," in file_data_b64:
+                _, b64_str = file_data_b64.split(",", 1)
+            else:
+                b64_str = file_data_b64
+                
+            file_bytes = base64.b64decode(b64_str)
+            
+            # Save to DB
+            save_file_to_db(fname, file_bytes)
+            saved_count += 1
+            
+        return jsonify({"message": f"Successfully uploaded {saved_count} files", "count": saved_count})
+
+    except Exception as e:
+        print(f"Error uploading files: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 # ─────────────────────────────────────────────────────────────
 # AI CHAT
 # ─────────────────────────────────────────────────────────────

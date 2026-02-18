@@ -45,6 +45,8 @@ const FilesModule = (() => {
             refreshBtn.addEventListener('click', _fetchFiles);
         }
 
+        _bindUpload();
+
         // Global listener for view change
         // We rely on app.js handling the main container switch.
         // But we need to check auth when "Files" view becomes active.
@@ -58,6 +60,106 @@ const FilesModule = (() => {
             });
         });
     }
+
+    function _bindUpload() {
+        const zone = $('filesUploadZone');
+        const input = $('filesUploadInput');
+        if (!zone || !input) return;
+
+        zone.addEventListener('click', () => input.click());
+        input.addEventListener('change', () => {
+            if (input.files.length > 0) _handleFilesUpload(input.files);
+        });
+
+        zone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            zone.style.borderColor = 'var(--rr-blue)';
+            zone.style.background = 'rgba(0, 102, 204, 0.1)';
+        });
+
+        zone.addEventListener('dragleave', () => {
+            zone.style.borderColor = 'var(--rr-border)';
+            zone.style.background = 'rgba(255,255,255,0.05)';
+        });
+
+        zone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            zone.style.borderColor = 'var(--rr-border)';
+            zone.style.background = 'rgba(255,255,255,0.05)';
+            if (e.dataTransfer.files.length > 0) _handleFilesUpload(e.dataTransfer.files);
+        });
+    }
+
+    async function _handleFilesUpload(fileList) {
+        const progressContainer = $('filesUploadProgressContainer');
+        if (progressContainer) {
+            progressContainer.style.display = 'block';
+            progressContainer.innerHTML = `
+                <div style="background: var(--rr-bg-card); padding: 15px; border-radius: 8px; border: 1px solid var(--rr-border);">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                        <span>Uploading ${fileList.length} file(s)...</span>
+                        <span id="filesUploadPct">0%</span>
+                    </div>
+                    <div class="upload-progress-bar" id="filesUploadBar" style="width: 0%;"></div>
+                </div>
+            `;
+        }
+
+        try {
+            // Read files
+            const files = Array.from(fileList);
+            const encodedFiles = await Promise.all(files.map(file => {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve({ name: file.name, data: reader.result });
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+            }));
+
+            // Simulate progress
+            const bar = $('filesUploadBar');
+            const pct = $('filesUploadPct');
+            if (bar) bar.style.width = '50%';
+            if (pct) pct.textContent = '50%';
+
+            // Send to backend
+            const response = await fetch('/api/files/upload', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ files: encodedFiles }),
+            });
+
+            if (bar) bar.style.width = '100%';
+            if (pct) pct.textContent = '100%';
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error || 'Upload failed');
+            }
+
+            const data = await response.json();
+            RRComponents.showToast(data.message || 'Files uploaded successfully', 'success');
+
+            // Refresh list
+            _fetchFiles();
+
+        } catch (error) {
+            console.error('Upload error:', error);
+            RRComponents.showToast(error.message, 'error');
+            if (progressContainer) progressContainer.innerHTML = `<div style="color:var(--rr-error); padding:10px;">Upload failed: ${error.message}</div>`;
+        } finally {
+            // Clear input
+            const input = $('filesUploadInput');
+            if (input) input.value = '';
+
+            // Hide progress after delay
+            setTimeout(() => {
+                if (progressContainer) progressContainer.style.display = 'none';
+            }, 3000);
+        }
+    }
+
 
     // ═══════════════════════════════════════════
     // AUTHENTICATION
