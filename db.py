@@ -2,8 +2,8 @@ import os
 import psycopg2
 import psycopg2.extras
 from psycopg2 import Error
-from dotenv import load_dotenv
 from datetime import datetime
+from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
@@ -119,3 +119,22 @@ def get_file_by_id(file_id):
                 cursor.close()
                 connection.close()
     return None
+
+def delete_file_by_id(file_id):
+    """Delete a specific file by ID."""
+    connection = get_db_connection()
+    if connection:
+        try:
+            cursor = connection.cursor()
+            query = "DELETE FROM file_uploads WHERE id = %s"
+            cursor.execute(query, (file_id,))
+            connection.commit()
+            return cursor.rowcount > 0
+        except Error as e:
+            print(f"Error deleting file {file_id}: {e}")
+            return False
+        finally:
+            if connection:
+                cursor.close()
+                connection.close()
+    return False

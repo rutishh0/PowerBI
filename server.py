@@ -416,6 +416,19 @@ def upload_files_to_db():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/files/<int:file_id>", methods=["DELETE"])
+@login_required
+def delete_file(file_id):
+    """Delete a specific file from the database."""
+    from db import delete_file_by_id
+    success = delete_file_by_id(file_id)
+    
+    if success:
+        return jsonify({"message": "File deleted successfully"})
+    else:
+        return jsonify({"error": "Failed to delete file"}), 500
+
+
 # ─────────────────────────────────────────────────────────────
 # AI CHAT
 # ─────────────────────────────────────────────────────────────

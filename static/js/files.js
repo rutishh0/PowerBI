@@ -260,9 +260,14 @@ const FilesModule = (() => {
                 <td>${dateStr}</td>
                 <td>${sizeStr}</td>
                 <td>
-                    <a href="/api/files/${file.id}" target="_blank" class="btn-ghost btn-sm" title="Download">
-                        <i data-lucide="download"></i> Download
-                    </a>
+                    <div style="display:flex; gap: 8px;">
+                        <a href="/api/files/${file.id}" target="_blank" class="btn-ghost btn-sm" title="Download">
+                            <i data-lucide="download"></i>
+                        </a>
+                        <button class="btn-ghost btn-sm" style="color:var(--rr-error);" title="Delete" onclick="FilesModule.deleteFile(${file.id})">
+                            <i data-lucide="trash-2"></i>
+                        </button>
+                    </div>
                 </td>
             `;
             tbody.appendChild(tr);
@@ -272,12 +277,31 @@ const FilesModule = (() => {
         if (window.lucide) lucide.createIcons();
     }
 
+    async function deleteFile(id) {
+        if (!confirm('Are you sure you want to delete this file? This action cannot be undone.')) return;
+
+        try {
+            const response = await fetch(`${ENDPOINT_FILES}/${id}`, {
+                method: 'DELETE'
+            });
+
+            if (!response.ok) throw new Error('Delete failed');
+
+            RRComponents.showToast('File deleted successfully', 'success');
+            _fetchFiles(); // Refresh list
+
+        } catch (error) {
+            console.error('Delete error:', error);
+            RRComponents.showToast('Failed to delete file', 'error');
+        }
+    }
+
     // ═══════════════════════════════════════════
     // BOOT
     // ═══════════════════════════════════════════
 
     document.addEventListener('DOMContentLoaded', init);
 
-    return { init };
+    return { init, deleteFile };
 
 })();
