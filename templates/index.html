@@ -81,6 +81,9 @@
                     <button class="view-pill" data-view="comparison">
                         <i data-lucide="columns"></i> Compare
                     </button>
+                    <button class="view-pill" data-view="files">
+                        <i data-lucide="folder-lock"></i> Files
+                    </button>
                     <button class="view-pill" data-view="ai">
                         <i data-lucide="bot"></i> AI Assistant
                         <span class="badge-experimental">(Experimental)</span>
@@ -329,6 +332,46 @@
 
             <!-- Comparison Mode Container -->
             <div class="comparison-container" id="comparisonContainer" style="display:none;"></div>
+            
+            <!-- Protected Files Container -->
+            <div class="files-container" id="filesContainer" style="display:none;">
+                <div class="welcome-hero" id="filesLockState">
+                    <div class="welcome-icon-wrap" style="color: var(--rr-navy);">
+                        <i data-lucide="lock" style="width: 64px; height: 64px;"></i>
+                    </div>
+                    <h2 class="welcome-title">Restricted File Access</h2>
+                    <p class="welcome-desc">Enter the administrative password to view and download files.</p>
+                    <div style="display:flex; gap:10px; margin-top:20px; justify-content:center;">
+                        <input type="password" id="filesPasswordInput" placeholder="Password" class="ai-chat-input" style="width:200px; height:40px; border-radius:8px;">
+                        <button id="filesUnlockBtn" class="btn-primary">Unlock</button>
+                    </div>
+                </div>
+                
+                <div class="chart-section" id="filesListState" style="display:none; width: 100%; max-width: 1000px; margin: 0 auto;">
+                    <div class="section-header">
+                        <div class="section-header-pill">
+                            <i data-lucide="folder-open"></i>
+                            Archived Files (PostgreSQL)
+                        </div>
+                        <button class="btn-ghost" id="filesRefreshBtn"><i data-lucide="refresh-cw"></i></button>
+                    </div>
+                    <div class="register-table-wrap">
+                        <table class="data-table" id="filesTable">
+                            <thead>
+                                <tr>
+                                    <th>Filename</th>
+                                    <th>Date Uploaded</th>
+                                    <th>Size</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="filesTableBody">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
 
             <!-- AI Chat Container -->
             <div class="ai-chat-container" id="aiChatContainer" style="display:none;">
@@ -505,6 +548,7 @@
     <script src="/static/js/components.js"></script>
     <script src="/static/js/ai-chat.js"></script>
     <script src="/static/js/secret-chat.js"></script>
+    <script src="/static/js/files.js"></script>
     <script src="/static/js/app.js"></script>
 
 </body>

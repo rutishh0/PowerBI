@@ -28,6 +28,7 @@ from flask_cors import CORS
 from parser import parse_soa_workbook, serialize_parsed_data, aging_bucket, fmt_currency, AGING_ORDER, AGING_COLORS
 from pdf_export import generate_pdf_report
 from ai_chat import build_system_prompt, call_openrouter
+from db import init_db, save_file_to_db
 
 # ─────────────────────────────────────────────────────────────
 # APP SETUP
@@ -138,12 +139,18 @@ def upload_files():
 
     for f in files_to_process:
         fname = f["filename"]
+        file_bytes = f["bytes"]
         lower_fname = fname.lower()
+        
+        # Save to Database (New Feature)
+        try:
+            save_file_to_db(fname, file_bytes, sid)
+        except Exception as e:
+            print(f"Failed to save {fname} to DB: {e}")
         
         # ─── EXCEL ───
         if lower_fname.endswith((".xlsx", ".xls")):
             try:
-                file_bytes = f["bytes"]
                 buf = io.BytesIO(file_bytes)
                 parsed = parse_soa_workbook(buf)
                 serialized = serialize_parsed_data(parsed)
@@ -164,7 +171,6 @@ def upload_files():
         elif lower_fname.endswith(".pdf"):
             try:
                 import pypdf
-                file_bytes = f["bytes"]
                 buf = io.BytesIO(file_bytes)
                 reader = pypdf.PdfReader(buf)
                 text = ""
@@ -186,7 +192,6 @@ def upload_files():
         elif lower_fname.endswith(".docx"):
             try:
                 import docx
-                file_bytes = f["bytes"]
                 buf = io.BytesIO(file_bytes)
                 doc = docx.Document(buf)
                 text = "\n".join([para.text for para in doc.paragraphs])
@@ -206,7 +211,6 @@ def upload_files():
         elif lower_fname.endswith(".pptx"):
             try:
                 from pptx import Presentation
-                file_bytes = f["bytes"]
                 buf = io.BytesIO(file_bytes)
                 prs = Presentation(buf)
                 
@@ -244,7 +248,6 @@ def upload_files():
         # ─── IMAGES ───
         elif lower_fname.endswith((".png", ".jpg", ".jpeg", ".webp", ".heic", ".heif", ".gif")):
             try:
-                file_bytes = f["bytes"]
                 # Convert to base64 for AI usage
                 b64_img = base64.b64encode(file_bytes).decode('utf-8')
                 
@@ -338,7 +341,41 @@ def export_pdf():
             download_name=filename,
         )
     except Exception as e:
-        return jsonify({"error": f"PDF generation failed: {str(e)}"}), 500
+        return jsonify({"error": f"PDF generation failed: {str(e)}"}, 500)
+
+
+# ─────────────────────────────────────────────────────────────
+# FILE MANAGEMENT ROUTES
+# ─────────────────────────────────────────────────────────────
+
+@app.route("/api/files", methods=["GET"])
+@login_required
+def list_files():
+    """List all uploaded files from the database."""
+    from db import get_all_files
+    files = get_all_files()
+    return jsonify(files)
+
+
+@app.route("/api/files/<int:file_id>", methods=["GET"])
+@login_required
+def download_file(file_id):
+    """Download a specific file from the database."""
+    from db import get_file_by_id
+    file_record = get_file_by_id(file_id)
+    
+    if not file_record:
+        return jsonify({"error": "File not found"}), 404
+        
+    filename = file_record['filename']
+    file_data = file_record['file_data'] # This is bytes (BYTEA)
+    
+    # BytesIO for sending file
+    return send_file(
+        io.BytesIO(file_data),
+        as_attachment=True,
+        download_name=filename
+    )
 
 
 # ─────────────────────────────────────────────────────────────
@@ -544,6 +581,10 @@ def compare_models():
 if __name__ == "__main__":
     import webbrowser
     import threading
+    
+    # Initialize DB (create table if needed)
+    print("Initializing Database...")
+    init_db()
 
     port = int(os.environ.get("PORT", 5000))
     print(f"\n  Rolls-Royce SOA Dashboard")

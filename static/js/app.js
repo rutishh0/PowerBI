@@ -196,6 +196,7 @@ const RRApp = (() => {
         const content = $('dashboardContent');
         const presContainer = $('presentationContainer');
         const compContainer = $('comparisonContainer');
+        const filesContainer = $('filesContainer');
         const aiContainer = $('aiChatContainer');
 
         if (welcome) welcome.style.display = 'none';
@@ -204,6 +205,7 @@ const RRApp = (() => {
         if (content) content.style.display = 'none';
         if (presContainer) presContainer.style.display = 'none';
         if (compContainer) compContainer.style.display = 'none';
+        if (filesContainer) filesContainer.style.display = 'none';
         if (aiContainer) aiContainer.style.display = 'none';
 
         // Render based on current view
@@ -223,6 +225,9 @@ const RRApp = (() => {
             case 'comparison':
                 if (compContainer) compContainer.style.display = 'block';
                 _renderComparisonView();
+                break;
+            case 'files':
+                if (filesContainer) filesContainer.style.display = 'block';
                 break;
             case 'ai':
                 if (aiContainer) aiContainer.style.display = 'flex';
@@ -639,7 +644,7 @@ const RRApp = (() => {
     function _updateBreadcrumb() {
         const bc = $('breadcrumbView');
         if (!bc) return;
-        const labels = { standard: 'Standard View', executive: 'Executive Summary', presentation: 'Presentation Mode', comparison: 'Comparison Mode', ai: 'AI Assistant' };
+        const labels = { standard: 'Standard View', executive: 'Executive Summary', presentation: 'Presentation Mode', comparison: 'Comparison Mode', ai: 'AI Assistant', files: 'Restricted Files' };
         bc.textContent = labels[_currentView] || 'Standard View';
     }
 
