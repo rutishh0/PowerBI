@@ -1,0 +1,1237 @@
+{
+  "SOA": {
+    "file_type": "SOA",
+    "metadata": {
+      "title": "Ethiopian Statement of Account with Rolls-Royce",
+      "customer_name": "Ethiopian Airlines / EA Enterprise",
+      "customer_number": "1009374 / 1014433",
+      "contact_email": "Eyerusalemta@ethiopianairlines.com",
+      "lpi_rate": 0.00035,
+      "report_date": "2026-02-16",
+      "avg_days_late": 113.93,
+      "source_file": "SOA",
+      "source_sheet": "SoA 26.1.26"
+    },
+    "sections": [
+      {
+        "name": "Credits usable",
+        "section_type": "credits",
+        "items": [
+          "..."
+        ],
+        "total": -28217714.96,
+        "overdue": null,
+        "available_credit": null
+      },
+      {
+        "name": "TotalCare Charges",
+        "section_type": "totalcare",
+        "items": [
+          "...",
+          "...",
+          "...",
+          "...1 more"
+        ],
+        "total": 13237096.48,
+        "overdue": 0.0,
+        "available_credit": null
+      },
+      {
+        "name": "Customer Responsible Charges",
+        "section_type": "crc",
+        "items": [
+          "...",
+          "...",
+          "...",
+          "...37 more"
+        ],
+        "total": 19419421.1,
+        "overdue": 19419421.1,
+        "available_credit": -40166155.12
+      },
+      "...2 more"
+    ],
+    "grand_totals": {
+      "total_overdue": 21087889.32,
+      "total_credits": -68383870.08,
+      "net_balance": -33588435.28
+    },
+    "summary_sheet": {
+      "TotalCare": 0.0,
+      "CRC": 19419421.1,
+      "Spare Parts": 581179.0,
+      "LPI": 1087289.22,
+      "Total Overdue": 21087889.32,
+      "CRC ULW": -40166155.12,
+      "Other": -28217714.96,
+      "Total Credit": -68383870.08,
+      "Invoiced": 1050679.4,
+      "Not yet  invoiced (cum.)": 465124.5133994124,
+      "Total": 1515803.9133994123
+    },
+    "aging_buckets": {
+      "current": 9996620.13,
+      "1_30_days": 11253290.45,
+      "31_60_days": 3582351.97,
+      "61_90_days": 516997.85,
+      "91_180_days": 7306723.85,
+      "over_180_days": 2139450.55
+    },
+    "all_sheets": [
+      "SoA Summary",
+      "SoA 26.1.26",
+      "Offset",
+      "...3 more"
+    ],
+    "errors": []
+  },
+  "EPI": {
+    "file_type": "INVOICE_LIST",
+    "metadata": {
+      "source_file": "EPI",
+      "source_sheet": "Sheet1",
+      "total_items": 106,
+      "currencies": [
+        "USD"
+      ]
+    },
+    "items": [
+      {
+        "reference": null,
+        "doc_date": "2022-06-17",
+        "due_date": "2022-05-01",
+        "currency": "USD",
+        "amount": 4663.38,
+        "reference_key3": null,
+        "text": "Bal to canx by credit 17.6.22",
+        "assignment": "DEG 9054"
+      },
+      {
+        "reference": null,
+        "doc_date": "2022-11-07",
+        "due_date": "2022-10-01",
+        "currency": "USD",
+        "amount": 2640.0,
+        "reference_key3": null,
+        "text": "BAL LEFT AGAINST INV 0097819658",
+        "assignment": "DEG 10215"
+      },
+      {
+        "reference": "0098359070",
+        "doc_date": "2023-09-24",
+        "due_date": "2023-10-24",
+        "currency": "USD",
+        "amount": 978.0,
+        "reference_key3": null,
+        "text": "Part returned - should be credited",
+        "assignment": "5C-P0423946"
+      },
+      "...103 more"
+    ],
+    "totals": {
+      "total_amount": 11661590.03,
+      "total_positive": 72129475.12,
+      "total_negative": -60467885.09,
+      "item_count": 106
+    },
+    "sheet_subtotals": [
+      {
+        "row_index": 61,
+        "amount": 10834287.249999998
+      },
+      {
+        "row_index": 92,
+        "amount": 61295187.869999975
+      },
+      {
+        "row_index": 112,
+        "amount": -60467885.08999999
+      }
+    ],
+    "all_sheets": [
+      "Sheet1"
+    ],
+    "errors": []
+  },
+  "OPP": {
+    "file_type": "OPPORTUNITY_TRACKER",
+    "metadata": {
+      "source_file": "OPP",
+      "away_day_date": "2025-04-21",
+      "exchange_rate": null,
+      "report_title": "COMMERCIAL OPTIMISATION OPPORTUNITY REPORT",
+      "sheets_parsed": [
+        "L2",
+        "L3",
+        "MEA LOG"
+      ],
+      "all_sheets": [
+        "L2",
+        "L3",
+        "Summary",
+        "...10 more"
+      ],
+      "estimation_levels": {
+        "L2": "ICT",
+        "L3": "Contract",
+        "MEA LOG": "Hopper"
+      }
+    },
+    "opportunities": {
+      "L2": [
+        {
+          "number": "...",
+          "project": "...",
+          "programme": "...",
+          "customer": "...",
+          "region": "...",
+          "asks": "...",
+          "opportunity_type": "...",
+          "levers": "...",
+          "priority": "...",
+          "spe_related": "...",
+          "num_spe": "...",
+          "crp_pct": "...",
+          "ext_probability": "...",
+          "int_complexity": "...",
+          "status": "...",
+          "evaluation_level": "...",
+          "term_benefit": "...",
+          "benefit_2026": "...",
+          "benefit_2027": "...",
+          "sum_26_27": "...",
+          "financials": "...",
+          "supporting_financials": "...",
+          "to_go": "...",
+          "resource_priority": "..."
+        },
+        {
+          "number": "...",
+          "project": "...",
+          "programme": "...",
+          "customer": "...",
+          "region": "...",
+          "asks": "...",
+          "opportunity_type": "...",
+          "levers": "...",
+          "priority": "...",
+          "spe_related": "...",
+          "num_spe": "...",
+          "crp_pct": "...",
+          "ext_probability": "...",
+          "int_complexity": "...",
+          "status": "...",
+          "evaluation_level": "...",
+          "term_benefit": "...",
+          "benefit_2026": "...",
+          "benefit_2027": "...",
+          "sum_26_27": "...",
+          "financials": "...",
+          "supporting_financials": "...",
+          "to_go": "...",
+          "resource_priority": "..."
+        },
+        {
+          "number": "...",
+          "project": "...",
+          "programme": "...",
+          "customer": "...",
+          "region": "...",
+          "asks": "...",
+          "opportunity_type": "...",
+          "levers": "...",
+          "priority": "...",
+          "spe_related": "...",
+          "num_spe": "...",
+          "crp_pct": "...",
+          "ext_probability": "...",
+          "int_complexity": "...",
+          "status": "...",
+          "evaluation_level": "...",
+          "term_benefit": "...",
+          "benefit_2026": "...",
+          "benefit_2027": "...",
+          "sum_26_27": "...",
+          "financials": "...",
+          "supporting_financials": "...",
+          "to_go": "...",
+          "resource_priority": "..."
+        },
+        "...42 more"
+      ],
+      "L3": [
+        {
+          "number": "...",
+          "project": "...",
+          "programme": "...",
+          "customer": "...",
+          "region": "...",
+          "asks": "...",
+          "opportunity_type": "...",
+          "levers": "...",
+          "priority": "...",
+          "spe_related": "...",
+          "num_spe": "...",
+          "crp_pct": "...",
+          "ext_probability": "...",
+          "int_complexity": "...",
+          "status": "...",
+          "evaluation_level": "...",
+          "term_benefit": "...",
+          "benefit_2026": "...",
+          "benefit_2027": "...",
+          "sum_26_27": "...",
+          "financials": "...",
+          "supporting_financials": "...",
+          "to_go": "...",
+          "resource_priority": "..."
+        },
+        {
+          "number": "...",
+          "project": "...",
+          "programme": "...",
+          "customer": "...",
+          "region": "...",
+          "asks": "...",
+          "opportunity_type": "...",
+          "levers": "...",
+          "priority": "...",
+          "spe_related": "...",
+          "num_spe": "...",
+          "crp_pct": "...",
+          "ext_probability": "...",
+          "int_complexity": "...",
+          "status": "...",
+          "evaluation_level": "...",
+          "term_benefit": "...",
+          "benefit_2026": "...",
+          "benefit_2027": "...",
+          "sum_26_27": "...",
+          "financials": "...",
+          "supporting_financials": "...",
+          "to_go": "...",
+          "resource_priority": "..."
+        },
+        {
+          "number": "...",
+          "project": "...",
+          "programme": "...",
+          "customer": "...",
+          "region": "...",
+          "asks": "...",
+          "opportunity_type": "...",
+          "levers": "...",
+          "priority": "...",
+          "spe_related": "...",
+          "num_spe": "...",
+          "crp_pct": "...",
+          "ext_probability": "...",
+          "int_complexity": "...",
+          "status": "...",
+          "evaluation_level": "...",
+          "term_benefit": "...",
+          "benefit_2026": "...",
+          "benefit_2027": "...",
+          "sum_26_27": "...",
+          "financials": "...",
+          "supporting_financials": "...",
+          "to_go": "...",
+          "resource_priority": "..."
+        },
+        "...42 more"
+      ],
+      "MEA LOG": [
+        {
+          "number": "...",
+          "project": "...",
+          "programme": "...",
+          "customer": "...",
+          "region": "...",
+          "asks": "...",
+          "opportunity_type": "...",
+          "levers": "...",
+          "priority": "...",
+          "spe_related": "...",
+          "num_spe": "...",
+          "crp_pct": "...",
+          "ext_probability": "...",
+          "int_complexity": "...",
+          "status": "...",
+          "evaluation_level": "...",
+          "term_benefit": "...",
+          "benefit_2026": "...",
+          "benefit_2027": "...",
+          "sum_26_27": "...",
+          "financials": "...",
+          "supporting_financials": "...",
+          "to_go": "...",
+          "resource_priority": "..."
+        },
+        {
+          "number": "...",
+          "project": "...",
+          "programme": "...",
+          "customer": "...",
+          "region": "...",
+          "asks": "...",
+          "opportunity_type": "...",
+          "levers": "...",
+          "priority": "...",
+          "spe_related": "...",
+          "num_spe": "...",
+          "crp_pct": "...",
+          "ext_probability": "...",
+          "int_complexity": "...",
+          "status": "...",
+          "evaluation_level": "...",
+          "term_benefit": "...",
+          "benefit_2026": "...",
+          "benefit_2027": "...",
+          "sum_26_27": "...",
+          "financials": "...",
+          "supporting_financials": "...",
+          "to_go": "...",
+          "resource_priority": "..."
+        },
+        {
+          "number": "...",
+          "project": "...",
+          "programme": "...",
+          "customer": "...",
+          "region": "...",
+          "asks": "...",
+          "opportunity_type": "...",
+          "levers": "...",
+          "priority": "...",
+          "spe_related": "...",
+          "num_spe": "...",
+          "crp_pct": "...",
+          "ext_probability": "...",
+          "int_complexity": "...",
+          "status": "...",
+          "evaluation_level": "...",
+          "term_benefit": "...",
+          "benefit_2026": "...",
+          "benefit_2027": "...",
+          "sum_26_27": "...",
+          "financials": "...",
+          "supporting_financials": "...",
+          "to_go": "...",
+          "resource_priority": "..."
+        },
+        "...42 more"
+      ]
+    },
+    "opportunities_by_level": {
+      "ICT": {
+        "sheet_name": "L2",
+        "records": [
+          "...",
+          "...",
+          "...",
+          "...42 more"
+        ],
+        "sums": {
+          "term_benefit_sum": "...",
+          "sum_2026": "...",
+          "sum_2027": "...",
+          "sum_26_27": "..."
+        }
+      },
+      "Contract": {
+        "sheet_name": "L3",
+        "records": [
+          "...",
+          "...",
+          "...",
+          "...42 more"
+        ],
+        "sums": {
+          "term_benefit_sum": "...",
+          "sum_2026": "...",
+          "sum_2027": "...",
+          "sum_26_27": "..."
+        }
+      },
+      "Hopper": {
+        "sheet_name": "MEA LOG",
+        "records": [
+          "...",
+          "...",
+          "...",
+          "...42 more"
+        ],
+        "sums": {
+          "term_benefit_sum": "...",
+          "sum_2026": "...",
+          "sum_2027": "...",
+          "sum_26_27": "..."
+        }
+      }
+    },
+    "summary": {
+      "total_opportunities": 135,
+      "by_status": {
+        "Completed": 27,
+        "Contracting": 9,
+        "Hopper": 51,
+        "ICT": 15,
+        "Negotiations": 9,
+        "Cancelled": 24
+      },
+      "by_programme": {
+        "Trent XWB-84": 45,
+        "Trent 1000": 33,
+        "Trent XWB-97": 12,
+        "Trent 500": 3,
+        "Trent 700": 21,
+        "RB211-524": 6,
+        "Trent 7000": 12,
+        "Trent 900": 3
+      },
+      "by_customer": {
+        "Emirates": 21,
+        "Ethiopia": 21,
+        "Qatar": 9,
+        "Qatar Amiri": 3,
+        "Egypt": 15,
+        "Turkmenistan": 3,
+        "Qanot Sharq": 3,
+        "Silkway": 6,
+        "Senegal": 3,
+        "Air Algerie": 3,
+        "Etihad": 6,
+        "Saudia": 6,
+        "Tanzania": 6,
+        "Gulf": 9,
+        "Austral": 6,
+        "Kuwait": 3,
+        "Mauritus": 6,
+        "Rwanda": 3,
+        "SAA": 3
+      },
+      "by_opportunity_type": {
+        "TCA Amendments": 51,
+        "Cost Reduction": 18,
+        "SPE increase": 24,
+        "Term Extension": 21,
+        "Service Upsells": 6,
+        "New a/c": 9,
+        "Other": 3,
+        "Last 6 aircraft": 3
+      },
+      "total_term_benefit": 4901.7,
+      "estimation_level_sums": {
+        "ICT": {
+          "sheet_name": "...",
+          "count": "...",
+          "total_term_benefit": "...",
+          "total_2026": "...",
+          "total_2027": "...",
+          "total_sum_26_27": "...",
+          "sums_from_sheet": "..."
+        },
+        "Contract": {
+          "sheet_name": "...",
+          "count": "...",
+          "total_term_benefit": "...",
+          "total_2026": "...",
+          "total_2027": "...",
+          "total_sum_26_27": "...",
+          "sums_from_sheet": "..."
+        },
+        "Hopper": {
+          "sheet_name": "...",
+          "count": "...",
+          "total_term_benefit": "...",
+          "total_2026": "...",
+          "total_2027": "...",
+          "total_sum_26_27": "...",
+          "sums_from_sheet": "..."
+        }
+      }
+    },
+    "project_summary": {
+      "projects": [
+        {
+          "group": "...",
+          "project": "...",
+          "customer": "...",
+          "programme": "...",
+          "kam_pack_complete": "...",
+          "crp_deep_dive_complete": "...",
+          "risk_review_complete": "...",
+          "contract_dcr_complete": "...",
+          "ov_review_complete": "...",
+          "current_crp_margin": "...",
+          "onerous_provision": "...",
+          "current_crp_pct": "...",
+          "onerous_release_2024": "...",
+          "onerous_release_2025": "...",
+          "fyp_improvement": "...",
+          "overall_pack_improvement": "..."
+        },
+        {
+          "group": "...",
+          "project": "...",
+          "customer": "...",
+          "programme": "...",
+          "kam_pack_complete": "...",
+          "crp_deep_dive_complete": "...",
+          "risk_review_complete": "...",
+          "contract_dcr_complete": "...",
+          "ov_review_complete": "...",
+          "current_crp_margin": "...",
+          "onerous_provision": "...",
+          "current_crp_pct": "...",
+          "onerous_release_2024": "...",
+          "onerous_release_2025": "...",
+          "fyp_improvement": "...",
+          "overall_pack_improvement": "..."
+        },
+        {
+          "group": "...",
+          "project": "...",
+          "customer": "...",
+          "programme": "...",
+          "kam_pack_complete": "...",
+          "crp_deep_dive_complete": "...",
+          "risk_review_complete": "...",
+          "contract_dcr_complete": "...",
+          "ov_review_complete": "...",
+          "current_crp_margin": "...",
+          "onerous_provision": "...",
+          "current_crp_pct": "...",
+          "onerous_release_2024": "...",
+          "onerous_release_2025": "...",
+          "fyp_improvement": "...",
+          "overall_pack_improvement": "..."
+        },
+        "...8 more"
+      ]
+    },
+    "opps_and_threats": {
+      "totals": {
+        "col_5": 104.62162162162161,
+        "col_6": 834.72,
+        "col_7": 0.7702702702702702,
+        "col_8": 0.8243243243243243,
+        "col_9": 0.8264478764478764,
+        "col_10": 0.8918918918918919,
+        "col_11": 0.7220077220077221,
+        "col_12": 1300.18
+      },
+      "items": [
+        {
+          "project": "...",
+          "programme": "...",
+          "customer": "...",
+          "opportunity": "...",
+          "profit_release_2024": "...",
+          "profit_release_2025": "...",
+          "fyp_improvement": "...",
+          "overall_pack_improvement": "...",
+          "window_for_forecast": "...",
+          "due_date": "...",
+          "owner": "...",
+          "status": "...",
+          "comments": "..."
+        },
+        {
+          "project": "...",
+          "programme": "...",
+          "customer": "...",
+          "opportunity": "...",
+          "profit_release_2024": "...",
+          "profit_release_2025": "...",
+          "fyp_improvement": "...",
+          "overall_pack_improvement": "...",
+          "window_for_forecast": "...",
+          "due_date": "...",
+          "owner": "...",
+          "status": "...",
+          "comments": "..."
+        },
+        {
+          "project": "...",
+          "programme": "...",
+          "customer": "...",
+          "opportunity": "...",
+          "profit_release_2024": "...",
+          "profit_release_2025": "...",
+          "fyp_improvement": "...",
+          "overall_pack_improvement": "...",
+          "window_for_forecast": "...",
+          "due_date": "...",
+          "owner": "...",
+          "status": "...",
+          "comments": "..."
+        },
+        "...10 more"
+      ]
+    },
+    "timeline": {
+      "milestones": [
+        {
+          "project": "...",
+          "customer": "...",
+          "milestones": "...",
+          "current_phase": "...",
+          "source": "..."
+        },
+        {
+          "project": "...",
+          "customer": "...",
+          "milestones": "...",
+          "current_phase": "...",
+          "source": "..."
+        },
+        {
+          "project": "...",
+          "customer": "...",
+          "milestones": "...",
+          "current_phase": "...",
+          "source": "..."
+        },
+        "...54 more"
+      ]
+    },
+    "customer_analytics": {
+      "customers": [
+        {
+          "customer": "...",
+          "count_of_asks": "...",
+          "spe_related": "...",
+          "num_spe": "...",
+          "prog_xwb84": "...",
+          "prog_xwb97": "...",
+          "prog_t1000": "...",
+          "prog_t500": "...",
+          "prog_t700": "...",
+          "prog_rb211": "...",
+          "prog_t7000": "...",
+          "count_high_prob": "...",
+          "count_med_prob": "...",
+          "count_low_prob": "...",
+          "count_high_comp": "...",
+          "count_med_comp": "...",
+          "count_low_comp": "...",
+          "count_completed": "...",
+          "count_contracting": "...",
+          "count_negotiations": "...",
+          "count_ict": "...",
+          "count_hopper": "...",
+          "sum_2026": "...",
+          "sum_2027": "...",
+          "sum_26_27": "...",
+          "sum_term_benefit": "..."
+        },
+        {
+          "customer": "...",
+          "count_of_asks": "...",
+          "spe_related": "...",
+          "num_spe": "...",
+          "prog_xwb84": "...",
+          "prog_xwb97": "...",
+          "prog_t1000": "...",
+          "prog_t500": "...",
+          "prog_t700": "...",
+          "prog_rb211": "...",
+          "prog_t7000": "...",
+          "count_high_prob": "...",
+          "count_med_prob": "...",
+          "count_low_prob": "...",
+          "count_high_comp": "...",
+          "count_med_comp": "...",
+          "count_low_comp": "...",
+          "count_completed": "...",
+          "count_contracting": "...",
+          "count_negotiations": "...",
+          "count_ict": "...",
+          "count_hopper": "...",
+          "sum_2026": "...",
+          "sum_2027": "...",
+          "sum_26_27": "...",
+          "sum_term_benefit": "..."
+        },
+        {
+          "customer": "...",
+          "count_of_asks": "...",
+          "spe_related": "...",
+          "num_spe": "...",
+          "prog_xwb84": "...",
+          "prog_xwb97": "...",
+          "prog_t1000": "...",
+          "prog_t500": "...",
+          "prog_t700": "...",
+          "prog_rb211": "...",
+          "prog_t7000": "...",
+          "count_high_prob": "...",
+          "count_med_prob": "...",
+          "count_low_prob": "...",
+          "count_high_comp": "...",
+          "count_med_comp": "...",
+          "count_low_comp": "...",
+          "count_completed": "...",
+          "count_contracting": "...",
+          "count_negotiations": "...",
+          "count_ict": "...",
+          "count_hopper": "...",
+          "sum_2026": "...",
+          "sum_2027": "...",
+          "sum_26_27": "...",
+          "sum_term_benefit": "..."
+        },
+        "...110 more"
+      ],
+      "sorted_rankings": {
+        "SORTED TERM IMPACT A": [
+          "...",
+          "...",
+          "...",
+          "...16 more"
+        ],
+        "SORTED 2026": [
+          "...",
+          "...",
+          "...",
+          "...16 more"
+        ],
+        "SORTED 2027": [
+          "...",
+          "...",
+          "...",
+          "...16 more"
+        ],
+        "SORTED 2026/2027": [
+          "...",
+          "...",
+          "...",
+          "...16 more"
+        ]
+      }
+    },
+    "calculator": {
+      "filters": {
+        "probability": "High",
+        "complexity": "Low",
+        "status": "Completed"
+      },
+      "computed_sums": {
+        "term_impact": 453.18,
+        "sum_2026": 0.43333333333333335,
+        "sum_2027": 20.0
+      },
+      "totals": {
+        "term_impact": 453.18,
+        "sum_2026": 0.43333333333333335,
+        "sum_2027": 20.0
+      }
+    },
+    "cover": {
+      "title": "COMMERCIAL OPTIMISATION OPPORTUNITY REPORT",
+      "subtitle": null
+    },
+    "input_config": {
+      "probability_scores": {
+        "Med": 1.0
+      },
+      "complexity_scores": {
+        "High": 1.0,
+        "Low": 1.0
+      },
+      "weights": {},
+      "years": [
+        2026,
+        2027,
+        2028,
+        "...3 more"
+      ],
+      "statuses": [
+        "Hopper",
+        "ICT",
+        "Negotiations",
+        "...2 more"
+      ],
+      "customers": [
+        "Emirates",
+        "Ethiopia",
+        "Qatar",
+        "...16 more"
+      ],
+      "projects": [
+        "FiniQ II",
+        "FiniQ III",
+        "IDK",
+        "...28 more"
+      ],
+      "programmes": [
+        "Trent XWB-84",
+        "Trent XWB-97",
+        "Trent 1000",
+        "...10 more"
+      ]
+    },
+    "reference_data": {
+      "programmes": [
+        "RB211-535",
+        "Trent 500",
+        "Trent 700",
+        "...7 more"
+      ],
+      "operators": [
+        "Air Algerie",
+        "Air Berkut",
+        "Austral",
+        "...34 more"
+      ],
+      "projects": [
+        "Burgundy",
+        "Falcon",
+        "FiniQ",
+        "...1 more"
+      ],
+      "tca_agreement_types": [
+        "Term extension",
+        "Engine enhancement",
+        "Fuel burn guarantees",
+        "...11 more"
+      ],
+      "spe_services_types": [
+        "Additional sales (increase SPE1 %)",
+        "NDSES",
+        "Discount vs list price",
+        "...16 more"
+      ],
+      "opportunity_types": [
+        "Contract Amendments",
+        "Service Upsells"
+      ],
+      "lever_types": [
+        "SPE",
+        "Cost cutting",
+        "Cost Reduction",
+        "...7 more"
+      ]
+    },
+    "errors": []
+  },
+  "SV": {
+    "file_type": "SHOP_VISIT_HISTORY",
+    "metadata": {
+      "source_file": "SV",
+      "source_sheet": "Report Page 1_1",
+      "engine_models": [
+        "TRENT900"
+      ],
+      "total_engines": 565,
+      "operators": [
+        "ALL NIPPON AIRWAYS",
+        "ASIANA AIRLINES",
+        "BRITISH AIRWAYS",
+        "...9 more"
+      ]
+    },
+    "shop_visits": [
+      {
+        "part_number": "TRENT900 [TRENT970-84]",
+        "serial_number": "91020",
+        "event_datetime": "2009-01-02",
+        "operator": "SINGAPORE AIRLINES LTD",
+        "parent_serial": "0005",
+        "registration": "9V-SKB",
+        "action_code": "REMOVAL",
+        "rework_level": "Shop Visit",
+        "service_event": "533636862",
+        "hsn": 4294.0,
+        "csn": 1990.0,
+        "hssv": 4294.0,
+        "cssv": 1990.0,
+        "sv_type": "Check & Repair",
+        "sv_location": "SAESL"
+      },
+      {
+        "part_number": "TRENT900 [TRENT970-84]",
+        "serial_number": "91020",
+        "event_datetime": "2010-02-28",
+        "operator": "SINGAPORE AIRLINES LTD",
+        "parent_serial": "0005",
+        "registration": "9V-SKB",
+        "action_code": "REMOVAL",
+        "rework_level": "Shop Visit",
+        "service_event": "21914",
+        "hsn": 7891.0,
+        "csn": 2395.0,
+        "hssv": 3597.0,
+        "cssv": 405.0,
+        "sv_type": "Check & Repair",
+        "sv_location": "SAESL"
+      },
+      {
+        "part_number": "TRENT900 [TRENT970-84]",
+        "serial_number": "91020",
+        "event_datetime": "2010-12-02",
+        "operator": "SINGAPORE AIRLINES LTD",
+        "parent_serial": "0006",
+        "registration": "9H-MIP",
+        "action_code": "REMOVAL",
+        "rework_level": "Shop Visit",
+        "service_event": "3635405983",
+        "hsn": 9728.0,
+        "csn": 2595.0,
+        "hssv": 1837.0,
+        "cssv": 200.0,
+        "sv_type": "Hospital",
+        "sv_location": "SAESL"
+      },
+      "...1408 more"
+    ],
+    "maintenance_actions": [],
+    "current_status": [
+      {
+        "part_number": "TRENT900 [TRENT970-84]",
+        "serial_number": "91002",
+        "event_datetime": "2026-02-09",
+        "operator": "NO OPERATOR",
+        "parent_serial": null,
+        "registration": null,
+        "action_code": "Current Status",
+        "rework_level": "Current Status",
+        "service_event": null,
+        "hsn": 0.0,
+        "csn": 0.0,
+        "hssv": 0.0,
+        "cssv": 0.0,
+        "sv_type": null,
+        "sv_location": null
+      },
+      {
+        "part_number": "TRENT900 [TRENT970-84]",
+        "serial_number": "91009",
+        "event_datetime": "2026-02-09",
+        "operator": "NO OPERATOR",
+        "parent_serial": null,
+        "registration": null,
+        "action_code": "Current Status",
+        "rework_level": "Current Status",
+        "service_event": null,
+        "hsn": 0.0,
+        "csn": 0.0,
+        "hssv": 0.0,
+        "cssv": 0.0,
+        "sv_type": null,
+        "sv_location": null
+      },
+      {
+        "part_number": "TRENT900 [TRENT970-84]",
+        "serial_number": "91012",
+        "event_datetime": "2026-02-09",
+        "operator": "NO OPERATOR",
+        "parent_serial": null,
+        "registration": null,
+        "action_code": "Current Status",
+        "rework_level": "Current Status",
+        "service_event": null,
+        "hsn": 0.0,
+        "csn": 0.0,
+        "hssv": 0.0,
+        "cssv": 0.0,
+        "sv_type": null,
+        "sv_location": null
+      },
+      "...598 more"
+    ],
+    "statistics": {
+      "total_shop_visits": 1411,
+      "total_maintenance": 0,
+      "total_engines_tracked": 565,
+      "sv_types": {
+        "Check & Repair": 464,
+        "Hospital": 549,
+        "First Refurbishment": 236,
+        "Unknown": 79,
+        "Serviceability": 16,
+        "Second Refurbishment": 30,
+        "Other (L1)": 3,
+        "Non Shop Visit": 32,
+        "SM": 2
+      },
+      "sv_locations": {
+        "SAESL": 808,
+        "Unknown": 79,
+        "N3EOS": 459,
+        "CMB": 21,
+        "Customer Maint Base": 14,
+        "No Overhaul Base": 2,
+        "N3EOS-OSP": 28
+      }
+    },
+    "all_sheets": [
+      "Report Page 1_1",
+      "Glossary_2"
+    ],
+    "errors": []
+  },
+  "SVRG": {
+    "file_type": "SVRG_MASTER",
+    "metadata": {
+      "source_file": "SVRG",
+      "customer": "Emirates",
+      "engine_model": "Trent 900 Guarantee Administration",
+      "all_sheets": [
+        "MENU",
+        "Sheet3",
+        "DESCRIPTIONS",
+        "...22 more"
+      ]
+    },
+    "claims_summary": {
+      "claims": [],
+      "total_claims": 0,
+      "total_credit_value": 0
+    },
+    "event_entries": {
+      "events": [
+        {
+          "event_type": "...",
+          "date": "...",
+          "engine_serial": "...",
+          "aircraft": "...",
+          "tsn_tsr": "...",
+          "csn_csr": "...",
+          "description": "...",
+          "qualification": "...",
+          "justification": "...",
+          "rr_input": "...",
+          "rr_justification": "...",
+          "guarantee_coverage": "...",
+          "comments": "..."
+        },
+        {
+          "event_type": "...",
+          "date": "...",
+          "engine_serial": "...",
+          "aircraft": "...",
+          "tsn_tsr": "...",
+          "csn_csr": "...",
+          "description": "...",
+          "qualification": "...",
+          "justification": "...",
+          "rr_input": "...",
+          "rr_justification": "...",
+          "guarantee_coverage": "...",
+          "comments": "..."
+        },
+        {
+          "event_type": "...",
+          "date": "...",
+          "engine_serial": "...",
+          "aircraft": "...",
+          "tsn_tsr": "...",
+          "csn_csr": "...",
+          "description": "...",
+          "qualification": "...",
+          "justification": "...",
+          "rr_input": "...",
+          "rr_justification": "...",
+          "guarantee_coverage": "...",
+          "comments": "..."
+        },
+        "...13 more"
+      ],
+      "total_events": 16,
+      "qualifications": {
+        "Unknown": 15,
+        "Qualified": 1
+      },
+      "guarantee_types": {
+        "ABTO": 1,
+        "DIV & ATB": 1,
+        "Unknown": 14
+      }
+    },
+    "available_sheets": {
+      "CHARTS": {
+        "row_count": 61,
+        "col_count": 11
+      },
+      "EFH AND REV DEPS": {
+        "row_count": 11,
+        "col_count": 17
+      },
+      "RATE BASED SUMMARY": {
+        "row_count": 75,
+        "col_count": 20
+      },
+      "DI SUMMARY": {
+        "row_count": 75,
+        "col_count": 22
+      },
+      "HPTB&VANE SUMMARY": {
+        "row_count": 20,
+        "col_count": 20
+      },
+      "ELMB SUMMARY": {
+        "row_count": 30,
+        "col_count": 21
+      },
+      "EMISSIONS SUMMARY": {
+        "row_count": 6,
+        "col_count": 15
+      },
+      "WEIGHT SUMMARY": {
+        "row_count": 19,
+        "col_count": 13
+      },
+      "OIL  ": {
+        "row_count": 8,
+        "col_count": 13
+      },
+      "OIL SUMMARY": {
+        "row_count": 29,
+        "col_count": 17
+      },
+      "FBR&UNCONT FAIL": {
+        "row_count": 6,
+        "col_count": 9
+      },
+      "QUALIFIED ENGINES": {
+        "row_count": 167,
+        "col_count": 42
+      },
+      "QUALIFIED SVs": {
+        "row_count": 1145,
+        "col_count": 13
+      },
+      "QUALIFIED EFH": {
+        "row_count": 394,
+        "col_count": 184
+      },
+      "HOURS&CYCLES INPUT": {
+        "row_count": 12143,
+        "col_count": 7
+      },
+      "TGT DETERIORATION": {
+        "row_count": 6,
+        "col_count": 12
+      },
+      "SVRG+ESVRG": {
+        "row_count": 40,
+        "col_count": 20
+      },
+      "ASSUMPTIONS": {
+        "row_count": 22,
+        "col_count": 33
+      },
+      "EHPTB MEASURE": {
+        "row_count": 20,
+        "col_count": 123
+      },
+      "2024 Expected SV's": {
+        "row_count": 11,
+        "col_count": 17
+      }
+    },
+    "errors": []
+  }
+}

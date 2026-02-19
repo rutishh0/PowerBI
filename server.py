@@ -1,8 +1,9 @@
 """
-Rolls-Royce Civil Aerospace — SOA Dashboard Server
-====================================================
+Rolls-Royce Civil Aerospace — Data Visualizer Server
+=====================================================
 Flask API backend serving the premium dashboard frontend.
-Handles file upload, Excel parsing, and PDF export.
+Handles file upload, universal Excel parsing, and PDF export.
+Supports: SOA, Invoice List, Opportunity Tracker, Shop Visit History, SVRG Master.
 
 Usage:
     python server.py
@@ -25,7 +26,14 @@ from flask import Flask, render_template, request, jsonify, send_file, session, 
 from functools import wraps
 from flask_cors import CORS
 
-from parser import parse_soa_workbook, serialize_parsed_data, aging_bucket, fmt_currency, AGING_ORDER, AGING_COLORS
+# Universal parser — handles SOA, INVOICE_LIST, OPPORTUNITY_TRACKER, SHOP_VISIT, SVRG_MASTER
+from parser_universal import parse_file, detect_file_type
+# Keep old parser for PDF export backward compat
+try:
+    from parser import parse_soa_workbook, serialize_parsed_data, aging_bucket, fmt_currency, AGING_ORDER, AGING_COLORS
+except ImportError:
+    parse_soa_workbook = None
+    serialize_parsed_data = None
 from pdf_export import generate_pdf_report
 from ai_chat import build_system_prompt, call_openrouter
 from db import init_db, save_file_to_db
@@ -148,19 +156,19 @@ def upload_files():
         except Exception as e:
             print(f"Failed to save {fname} to DB: {e}")
         
-        # ─── EXCEL ───
-        if lower_fname.endswith((".xlsx", ".xls")):
+        # ─── EXCEL (Universal Parser) ───
+        if lower_fname.endswith((".xlsx", ".xls", ".xlsb", ".xlsm")):
             try:
                 buf = io.BytesIO(file_bytes)
-                parsed = parse_soa_workbook(buf)
-                serialized = serialize_parsed_data(parsed)
-                results[fname] = serialized
+                parsed = parse_file(buf, filename=fname)
+                results[fname] = parsed
 
                 # Store raw parsed data
                 if sid not in _parsed_store:
                     _parsed_store[sid] = {}
                 _parsed_store[sid][fname] = {
                     "type": "excel",
+                    "file_type": parsed.get("file_type", "UNKNOWN"),
                     "parsed": parsed,
                     "file_bytes": file_bytes,
                 }
@@ -485,8 +493,16 @@ def chat():
                 "filename": fname
             })
         else:
-            # Excel — use the parsed data in system prompt (text-based)
-            serialized_data[fname] = serialize_parsed_data(fstore["parsed"])
+            # Excel — use the parsed data in system prompt
+            # Universal parser results are already JSON-serializable
+            parsed = fstore.get("parsed", {})
+            if serialize_parsed_data and isinstance(parsed, dict) and "sections" in parsed and hasattr(parsed.get("sections", {}), 'items'):
+                try:
+                    serialized_data[fname] = serialize_parsed_data(parsed)
+                except Exception:
+                    serialized_data[fname] = parsed
+            else:
+                serialized_data[fname] = parsed
 
     system_prompt = build_system_prompt(serialized_data)
 
@@ -638,7 +654,7 @@ if __name__ == "__main__":
     init_db()
 
     port = int(os.environ.get("PORT", 5000))
-    print(f"\n  Rolls-Royce SOA Dashboard")
+    print(f"\n  Rolls-Royce Data Visualizer")
     print(f"  http://localhost:{port}\n")
 
     # Auto-open browser after short delay
