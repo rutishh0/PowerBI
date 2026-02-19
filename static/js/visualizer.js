@@ -9,7 +9,7 @@
  * premium Rolls-Royce visual language with dynamic charts and micro-animations.
  */
 
-const RRVisualizer = (() => {
+window.RRVisualizer = (() => {
     'use strict';
 
     const $ = (id) => document.getElementById(id);

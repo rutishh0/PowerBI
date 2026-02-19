@@ -149,13 +149,35 @@ const RRApp = (() => {
             // Update file chips in sidebar
             _renderFileChips();
 
-            // Merge all items
+            // Merge all items — handle both old and new parser formats
             _allItems = [];
             Object.entries(_filesData).forEach(([fname, fdata]) => {
-                (fdata.all_items || []).forEach(item => {
-                    _allItems.push({ ...item, _source: fname });
-                });
+                console.log(`[RR Visualizer] File: ${fname}, file_type: ${fdata.file_type}, keys: ${Object.keys(fdata).join(',')}`);
+
+                // New parser format: items in sections[].items (SOA) or items[] (INVOICE_LIST)
+                if (fdata.file_type) {
+                    if (fdata.sections && Array.isArray(fdata.sections)) {
+                        fdata.sections.forEach(sec => {
+                            (sec.items || []).forEach(item => {
+                                _allItems.push({ ...item, _source: fname, _section: sec.name });
+                            });
+                        });
+                    }
+                    if (fdata.items && Array.isArray(fdata.items)) {
+                        fdata.items.forEach(item => {
+                            _allItems.push({ ...item, _source: fname });
+                        });
+                    }
+                }
+                // Old parser format: flat all_items array
+                else if (fdata.all_items) {
+                    (fdata.all_items || []).forEach(item => {
+                        _allItems.push({ ...item, _source: fname });
+                    });
+                }
             });
+
+            console.log(`[RR Visualizer] Total items merged: ${_allItems.length}, hasNewFormat: ${_detectNewParserFormat()}`);
 
             // Show dashboard
             _showDashboard();
@@ -222,14 +244,32 @@ const RRApp = (() => {
 
         // Detect if data uses the new universal parser format
         const hasNewFormat = _detectNewParserFormat();
+        console.log('[RR Debug] _showDashboard:', {
+            currentView: _currentView,
+            hasNewFormat,
+            vizContainerExists: !!vizContainer,
+            rrVisualizerExists: !!window.RRVisualizer,
+            fileCount: Object.keys(_filesData).length,
+            fileTypes: Object.entries(_filesData).map(([f, d]) => `${f}: ${d.file_type || 'NO_TYPE'}`),
+        });
 
         // Render based on current view
         switch (_currentView) {
             case 'standard':
                 if (hasNewFormat && vizContainer && window.RRVisualizer) {
+                    console.log('[RR Debug] → Rendering NEW universal visualizer');
+                    if (content) content.style.display = 'none';
                     vizContainer.style.display = 'block';
-                    RRVisualizer.renderVisualizer(_filesData, vizContainer);
+                    const result = RRVisualizer.renderVisualizer(_filesData, vizContainer);
+                    console.log('[RR Debug] → Visualizer result:', result);
+                    if (result === false) {
+                        // Visualizer said "legacy format, let old view handle it"
+                        vizContainer.style.display = 'none';
+                        if (content) content.style.display = 'block';
+                        _renderStandardView();
+                    }
                 } else {
+                    console.log('[RR Debug] → Falling back to OLD view (hasNewFormat:', hasNewFormat, 'vizContainer:', !!vizContainer, 'RRVisualizer:', !!window.RRVisualizer, ')');
                     if (content) content.style.display = 'block';
                     _renderStandardView();
                 }
