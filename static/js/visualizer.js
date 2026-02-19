@@ -485,148 +485,476 @@ window.RRVisualizer = (() => {
         const meta = data.metadata || {};
         const summary = data.summary || {};
         const opportunities = data.opportunities || {};
-        const byLevel = data.opportunities_by_level || {};
         const projectSummary = data.project_summary || {};
         const timeline = data.timeline || {};
         const customerAnalytics = data.customer_analytics || {};
+        const cover = data.cover || {};
+        const oppsAndThreats = data.opps_and_threats || {};
 
-        // Flatten all records
+        // Flatten all opportunity records
         let allRecords = [];
-        Object.values(opportunities).forEach(recs => {
-            if (Array.isArray(recs)) allRecords = allRecords.concat(recs);
+        Object.entries(opportunities).forEach(([sheet, recs]) => {
+            if (Array.isArray(recs)) recs.forEach(r => { allRecords.push({ ...r, _sheet: sheet }); });
         });
+
+        // ─── Compute Aggregations client-side ───
+        const _val = (v) => (typeof v === 'number' && isFinite(v)) ? v : 0;
+        const _sumField = (arr, field) => arr.reduce((s, r) => s + _val(r[field]), 0);
+
+        const totalOpps = allRecords.length;
+        const total2026 = _sumField(allRecords, 'benefit_2026');
+        const total2027 = _sumField(allRecords, 'benefit_2027');
+        const totalSum2627 = _sumField(allRecords, 'sum_26_27');
+        const totalTerm = _sumField(allRecords, 'term_benefit');
+
+        const byStatus = summary.by_status || {};
+        const byProgramme = summary.by_programme || {};
+        const byCustomer = summary.by_customer || {};
+        const byOppType = summary.by_opportunity_type || {};
+        const estLevels = summary.estimation_level_sums || {};
+
+        const activeOpps = totalOpps - (byStatus['Cancelled'] || 0);
+        const completedOpps = byStatus['Completed'] || 0;
+
+        // Aggregate value by opp type × ext probability (for stacked bar)
+        const probLevels = ['High', 'Med', 'Low'];
+        const probColors = { 'High': '#10069F', 'Med': '#1565C0', 'Low': '#00838F' };
+        const oppTypes = [...new Set(allRecords.map(r => r.opportunity_type).filter(Boolean))];
+        const statusList = ['Hopper', 'ICT', 'Negotiations', 'Contracting', 'Completed', 'Cancelled'];
+
+        // Value by Type × Probability
+        const valueByTypeProbObj = {};
+        oppTypes.forEach(t => { valueByTypeProbObj[t] = { High: 0, Med: 0, Low: 0 }; });
+        allRecords.forEach(r => {
+            const t = r.opportunity_type;
+            const p = r.ext_probability;
+            if (t && p && valueByTypeProbObj[t]) valueByTypeProbObj[t][p] += _val(r.sum_26_27);
+        });
+
+        // Value by Status × Probability
+        const valueByStatusProbObj = {};
+        statusList.forEach(s => { valueByStatusProbObj[s] = { High: 0, Med: 0, Low: 0 }; });
+        allRecords.forEach(r => {
+            const s = r.status;
+            const p = r.ext_probability;
+            if (s && p && valueByStatusProbObj[s]) valueByStatusProbObj[s][p] += _val(r.sum_26_27);
+        });
+
+        // Value by Customer (top 10 by sum_26_27)
+        const custValues = {};
+        allRecords.forEach(r => {
+            const c = r.customer;
+            if (c) custValues[c] = (custValues[c] || 0) + _val(r.sum_26_27);
+        });
+        const custTop10 = Object.entries(custValues).sort((a, b) => b[1] - a[1]).slice(0, 15);
+
+        // By priority
+        const byPriority = {};
+        allRecords.forEach(r => {
+            const p = String(r.priority || '?').replace('.0', '');
+            if (!byPriority[p]) byPriority[p] = { count: 0, term: 0, sum_26_27: 0 };
+            byPriority[p].count += 1;
+            byPriority[p].term += _val(r.term_benefit);
+            byPriority[p].sum_26_27 += _val(r.sum_26_27);
+        });
+
+        // Dollar formatter ($M)
+        const $m = (v) => {
+            if (v == null || isNaN(v)) return '—';
+            return `$${Math.abs(v).toFixed(1)}m`;
+        };
 
         let html = '';
-        html += _sectionHeader('MEA Profit Opportunities Tracker', 'trending-up', {
-            badge: 'OPP TRACKER', badgeColor: COLORS.green
-        });
+
+        // ═══════════════════════════════════════════
+        // TITLE BANNER
+        // ═══════════════════════════════════════════
+        html += `<div class="viz-opp-banner">
+            <div class="viz-opp-banner-inner">
+                <div class="viz-opp-banner-title">
+                    <i data-lucide="target"></i>
+                    <span>${cover.title || 'MEA Commercial Optimisation Report'}</span>
+                </div>
+                <div class="viz-opp-banner-badge">OPP TRACKER</div>
+            </div>
+        </div>`;
+
+        // ═══════════════════════════════════════════
+        // FINANCIAL HERO KPIs
+        // ═══════════════════════════════════════════
+        html += `<div class="viz-opp-hero">
+            <div class="viz-opp-hero-card">
+                <div class="viz-opp-hero-label">2026</div>
+                <div class="viz-opp-hero-value">${$m(total2026)}</div>
+            </div>
+            <div class="viz-opp-hero-card">
+                <div class="viz-opp-hero-label">2027</div>
+                <div class="viz-opp-hero-value">${$m(total2027)}</div>
+            </div>
+            <div class="viz-opp-hero-card viz-opp-hero-accent">
+                <div class="viz-opp-hero-label">2026 + 2027</div>
+                <div class="viz-opp-hero-value">${$m(totalSum2627)}</div>
+            </div>
+            <div class="viz-opp-hero-card viz-opp-hero-primary">
+                <div class="viz-opp-hero-label">Term Impact</div>
+                <div class="viz-opp-hero-value">${$m(totalTerm)}</div>
+            </div>
+        </div>`;
 
         // Meta bar
         html += '<div class="viz-customer-bar">';
-        html += `<div class="viz-info-chip"><b>Source:</b> ${_safe(meta.source_file)}</div>`;
         if (meta.away_day_date) html += `<div class="viz-info-chip"><b>Away Day:</b> ${meta.away_day_date}</div>`;
-        if (meta.sheets_parsed) html += `<div class="viz-info-chip"><b>Sheets Parsed:</b> ${meta.sheets_parsed.join(', ')}</div>`;
+        if (meta.sheets_parsed) html += `<div class="viz-info-chip"><b>Sheets:</b> ${meta.sheets_parsed.join(', ')}</div>`;
+        html += `<div class="viz-info-chip"><b>Opportunities:</b> ${totalOpps} (${activeOpps} active)</div>`;
+        html += `<div class="viz-info-chip"><b>Customers:</b> ${Object.keys(byCustomer).length}</div>`;
+        html += `<div class="viz-info-chip"><b>Programmes:</b> ${Object.keys(byProgramme).length}</div>`;
         html += '</div>';
 
-        // KPIs
-        html += '<div class="viz-kpi-grid viz-kpi-grid-5">';
-        html += _kpiCard('Total Opportunities', _fmtNumber(summary.total_opportunities || allRecords.length), { icon: 'target' });
-        html += _kpiCard('Term Benefit', _fmtCurrency(summary.total_term_benefit, '$'), { icon: 'dollar-sign' });
+        // ═══════════════════════════════════════════
+        // PRIORITY BREAKDOWN
+        // ═══════════════════════════════════════════
+        const priorityKeys = Object.keys(byPriority).sort();
+        if (priorityKeys.length > 0) {
+            html += `<div class="viz-kpi-grid viz-kpi-grid-${Math.min(priorityKeys.length + 2, 5)}">`;
+            priorityKeys.forEach(p => {
+                const d = byPriority[p];
+                html += _kpiCard(`Priority ${p}`, $m(d.sum_26_27), {
+                    icon: p === '1' ? 'star' : p === '2' ? 'circle' : 'minus',
+                    colorClass: p === '1' ? 'kpi-success' : '',
+                    subtitle: `${d.count} opps · Term: ${$m(d.term)}`
+                });
+            });
+            // Add overall completed & pipeline KPIs
+            html += _kpiCard('Completed', _fmtNumber(completedOpps), {
+                icon: 'check-circle', colorClass: 'kpi-success',
+                subtitle: `${((completedOpps / totalOpps) * 100).toFixed(0)}% of total`
+            });
+            html += _kpiCard('Pipeline', _fmtNumber(activeOpps - completedOpps), {
+                icon: 'git-branch', colorClass: 'kpi-warning',
+                subtitle: `${(byStatus['ICT'] || 0)} ICT · ${(byStatus['Negotiations'] || 0)} Neg · ${(byStatus['Contracting'] || 0)} Ctr`
+            });
+            html += '</div>';
+        }
 
-        const byStatus = summary.by_status || {};
-        const completed = byStatus['Completed'] || 0;
-        const contracting = byStatus['Contracting'] || 0;
-        html += _kpiCard('Completed', _fmtNumber(completed), { icon: 'check-circle', colorClass: 'kpi-success' });
-        html += _kpiCard('Contracting', _fmtNumber(contracting), { icon: 'pen-tool' });
-
-        const uniqueCustomers = Object.keys(summary.by_customer || {}).length;
-        html += _kpiCard('Customers', _fmtNumber(uniqueCustomers), { icon: 'users' });
-        html += '</div>';
-
-        // Charts
-        const statusId = `opp-status-${Date.now()}`;
-        const progId = `opp-prog-${Date.now()}`;
-        const custId = `opp-cust-${Date.now()}`;
-
-        html += `<div class="viz-chart-grid viz-chart-grid-3">
-            <div class="viz-chart-card"><div class="viz-chart-header">By Status</div><div id="${statusId}" class="viz-chart-body"></div></div>
-            <div class="viz-chart-card"><div class="viz-chart-header">By Programme</div><div id="${progId}" class="viz-chart-body"></div></div>
-            <div class="viz-chart-card"><div class="viz-chart-header">By Customer (Top 10)</div><div id="${custId}" class="viz-chart-body"></div></div>
+        // ═══════════════════════════════════════════
+        // CHARTS ROW 1: Value by Type+Prob | Value by Status+Prob
+        // ═══════════════════════════════════════════
+        const typeChartId = `opp-type-val-${Date.now()}`;
+        const statusChartId = `opp-status-val-${Date.now()}`;
+        html += `<div class="viz-chart-grid viz-chart-grid-2">
+            <div class="viz-chart-card"><div class="viz-chart-header">Sum of Value by Type of Opportunity & External Probability</div><div id="${typeChartId}" class="viz-chart-body"></div></div>
+            <div class="viz-chart-card"><div class="viz-chart-header">Sum of Value by Status & External Probability</div><div id="${statusChartId}" class="viz-chart-body"></div></div>
         </div>`;
 
-        // Estimation level comparison
-        const levelEntries = Object.entries(summary.estimation_level_sums || {});
+        // ═══════════════════════════════════════════
+        // CHARTS ROW 2: Customer Top | Financial Forecast
+        // ═══════════════════════════════════════════
+        const custChartId = `opp-cust-val-${Date.now()}`;
+        const finChartId = `opp-fin-${Date.now()}`;
+        const pipeDonutId = `opp-pipe-${Date.now()}`;
+        html += `<div class="viz-chart-grid viz-chart-grid-3">
+            <div class="viz-chart-card"><div class="viz-chart-header">Sum of Value by Customer</div><div id="${custChartId}" class="viz-chart-body"></div></div>
+            <div class="viz-chart-card"><div class="viz-chart-header">Financial Forecast by Level</div><div id="${finChartId}" class="viz-chart-body"></div></div>
+            <div class="viz-chart-card"><div class="viz-chart-header">Pipeline Status</div><div id="${pipeDonutId}" class="viz-chart-body"></div></div>
+        </div>`;
+
+        // ═══════════════════════════════════════════
+        // ESTIMATION LEVEL CARDS
+        // ═══════════════════════════════════════════
+        const levelEntries = Object.entries(estLevels);
         if (levelEntries.length > 0) {
-            html += _sectionHeader('Estimation Levels', 'git-branch');
-            html += '<div class="viz-kpi-grid viz-kpi-grid-3">';
+            html += _sectionHeader('Estimation Level Breakdown', 'layers');
+            html += `<div class="viz-kpi-grid viz-kpi-grid-${Math.min(levelEntries.length, 3)}">`;
             levelEntries.forEach(([level, sums]) => {
+                const iconMap = { 'ICT': 'zap', 'Contract': 'file-check', 'Hopper': 'inbox' };
                 html += _kpiCard(
-                    level,
-                    `${sums.count} opps · ${_fmtCurrency(sums.total_term_benefit, '$')}`,
-                    { icon: 'layers', subtitle: `2026: ${_fmtCurrency(sums.total_2026, '$')} | 2027: ${_fmtCurrency(sums.total_2027, '$')}` }
+                    `${level} Estimates`,
+                    $m(sums.total_sum_26_27 || 0),
+                    {
+                        icon: iconMap[level] || 'layers',
+                        colorClass: level === 'Contract' ? 'kpi-success' : '',
+                        subtitle: `${sums.count} opps · Term: ${$m(sums.total_term_benefit)} · 2026: ${$m(sums.total_2026)} · 2027: ${$m(sums.total_2027)}`
+                    }
                 );
             });
             html += '</div>';
         }
 
-        // Opportunities table
-        html += _sectionHeader('All Opportunities', 'table');
-        const headers = ['#', 'Project', 'Programme', 'Customer', 'Status', 'Priority', 'Ext Prob', 'Int Complex', 'Term Benefit', '2026', '2027'];
-        const rows = allRecords.map(r => [
-            r.number, _truncate(r.project, 25), r.programme, _truncate(r.customer, 20),
-            r.status, r.priority, r.ext_probability, r.int_complexity,
-            r.term_benefit, r.benefit_2026, r.benefit_2027
-        ]);
-        html += _dataTable(headers, rows, { maxRows: 200 });
+        // ═══════════════════════════════════════════
+        // EXT PROBABILITY BREAKDOWN
+        // ═══════════════════════════════════════════
+        html += _sectionHeader('External Probability & Opportunity Types', 'bar-chart-3');
+        html += '<div class="viz-customer-bar">';
+        // Probability chips
+        const probAgg = {};
+        allRecords.forEach(r => {
+            const p = r.ext_probability || '?';
+            if (!probAgg[p]) probAgg[p] = { count: 0, sum: 0, term: 0 };
+            probAgg[p].count += 1;
+            probAgg[p].sum += _val(r.sum_26_27);
+            probAgg[p].term += _val(r.term_benefit);
+        });
+        Object.entries(probAgg).forEach(([prob, d]) => {
+            const color = probColors[prob] || '#9E9E9E';
+            html += `<div class="viz-info-chip" style="border-left:3px solid ${color}"><b>${prob}:</b> ${d.count} opps · ${$m(d.sum)} (26+27) · ${$m(d.term)} term</div>`;
+        });
+        html += '</div>';
+        // Opp type chips
+        html += '<div class="viz-customer-bar" style="margin-top:8px">';
+        const typeColors = [COLORS.navy, COLORS.blue2, COLORS.green, COLORS.teal, COLORS.orange, COLORS.purple, COLORS.red, COLORS.gold];
+        Object.entries(byOppType).forEach(([type, count], i) => {
+            const color = typeColors[i % typeColors.length];
+            const typeVal = allRecords.filter(r => r.opportunity_type === type).reduce((s, r) => s + _val(r.sum_26_27), 0);
+            html += `<div class="viz-info-chip" style="border-left:3px solid ${color}"><b>${type}:</b> ${count} · ${$m(typeVal)}</div>`;
+        });
+        html += '</div>';
 
-        // Timeline milestones
-        const milestones = (timeline.milestones || []).filter(m => m.source === 'Date Input');
+        // ═══════════════════════════════════════════
+        // CUSTOMER-ASK TABLE (top opportunities by value)
+        // ═══════════════════════════════════════════
+        html += _sectionHeader('Top Opportunities by Value', 'trophy');
+        const topByValue = [...allRecords].sort((a, b) => _val(b.sum_26_27) - _val(a.sum_26_27)).slice(0, 20);
+        const topHeaders = ['Customer', 'Asks', 'Ext Prob', 'Status', 'Sum of Value (26+27)'];
+        const topRows = topByValue.map(r => [
+            r.customer, _truncate(String(r.asks || ''), 45),
+            r.ext_probability, r.status, _val(r.sum_26_27)
+        ]);
+        html += _dataTable(topHeaders, topRows, { maxRows: 20 });
+
+        // ═══════════════════════════════════════════
+        // TABLES BY ESTIMATION LEVEL
+        // ═══════════════════════════════════════════
+        html += _sectionHeader('Opportunities by Estimation Level', 'table');
+        const sheetOrder = Object.keys(opportunities);
+        sheetOrder.forEach(sheetName => {
+            const recs = opportunities[sheetName] || [];
+            if (!Array.isArray(recs) || recs.length === 0) return;
+            const levelLabel = (meta.estimation_levels || {})[sheetName] || sheetName;
+            const sheetSum = recs.reduce((s, r) => s + _val(r.sum_26_27), 0);
+            const sheetTerm = recs.reduce((s, r) => s + _val(r.term_benefit), 0);
+
+            html += `<div class="viz-subsection">
+                <div class="viz-subsection-header">
+                    <span class="viz-subsection-name">${levelLabel} — ${sheetName}</span>
+                    <span class="viz-subsection-total">${$m(sheetSum)} (26+27) · ${$m(sheetTerm)} term</span>
+                    <span class="viz-subsection-count">${recs.length} opps</span>
+                </div>
+            </div>`;
+            const headers = ['#', 'Project', 'Programme', 'Customer', 'Asks', 'Ext Prob', 'Status', 'Priority', 'Sum $M', 'Term $M'];
+            const rows = recs.map(r => [
+                r.number, _truncate(String(r.project || ''), 18),
+                _truncate(String(r.programme || ''), 14), _truncate(String(r.customer || ''), 14),
+                _truncate(String(r.asks || ''), 30), r.ext_probability, r.status,
+                r.priority, _val(r.sum_26_27), _val(r.term_benefit),
+            ]);
+            html += _dataTable(headers, rows, { maxRows: 50 });
+        });
+
+        // ═══════════════════════════════════════════
+        // PROJECT TIMELINE (Gantt-style)
+        // ═══════════════════════════════════════════
+        const milestones = (timeline.milestones || []).filter(m => m.project && m.milestones);
         if (milestones.length > 0) {
-            html += _sectionHeader('Project Milestones', 'calendar');
-            const msHeaders = ['Project', 'Customer', 'Idea Gen', 'Launch', 'Strategy', 'BE Gen', 'Approval', 'Negotiation', 'Submitted', 'Signed', 'Current Phase'];
-            const msRows = milestones.map(m => {
+            html += _sectionHeader('Project Timeline & Milestones', 'calendar');
+
+            // Phase progression table
+            const phaseHeaders = ['Project', 'Customer', 'Current Phase', 'Days to Sign'];
+            const phaseRows = milestones.slice(0, 30).map(m => {
                 const ms = m.milestones || {};
-                return [m.project, m.customer, ms.idea_generation, ms.approval_to_launch,
-                ms.strategy_approval, ms.be_generated, ms.approval, ms.negotiation_strategy,
-                ms.proposal_submitted, ms.proposal_signed, (m.current_phase || '').replace(/_/g, ' ')];
+                const signedDate = ms.proposal_signed ? new Date(ms.proposal_signed) : null;
+                const now = new Date();
+                const daysToSign = signedDate ? Math.round((signedDate - now) / (1000 * 60 * 60 * 24)) : '—';
+                return [
+                    _truncate(String(m.project || ''), 20),
+                    _truncate(String(m.customer || ''), 16),
+                    String(m.current_phase || '').replace(/_/g, ' '),
+                    daysToSign,
+                ];
             });
-            html += _dataTable(msHeaders, msRows);
+            html += _dataTable(phaseHeaders, phaseRows);
+
+            // Gantt visual
+            html += '<div class="viz-gantt-wrap">';
+            const phases = ['idea_generation', 'approval_to_launch', 'strategy_approval', 'be_generated', 'approval', 'negotiation_strategy', 'proposal_submitted', 'proposal_signed'];
+            const phaseLabels = ['Idea Gen', 'Launch', 'Strategy', 'BE Gen', 'Approval', 'Negotiation', 'Submitted', 'Signed'];
+            const phaseColors = ['#10069F', '#1565C0', '#5E35B1', '#00838F', '#2E7D32', '#EF6C00', '#F9A825', '#C62828'];
+
+            html += '<table class="viz-gantt-table"><thead><tr><th>Project</th>';
+            phaseLabels.forEach(l => { html += `<th>${l}</th>`; });
+            html += '</tr></thead><tbody>';
+
+            milestones.slice(0, 20).forEach(m => {
+                const ms = m.milestones || {};
+                const currentPhase = m.current_phase || '';
+                html += `<tr><td class="viz-gantt-project">${_truncate(String(m.project || ''), 18)}</td>`;
+                let foundCurrent = false;
+                phases.forEach((phase, i) => {
+                    const date = ms[phase];
+                    const isCurrent = currentPhase === phase;
+                    const isPast = date && new Date(date) <= new Date();
+                    const isFuture = date && new Date(date) > new Date();
+                    if (isCurrent) foundCurrent = true;
+                    let cls = 'viz-gantt-empty';
+                    if (isPast && !foundCurrent) cls = 'viz-gantt-done';
+                    else if (isCurrent) cls = 'viz-gantt-current';
+                    else if (isFuture || (!foundCurrent && !isPast)) cls = 'viz-gantt-future';
+                    html += `<td class="${cls}" title="${phase}: ${date || 'N/A'}"><div class="viz-gantt-bar" style="background:${phaseColors[i]}"></div></td>`;
+                });
+                html += '</tr>';
+            });
+            html += '</tbody></table></div>';
+        }
+
+        // ═══════════════════════════════════════════
+        // OPPS & THREATS
+        // ═══════════════════════════════════════════
+        const oatItems = oppsAndThreats.items || [];
+        if (oatItems.length > 0) {
+            html += _sectionHeader('Opportunities & Threats', 'alert-triangle');
+            const oatHeaders = ['Project', 'Customer', 'Opportunity', 'Status', 'Owner', 'Pack Improvement', 'Due Date'];
+            const oatRows = oatItems.map(i => [
+                i.project, i.customer, _truncate(String(i.opportunity || ''), 40),
+                i.status, i.owner, typeof i.overall_pack_improvement === 'number' ? _fmtNumber(i.overall_pack_improvement) : '—',
+                i.due_date,
+            ]);
+            html += _dataTable(oatHeaders, oatRows);
+        }
+
+        // ═══════════════════════════════════════════
+        // PROJECT SUMMARY
+        // ═══════════════════════════════════════════
+        const projects = (projectSummary.projects || []);
+        if (projects.length > 0) {
+            html += _sectionHeader('Project Summary', 'briefcase');
+            const prjHeaders = ['Group', 'Project', 'Customer', 'Programme', 'CRP Margin ($M)', 'CRP %', 'Onerous'];
+            const prjRows = projects.map(p => [
+                p.group, p.project, p.customer, p.programme,
+                typeof p.current_crp_margin === 'number' ? p.current_crp_margin.toFixed(1) : '—',
+                typeof p.current_crp_pct === 'number' ? (p.current_crp_pct * 100).toFixed(1) + '%' : '—',
+                typeof p.onerous_provision === 'number' ? p.onerous_provision.toFixed(1) : '—',
+            ]);
+            html += _dataTable(prjHeaders, prjRows);
         }
 
         el.innerHTML = html;
 
-        // Charts
+        // ═══════════════════════════════════════════
+        // RENDER CHARTS
+        // ═══════════════════════════════════════════
         setTimeout(() => {
-            _renderOppCharts(statusId, progId, custId, summary);
-        }, 50);
+            _renderOppCharts({
+                typeChartId, statusChartId, custChartId, finChartId, pipeDonutId,
+                oppTypes, statusList, probLevels, probColors,
+                valueByTypeProbObj, valueByStatusProbObj,
+                custTop10, estLevels, byStatus
+            });
+        }, 80);
     }
 
-    function _renderOppCharts(statusId, progId, custId, summary) {
-        // Status donut
-        const statusData = summary.by_status || {};
-        const statusLabels = Object.keys(statusData);
-        const statusValues = Object.values(statusData);
-        if ($(statusId) && statusLabels.length > 0) {
-            new ApexCharts($(statusId), {
-                chart: { type: 'donut', height: 280, background: 'transparent' },
+    function _renderOppCharts(cfg) {
+        const { typeChartId, statusChartId, custChartId, finChartId, pipeDonutId,
+            oppTypes, statusList, probLevels, probColors,
+            valueByTypeProbObj, valueByStatusProbObj,
+            custTop10, estLevels, byStatus } = cfg;
+
+        // ─── Value by Opportunity Type × External Probability (Stacked Bar) ───
+        if ($(typeChartId) && oppTypes.length > 0) {
+            new ApexCharts($(typeChartId), {
+                chart: { type: 'bar', height: 320, background: 'transparent', stacked: true },
+                series: probLevels.map(p => ({
+                    name: p, data: oppTypes.map(t => +(valueByTypeProbObj[t]?.[p] || 0).toFixed(1))
+                })),
+                xaxis: { categories: oppTypes.map(t => _truncate(t, 14)), labels: { rotate: -30, style: { fontSize: '10px' } } },
+                colors: probLevels.map(p => probColors[p]),
+                plotOptions: { bar: { columnWidth: '65%', borderRadius: 3 } },
+                dataLabels: { enabled: false },
+                legend: { position: 'top', fontSize: '11px', markers: { size: 8 } },
+                yaxis: { title: { text: '$M' }, labels: { formatter: v => '$' + v.toFixed(0) + 'm' } },
+                tooltip: { y: { formatter: v => '$' + v.toFixed(1) + 'm' } },
+                theme: { mode: 'light' },
+            }).render();
+        }
+
+        // ─── Value by Status × External Probability (Stacked Bar) ───
+        const activeStatuses = statusList.filter(s => valueByStatusProbObj[s] && (valueByStatusProbObj[s].High + valueByStatusProbObj[s].Med + valueByStatusProbObj[s].Low) > 0);
+        if ($(statusChartId) && activeStatuses.length > 0) {
+            new ApexCharts($(statusChartId), {
+                chart: { type: 'bar', height: 320, background: 'transparent', stacked: true },
+                series: probLevels.map(p => ({
+                    name: p, data: activeStatuses.map(s => +(valueByStatusProbObj[s]?.[p] || 0).toFixed(1))
+                })),
+                xaxis: { categories: activeStatuses, labels: { rotate: -30, style: { fontSize: '10px' } } },
+                colors: probLevels.map(p => probColors[p]),
+                plotOptions: { bar: { columnWidth: '60%', borderRadius: 3 } },
+                dataLabels: { enabled: false },
+                legend: { position: 'top', fontSize: '11px' },
+                yaxis: { title: { text: '$M' }, labels: { formatter: v => '$' + v.toFixed(0) + 'm' } },
+                tooltip: { y: { formatter: v => '$' + v.toFixed(1) + 'm' } },
+                theme: { mode: 'light' },
+            }).render();
+        }
+
+        // ─── Customer Top 15 by Value (Horizontal Bar) ───
+        if ($(custChartId) && custTop10.length > 0) {
+            new ApexCharts($(custChartId), {
+                chart: { type: 'bar', height: 360, background: 'transparent' },
+                series: [{ name: 'Sum 26+27 ($M)', data: custTop10.map(c => +c[1].toFixed(1)) }],
+                xaxis: { categories: custTop10.map(c => c[0]) },
+                colors: [COLORS.teal],
+                plotOptions: { bar: { horizontal: true, borderRadius: 4, distributed: true, barHeight: '70%' } },
+                dataLabels: { enabled: true, formatter: v => '$' + v + 'm', offsetX: 10, style: { fontSize: '10px', colors: [COLORS.dark] } },
+                legend: { show: false },
+                yaxis: { labels: { style: { fontSize: '10px' } } },
+                theme: { mode: 'light' },
+            }).render();
+        }
+
+        // ─── Financial Forecast by Estimation Level (Grouped Bar) ───
+        const levelEntries = Object.entries(estLevels);
+        if ($(finChartId) && levelEntries.length > 0) {
+            const names = levelEntries.map(([l]) => l);
+            new ApexCharts($(finChartId), {
+                chart: { type: 'bar', height: 320, background: 'transparent' },
+                series: [
+                    { name: 'Term ($M)', data: levelEntries.map(([, s]) => +(s.total_term_benefit || 0).toFixed(1)) },
+                    { name: '2026 ($M)', data: levelEntries.map(([, s]) => +(s.total_2026 || 0).toFixed(1)) },
+                    { name: '2027 ($M)', data: levelEntries.map(([, s]) => +(s.total_2027 || 0).toFixed(1)) },
+                ],
+                xaxis: { categories: names },
+                colors: [COLORS.navy, COLORS.green, COLORS.blue2],
+                plotOptions: { bar: { horizontal: false, columnWidth: '55%', borderRadius: 4 } },
+                dataLabels: { enabled: true, formatter: v => '$' + v + 'm', style: { fontSize: '10px' } },
+                legend: { position: 'top', fontSize: '11px' },
+                yaxis: { labels: { formatter: v => '$' + v + 'm' } },
+                tooltip: { y: { formatter: v => '$' + v + 'm' } },
+                theme: { mode: 'light' },
+            }).render();
+        }
+
+        // ─── Pipeline Status Donut ───
+        const statusColors = {
+            'Completed': '#2E7D32', 'Contracting': '#1565C0', 'Negotiations': '#F9A825',
+            'ICT': '#5E35B1', 'Hopper': '#00838F', 'Cancelled': '#C62828',
+        };
+        const statusLabels = Object.keys(byStatus).filter(s => byStatus[s] > 0);
+        const statusValues = statusLabels.map(s => byStatus[s]);
+        if ($(pipeDonutId) && statusLabels.length > 0) {
+            new ApexCharts($(pipeDonutId), {
+                chart: { type: 'donut', height: 320, background: 'transparent' },
                 series: statusValues,
                 labels: statusLabels,
-                colors: [COLORS.green, COLORS.blue2, COLORS.orange, COLORS.purple, COLORS.amber, COLORS.teal, COLORS.red],
-                plotOptions: { pie: { donut: { size: '62%' } } },
-                dataLabels: { enabled: false },
+                colors: statusLabels.map(l => statusColors[l] || COLORS.silver),
+                plotOptions: {
+                    pie: {
+                        donut: {
+                            size: '55%', labels: {
+                                show: true, total: { show: true, label: 'Total', fontSize: '14px', fontWeight: 700 }
+                            }
+                        }
+                    }
+                },
+                dataLabels: { enabled: true, formatter: val => val.toFixed(0) + '%', style: { fontSize: '11px' } },
                 legend: { position: 'bottom', fontSize: '11px' },
-                theme: { mode: 'light' },
-            }).render();
-        }
-
-        // Programme bar
-        const progData = summary.by_programme || {};
-        const progLabels = Object.keys(progData).slice(0, 10);
-        const progValues = progLabels.map(k => progData[k]);
-        if ($(progId) && progLabels.length > 0) {
-            new ApexCharts($(progId), {
-                chart: { type: 'bar', height: 280, background: 'transparent' },
-                series: [{ name: 'Count', data: progValues }],
-                xaxis: { categories: progLabels.map(l => _truncate(l, 12)) },
-                colors: [COLORS.navy],
-                plotOptions: { bar: { horizontal: true, borderRadius: 4 } },
-                dataLabels: { enabled: false },
-                theme: { mode: 'light' },
-            }).render();
-        }
-
-        // Customer bar (top 10)
-        const custData = summary.by_customer || {};
-        const custSorted = Object.entries(custData).sort((a, b) => b[1] - a[1]).slice(0, 10);
-        if ($(custId) && custSorted.length > 0) {
-            new ApexCharts($(custId), {
-                chart: { type: 'bar', height: 280, background: 'transparent' },
-                series: [{ name: 'Opportunities', data: custSorted.map(c => c[1]) }],
-                xaxis: { categories: custSorted.map(c => _truncate(c[0], 15)) },
-                colors: [COLORS.teal],
-                plotOptions: { bar: { horizontal: true, borderRadius: 4, distributed: true } },
-                dataLabels: { enabled: false },
-                legend: { show: false },
                 theme: { mode: 'light' },
             }).render();
         }

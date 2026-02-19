@@ -1,0 +1,282 @@
+C:\Program Files\Python310\lib\site-packages\openpyxl\worksheet\_reader.py:329: UserWarning: Data Validation extension is not supported and will be removed
+  warn(msg)
+C:\Program Files\Python310\lib\site-packages\openpyxl\worksheet\_reader.py:329: UserWarning: Data Validation extension is not supported and will be removed
+  warn(msg)
+C:\Program Files\Python310\lib\site-packages\openpyxl\worksheet\_reader.py:329: UserWarning: Data Validation extension is not supported and will be removed
+  warn(msg)
+C:\Program Files\Python310\lib\site-packages\openpyxl\worksheet\_reader.py:329: UserWarning: Data Validation extension is not supported and will be removed
+  warn(msg)
+C:\Program Files\Python310\lib\site-packages\openpyxl\worksheet\_reader.py:329: UserWarning: Data Validation extension is not supported and will be removed
+  warn(msg)
+=== FIRST RECORD ===
+{
+  "number": 1,
+  "project": "FiniQ II",
+  "programme": "Trent XWB-84",
+  "customer": "Emirates",
+  "region": "MEA",
+  "asks": "3 year-extension + LRU Management + 23 a/c",
+  "opportunity_type": "TCA Amendments",
+  "levers": "XWB MRO -  OWS Support - 97k & EP Pricing",
+  "priority": 1.0,
+  "spe_related": null,
+  "num_spe": null,
+  "crp_pct": 0.0,
+  "ext_probability": "High",
+  "int_complexity": "Low",
+  "status": "Completed",
+  "evaluation_level": null,
+  "term_benefit": 341.88,
+  "benefit_2026": null,
+  "benefit_2027": null,
+  "sum_26_27": 0.0,
+  "financials": {
+    "existing_deal_cash": {
+      "yr_2025": 0.0,
+      "yr_2026": 0.0,
+      "yr_2027": 0.0,
+      "yr_2028": 0.0,
+      "yr_2029": 0.0,
+      "yr_2030": 0.0
+    },
+    "existing_deal_profit": {
+      "yr_2025": 0.0,
+      "yr_2026": 0.0,
+      "yr_2027": 0.0,
+      "yr_2028": 0.0,
+      "yr_2029": 0.0,
+      "yr_2030": 0.0
+    },
+    "new_deal_cash": {
+      "yr_2025": 0.0,
+      "yr_2026": 0.0,
+      "yr_2027": 0.0,
+      "yr_2028": 0.0,
+      "yr_2029": 0.0,
+      "yr_2030": 0.0
+    },
+    "new_deal_profit": {
+      "yr_2025": 0.0,
+      "yr_2026": 0.0,
+      "yr_2027": 0.0,
+      "yr_2028": 0.0,
+      "yr_2029": 0.0,
+      "yr_2030": 0.0
+    }
+  },
+  "supporting_financials": {
+    "deal_benefits": 0.0,
+    "expected_deal_costs": 0.0,
+    "inyear_profit_impact": 0.0,
+    "fyp_profit_improvement": 0.0,
+    "term_profit_improvement": 0.0,
+    "total_crp_term_revenue": 0.0,
+    "total_crp_term_margin": 0.0,
+    "crp_margin_pct": null
+  },
+  "to_go": {
+    "togo_term_revenue": 0.0,
+    "togo_term_cost": 0.0,
+    "togo_term_profit": 0.0
+  },
+  "resource_priority": {
+    "res_account_mgmt": 1.0,
+    "res_contract_mgmt": 1.0,
+    "res_service_business": 1.0,
+    "res_business_evaluation": 1.0,
+    "res_sales_contracting": 1.0,
+    "res_customer_ops": 1.0
+  },
+  "_sheet": "L2"
+}
+
+=== FINANCIAL TOTALS ===
+  2026: 467.6458660000001
+  2027: 586.1898600000002
+  26+27: 1053.8357260000007
+  Term: 4901.696000000001
+
+=== BY PRIORITY ===
+{
+  "1.0": {
+    "count": 78,
+    "term": 2974.016,
+    "sum_26_27": 757.9190629999999
+  },
+  "2.0": {
+    "count": 42,
+    "term": 1672.5000000000005,
+    "sum_26_27": 287.2166629999999
+  },
+  "3.0": {
+    "count": 15,
+    "term": 255.18,
+    "sum_26_27": 8.7
+  }
+}
+
+=== BY EXT PROBABILITY ===
+{
+  "High": {
+    "count": 33,
+    "sum_26_27": 420.716663
+  },
+  "Low": {
+    "count": 57,
+    "sum_26_27": 395.500663
+  },
+  "Med": {
+    "count": 45,
+    "sum_26_27": 237.6184
+  }
+}
+
+=== ESTIMATION LEVELS ===
+{
+  "ICT": {
+    "sheet_name": "L2",
+    "count": 45,
+    "total_term_benefit": 1834.03,
+    "total_2026": 151.85,
+    "total_2027": 218.2,
+    "total_sum_26_27": 370.06,
+    "sums_from_sheet": {
+      "term_benefit_sum": 1834.0320000000002,
+      "sum_2026": 151.8537333333333,
+      "sum_2027": 218.20439999999996,
+      "sum_26_27": 370.05813333333333
+    }
+  },
+  "Contract": {
+    "sheet_name": "L3",
+    "count": 45,
+    "total_term_benefit": 1536.23,
+    "total_2026": 159.05,
+    "total_2027": 183.99,
+    "total_sum_26_27": 343.04,
+    "sums_from_sheet": {
+      "term_benefit_sum": 1536.2320000000002,
+      "sum_2026": 159.0460663333333,
+      "sum_2027": 183.99272999999994,
+      "sum_26_27": 343.0387963333332
+    }
+  },
+  "Hopper": {
+    "sheet_name": "MEA LOG",
+    "count": 45,
+    "total_term_benefit": 1531.43,
+    "total_2026": 156.75,
+    "total_2027": 183.99,
+    "total_sum_26_27": 340.74,
+    "sums_from_sheet": {
+      "term_benefit_sum": 1531.4320000000002,
+      "sum_2026": 156.7460663333333,
+      "sum_2027": 183.99272999999994,
+      "sum_26_27": 340.7387963333332
+    }
+  }
+}
+
+=== CUSTOMER ANALYTICS SAMPLE ===
+{
+  "customer": "Emirates",
+  "count_of_asks": 7.0,
+  "spe_related": 1.0,
+  "num_spe": 3.0,
+  "prog_xwb84": 6.0,
+  "prog_xwb97": 0.0,
+  "prog_t1000": 0.0,
+  "prog_t500": 0.0,
+  "prog_t700": 0.0,
+  "prog_rb211": 0.0,
+  "prog_t7000": 0.0,
+  "count_high_prob": 2.0,
+  "count_med_prob": 2.0,
+  "count_low_prob": 3.0,
+  "count_high_comp": 1.0,
+  "count_med_comp": 3.0,
+  "count_low_comp": 3.0,
+  "count_completed": 1.0,
+  "count_contracting": 1.0,
+  "count_negotiations": 0.0,
+  "count_ict": 1.0,
+  "count_hopper": 4.0,
+  "sum_2026": 20.8,
+  "sum_2027": 20.8,
+  "sum_26_27": 41.6,
+  "sum_term_benefit": 677.28
+}
+Total customer entries: 113
+
+=== PROJECT SUMMARY SAMPLE ===
+{
+  "group": "Launched",
+  "project": "Finiq",
+  "customer": "Emirates",
+  "programme": "Trent 900",
+  "kam_pack_complete": null,
+  "crp_deep_dive_complete": null,
+  "risk_review_complete": null,
+  "contract_dcr_complete": null,
+  "ov_review_complete": null,
+  "current_crp_margin": -710.44,
+  "onerous_provision": -437.0,
+  "current_crp_pct": -0.664,
+  "onerous_release_2024": 0.0,
+  "onerous_release_2025": -437.0,
+  "fyp_improvement": {
+    "yr_2025": null,
+    "yr_2026": null,
+    "yr_2027": null,
+    "yr_2028": null,
+    "yr_2029": null
+  },
+  "overall_pack_improvement": null
+}
+Total projects: 11
+
+=== OPPS AND THREATS SAMPLE ===
+{
+  "project": "Falcon",
+  "programme": "Trent 1000",
+  "customer": "Gulf",
+  "opportunity": "Transport reduction from $437k to $300k",
+  "profit_release_2024": 4.263513513513513,
+  "profit_release_2025": null,
+  "fyp_improvement": {
+    "fyp_2025": 0.30405405405405406,
+    "fyp_2026": 0.3918918918918919,
+    "fyp_2027": 0.41428571428571426,
+    "fyp_2028": 0.42567567567567566,
+    "fyp_2029": 0.35714285714285715
+  },
+  "overall_pack_improvement": 11.84,
+  "window_for_forecast": "W3 2023",
+  "due_date": "2024-12-01",
+  "owner": "Georgia Chapman",
+  "status": "On-track",
+  "comments": "Challenge transportation pack assumptions"
+}
+Total items: 13
+
+=== MILESTONE SAMPLE ===
+{
+  "project": "Viva Algeria",
+  "customer": "Air Algerie",
+  "milestones": {
+    "idea_generation": "2025-04-21",
+    "approval_to_launch": "2025-05-21",
+    "strategy_approval": "2025-06-21",
+    "be_generated": "2025-07-21",
+    "approval": "2025-08-21",
+    "negotiation_strategy": "2025-09-21",
+    "proposal_submitted": "2025-10-21",
+    "proposal_signed": "2025-11-21"
+  },
+  "current_phase": "proposal_signed",
+  "source": "Date Input"
+}
+Total milestones: 57
+
+=== RECORD KEYS ===
+['_sheet', 'asks', 'benefit_2026', 'benefit_2027', 'crp_pct', 'customer', 'evaluation_level', 'ext_probability', 'financials', 'int_complexity', 'levers', 'num_spe', 'number', 'opportunity_type', 'priority', 'programme', 'project', 'region', 'resource_priority', 'spe_related', 'status', 'sum_26_27', 'supporting_financials', 'term_benefit', 'to_go']

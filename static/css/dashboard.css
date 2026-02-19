@@ -3276,17 +3276,31 @@ ul.ai-md-list {
     margin-bottom: var(--space-6);
 }
 
-.viz-kpi-grid-3 { grid-template-columns: repeat(3, 1fr); }
-.viz-kpi-grid-4 { grid-template-columns: repeat(4, 1fr); }
-.viz-kpi-grid-5 { grid-template-columns: repeat(5, 1fr); }
+.viz-kpi-grid-3 {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+.viz-kpi-grid-4 {
+    grid-template-columns: repeat(4, 1fr);
+}
+
+.viz-kpi-grid-5 {
+    grid-template-columns: repeat(5, 1fr);
+}
 
 @media (max-width: 1200px) {
-    .viz-kpi-grid-5 { grid-template-columns: repeat(3, 1fr); }
+    .viz-kpi-grid-5 {
+        grid-template-columns: repeat(3, 1fr);
+    }
 }
+
 @media (max-width: 900px) {
+
     .viz-kpi-grid-3,
     .viz-kpi-grid-4,
-    .viz-kpi-grid-5 { grid-template-columns: repeat(2, 1fr); }
+    .viz-kpi-grid-5 {
+        grid-template-columns: repeat(2, 1fr);
+    }
 }
 
 .viz-kpi-card {
@@ -3321,9 +3335,20 @@ ul.ai-md-list {
     opacity: 1;
 }
 
-.viz-kpi-card.kpi-danger::before { background: var(--danger); opacity: 1; }
-.viz-kpi-card.kpi-success::before { background: var(--success); opacity: 1; }
-.viz-kpi-card.kpi-warning::before { background: var(--warning); opacity: 1; }
+.viz-kpi-card.kpi-danger::before {
+    background: var(--danger);
+    opacity: 1;
+}
+
+.viz-kpi-card.kpi-success::before {
+    background: var(--success);
+    opacity: 1;
+}
+
+.viz-kpi-card.kpi-warning::before {
+    background: var(--warning);
+    opacity: 1;
+}
 
 .viz-kpi-icon {
     margin-bottom: var(--space-2);
@@ -3335,9 +3360,17 @@ ul.ai-md-list {
     height: 20px;
 }
 
-.viz-kpi-card.kpi-danger .viz-kpi-icon { color: var(--danger); }
-.viz-kpi-card.kpi-success .viz-kpi-icon { color: var(--success); }
-.viz-kpi-card.kpi-warning .viz-kpi-icon { color: var(--warning); }
+.viz-kpi-card.kpi-danger .viz-kpi-icon {
+    color: var(--danger);
+}
+
+.viz-kpi-card.kpi-success .viz-kpi-icon {
+    color: var(--success);
+}
+
+.viz-kpi-card.kpi-warning .viz-kpi-icon {
+    color: var(--warning);
+}
 
 .viz-kpi-label {
     font-size: 0.72rem;
@@ -3356,8 +3389,13 @@ ul.ai-md-list {
     line-height: 1.2;
 }
 
-.viz-kpi-card.kpi-danger .viz-kpi-value { color: var(--danger); }
-.viz-kpi-card.kpi-success .viz-kpi-value { color: var(--success); }
+.viz-kpi-card.kpi-danger .viz-kpi-value {
+    color: var(--danger);
+}
+
+.viz-kpi-card.kpi-success .viz-kpi-value {
+    color: var(--success);
+}
 
 .viz-kpi-subtitle {
     font-size: 0.72rem;
@@ -3372,15 +3410,26 @@ ul.ai-md-list {
     margin-bottom: var(--space-6);
 }
 
-.viz-chart-grid-2 { grid-template-columns: repeat(2, 1fr); }
-.viz-chart-grid-3 { grid-template-columns: repeat(3, 1fr); }
+.viz-chart-grid-2 {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.viz-chart-grid-3 {
+    grid-template-columns: repeat(3, 1fr);
+}
 
 @media (max-width: 1100px) {
-    .viz-chart-grid-3 { grid-template-columns: repeat(2, 1fr); }
+    .viz-chart-grid-3 {
+        grid-template-columns: repeat(2, 1fr);
+    }
 }
+
 @media (max-width: 768px) {
+
     .viz-chart-grid-2,
-    .viz-chart-grid-3 { grid-template-columns: 1fr; }
+    .viz-chart-grid-3 {
+        grid-template-columns: 1fr;
+    }
 }
 
 .viz-chart-card {
@@ -3618,4 +3667,204 @@ ul.ai-md-list {
     color: var(--text-muted);
     font-size: 0.88rem;
     padding: var(--space-6);
+}
+
+/* ═══════════════════════════════════════════════
+   OPPORTUNITY TRACKER — Commercial Optimisation
+   ═══════════════════════════════════════════════ */
+
+/* Banner */
+.viz-opp-banner {
+    background: linear-gradient(135deg, #10069F 0%, #1a1a6e 60%, #2d1b69 100%);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5) var(--space-6);
+    margin-bottom: var(--space-5);
+    color: #fff;
+}
+
+.viz-opp-banner-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.viz-opp-banner-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.15rem;
+    letter-spacing: -0.01em;
+}
+
+.viz-opp-banner-title i {
+    width: 22px;
+    height: 22px;
+    opacity: 0.85;
+}
+
+.viz-opp-banner-badge {
+    background: rgba(255, 255, 255, 0.18);
+    color: #fff;
+    padding: 4px 14px;
+    border-radius: var(--radius-full);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+/* Financial Hero KPIs (PowerBI-style top row) */
+.viz-opp-hero {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--space-4);
+    margin-bottom: var(--space-5);
+}
+
+@media (max-width: 900px) {
+    .viz-opp-hero {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+.viz-opp-hero-card {
+    background: var(--surface-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: var(--space-5);
+    text-align: center;
+    box-shadow: var(--shadow-sm);
+    transition: all var(--transition-fast);
+}
+
+.viz-opp-hero-card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+.viz-opp-hero-label {
+    font-family: var(--font-display);
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    margin-bottom: var(--space-2);
+}
+
+.viz-opp-hero-value {
+    font-family: var(--font-display);
+    font-size: 1.6rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+}
+
+.viz-opp-hero-accent {
+    border-left: 3px solid var(--success);
+}
+
+.viz-opp-hero-accent .viz-opp-hero-value {
+    color: var(--success);
+}
+
+.viz-opp-hero-primary {
+    background: linear-gradient(135deg, #10069F 0%, #1a1a6e 100%);
+    border-color: transparent;
+    color: #fff;
+}
+
+.viz-opp-hero-primary .viz-opp-hero-label {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.viz-opp-hero-primary .viz-opp-hero-value {
+    color: #fff;
+}
+
+/* Gantt Chart Table */
+.viz-gantt-wrap {
+    overflow-x: auto;
+    margin-bottom: var(--space-5);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-subtle);
+    box-shadow: var(--shadow-xs);
+}
+
+.viz-gantt-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+}
+
+.viz-gantt-table thead {
+    background: var(--surface-elevated);
+}
+
+.viz-gantt-table th {
+    text-align: center;
+    padding: var(--space-3) var(--space-2);
+    font-family: var(--font-display);
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    border-bottom: 2px solid var(--border-subtle);
+    white-space: nowrap;
+}
+
+.viz-gantt-table th:first-child {
+    text-align: left;
+    padding-left: var(--space-4);
+}
+
+.viz-gantt-table td {
+    padding: var(--space-1) var(--space-2);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+    position: relative;
+}
+
+.viz-gantt-project {
+    font-weight: 600;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    padding-left: var(--space-4) !important;
+    min-width: 120px;
+}
+
+.viz-gantt-bar {
+    height: 16px;
+    border-radius: 3px;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+td.viz-gantt-done .viz-gantt-bar {
+    opacity: 0.85;
+}
+
+td.viz-gantt-current .viz-gantt-bar {
+    opacity: 1;
+    box-shadow: 0 0 8px rgba(0, 0, 0, 0.2);
+}
+
+td.viz-gantt-future .viz-gantt-bar {
+    opacity: 0.2;
+}
+
+td.viz-gantt-empty .viz-gantt-bar {
+    opacity: 0.04;
+    background: #ccc !important;
+}
+
+.viz-gantt-table tbody tr:hover td.viz-gantt-done .viz-gantt-bar,
+.viz-gantt-table tbody tr:hover td.viz-gantt-current .viz-gantt-bar {
+    opacity: 1;
+}
+
+.viz-gantt-table tbody tr:hover {
+    background: rgba(var(--rr-navy-rgb), 0.03);
 }
