@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rolls-Royce Civil Aerospace &middot; Data Visualizer</title>
+    <title>Rolls-Royce Civil Aerospace &middot; Financial Dashboard</title>
     <link rel="icon"
         href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✈</text></svg>">
 
@@ -49,13 +49,13 @@
                 <div class="upload-zone" id="uploadZone">
                     <div class="upload-zone-content">
                         <i data-lucide="file-spreadsheet" class="upload-icon"></i>
-                        <p class="upload-text">Drop Excel files here</p>
-                        <p class="upload-subtext">.xlsx, .xls, .xlsb, .xlsm, .pptx</p>
+                        <p class="upload-text">Drop .xlsx or .pptx files here</p>
+                        <p class="upload-subtext">or click to browse</p>
                     </div>
                     <div class="upload-progress" id="uploadProgress">
                         <div class="upload-progress-bar" id="uploadProgressBar"></div>
                     </div>
-                    <input type="file" id="fileInput" accept=".xlsx,.xls,.xlsb,.xlsm,.pptx" multiple hidden>
+                    <input type="file" id="fileInput" accept=".xlsx,.xls,.pptx" multiple hidden>
                 </div>
                 <div class="uploaded-files" id="uploadedFiles"></div>
             </div>
@@ -142,7 +142,7 @@
 
             <!-- Sidebar Footer -->
             <div class="sidebar-footer">
-                <p>Data Visualizer</p>
+                <p>Financial Dashboard</p>
                 <p class="sidebar-footer-sub">Finance & Receivables</p>
             </div>
         </div>
@@ -155,7 +155,7 @@
         <header class="dashboard-header" id="dashboardHeader">
             <div class="header-content">
                 <div class="header-left">
-                    <h1 class="header-title">Data Visualizer</h1>
+                    <h1 class="header-title">Financial Dashboard</h1>
                     <p class="header-subtitle">Rolls-Royce Civil Aerospace &mdash; Finance & Receivables</p>
                 </div>
                 <div class="header-right">
@@ -183,35 +183,33 @@
                                 stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
                         </svg>
                     </div>
-                    <h2 class="welcome-title">Welcome to the RR Data Visualizer</h2>
+                    <h2 class="welcome-title">Welcome to the RR Financial Dashboard</h2>
                     <p class="welcome-desc">
-                        Upload any Rolls-Royce Civil Aerospace workbook. The visualizer automatically
-                        detects file type (SOA, Invoice List, Opportunity Tracker, Shop Visit, SVRG Master)
-                        and renders the appropriate dashboard with charts, KPIs, and data tables.
+                        Upload any Rolls-Royce financial workbook. The dashboard automatically
+                        detects sections, headers, and financial data regardless of layout variations.
                     </p>
                     <button class="welcome-upload-btn" id="welcomeUploadBtn">
                         <i data-lucide="upload-cloud"></i>
-                        Upload Workbook(s)
+                        Upload Workbook
                     </button>
                 </div>
                 <div class="welcome-features">
                     <div class="welcome-feature-card">
                         <div class="feature-icon"><i data-lucide="scan-search"></i></div>
                         <h4>Smart Detection</h4>
-                        <p>Automatically identifies SOA, Invoice Lists, Opportunity Trackers, Shop Visits, and SVRG
-                            files.</p>
+                        <p>Automatically identifies sections, headers, and financial data regardless of layout
+                            variations.</p>
                     </div>
                     <div class="welcome-feature-card">
                         <div class="feature-icon"><i data-lucide="bar-chart-3"></i></div>
                         <h4>Rich Analytics</h4>
-                        <p>Interactive charts, KPI cards, aging analysis, pipeline views, and engine timelines at a
-                            glance.</p>
+                        <p>Interactive charts, aging analysis, bilateral positions, and section breakdowns at a glance.
+                        </p>
                     </div>
                     <div class="welcome-feature-card">
-                        <div class="feature-icon"><i data-lucide="link-2"></i></div>
-                        <h4>Cross-File Linking</h4>
-                        <p>Upload multiple files to discover shared references, customers, and invoice links across
-                            datasets.</p>
+                        <div class="feature-icon"><i data-lucide="files"></i></div>
+                        <h4>Multi-File Compare</h4>
+                        <p>Upload multiple SOA files to compare across customers or reporting periods.</p>
                     </div>
                 </div>
             </div>
@@ -322,9 +320,6 @@
 
             </div>
 
-            <!-- ══════ UNIVERSAL VISUALIZER (new parser output) ══════ -->
-            <div class="dashboard-content" id="visualizerContainer" style="display:none;"></div>
-
             <!-- Presentation Mode Container -->
             <div class="presentation-container" id="presentationContainer" style="display:none;">
                 <div class="pres-nav" id="presNav">
@@ -420,7 +415,7 @@
                     </div>
 
                     <p class="ai-welcome-desc">
-                        Ask me anything about your FICTIONAL FAKE financial data. I can analyze trends,
+                        Ask me anything about your financial data. I can analyze trends,
                         draft emails, create charts, and generate reports.
                         <br><br>
                         <span class="ai-disclaimer"><i data-lucide="alert-triangle"
@@ -460,7 +455,7 @@
                     <button class="ai-chat-clear-btn" id="aiChatClearBtn" title="Clear chat">
                         <i data-lucide="trash-2"></i>
                     </button>
-                    <textarea class="ai-chat-input" id="aiChatInput" placeholder="Ask about your uploaded data..."
+                    <textarea class="ai-chat-input" id="aiChatInput" placeholder="Ask about your SOA data..."
                         rows="1"></textarea>
                     <button class="ai-chat-send-btn" id="aiChatSendBtn">
                         <i data-lucide="send"></i>
@@ -472,7 +467,7 @@
 
         <!-- Footer -->
         <footer class="dashboard-footer">
-            <p><strong>ROLLS-ROYCE</strong> CIVIL AEROSPACE &mdash; Data Visualizer</p>
+            <p><strong>ROLLS-ROYCE</strong> CIVIL AEROSPACE &mdash; Financial Dashboard</p>
             <p>Data sourced from uploaded workbook(s) &bull; For internal use only</p>
         </footer>
     </main>
@@ -575,7 +570,6 @@
     <script src="/static/js/ai-chat.js"></script>
     <script src="/static/js/secret-chat.js"></script>
     <script src="/static/js/files.js"></script>
-    <script src="/static/js/visualizer.js"></script>
     <script src="/static/js/app.js"></script>
 
 </body>
