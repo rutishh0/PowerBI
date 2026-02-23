@@ -3141,3 +3141,1416 @@ ul.ai-md-list {
         opacity: 1;
     }
 }
+
+
+/* ═══════════════════════════════════════════════════════════════
+   UNIVERSAL VISUALIZER STYLES
+   Type-specific views for SOA, Invoice List, Opportunity Tracker,
+   Shop Visit History, SVRG Master, and Unknown/fallback.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ─── File Type Badge Bar ─── */
+.viz-type-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    margin-bottom: var(--space-6);
+}
+
+.viz-file-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4);
+    background: var(--badge-bg);
+    border: 1px solid color-mix(in srgb, var(--badge-color) 25%, transparent);
+    border-radius: var(--radius-full);
+    font-size: 0.8rem;
+    color: var(--badge-color);
+    transition: all var(--transition-fast);
+}
+
+.viz-file-badge:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px color-mix(in srgb, var(--badge-color) 12%, transparent);
+}
+
+.viz-file-badge i {
+    width: 14px;
+    height: 14px;
+}
+
+.viz-file-badge-type {
+    font-weight: 600;
+    font-family: var(--font-display);
+    letter-spacing: 0.3px;
+}
+
+.viz-file-badge-name {
+    color: var(--text-secondary);
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ─── File Chip Type Dot ─── */
+.file-chip-type-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* ─── Section Header ─── */
+.viz-section {
+    margin-bottom: var(--space-8);
+}
+
+.viz-section-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin-bottom: var(--space-5);
+}
+
+.viz-section-header-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    background: var(--surface-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-full);
+    padding: var(--space-2) var(--space-5);
+    box-shadow: var(--shadow-xs);
+}
+
+.viz-section-header-pill i {
+    width: 16px;
+    height: 16px;
+    color: var(--rr-navy);
+}
+
+.viz-section-badge {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: white;
+    padding: 2px 10px;
+    border-radius: var(--radius-full);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+/* ─── Customer / Meta Bar ─── */
+.viz-customer-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    margin-bottom: var(--space-6);
+}
+
+.viz-info-chip {
+    background: var(--surface-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-4);
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    box-shadow: var(--shadow-xs);
+}
+
+.viz-info-chip b {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* ─── KPI Cards ─── */
+.viz-kpi-grid {
+    display: grid;
+    gap: var(--space-4);
+    margin-bottom: var(--space-6);
+}
+
+.viz-kpi-grid-3 {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+.viz-kpi-grid-4 {
+    grid-template-columns: repeat(4, 1fr);
+}
+
+.viz-kpi-grid-5 {
+    grid-template-columns: repeat(5, 1fr);
+}
+
+@media (max-width: 1200px) {
+    .viz-kpi-grid-5 {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 900px) {
+
+    .viz-kpi-grid-3,
+    .viz-kpi-grid-4,
+    .viz-kpi-grid-5 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+.viz-kpi-card {
+    background: var(--surface-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: var(--space-5);
+    box-shadow: var(--shadow-card);
+    transition: all var(--transition-base);
+    position: relative;
+    overflow: hidden;
+}
+
+.viz-kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--rr-navy);
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+}
+
+.viz-kpi-card:hover {
+    box-shadow: var(--shadow-card-hover);
+    transform: translateY(-2px);
+}
+
+.viz-kpi-card:hover::before {
+    opacity: 1;
+}
+
+.viz-kpi-card.kpi-danger::before {
+    background: var(--danger);
+    opacity: 1;
+}
+
+.viz-kpi-card.kpi-success::before {
+    background: var(--success);
+    opacity: 1;
+}
+
+.viz-kpi-card.kpi-warning::before {
+    background: var(--warning);
+    opacity: 1;
+}
+
+.viz-kpi-icon {
+    margin-bottom: var(--space-2);
+    color: var(--rr-navy);
+}
+
+.viz-kpi-icon i {
+    width: 20px;
+    height: 20px;
+}
+
+.viz-kpi-card.kpi-danger .viz-kpi-icon {
+    color: var(--danger);
+}
+
+.viz-kpi-card.kpi-success .viz-kpi-icon {
+    color: var(--success);
+}
+
+.viz-kpi-card.kpi-warning .viz-kpi-icon {
+    color: var(--warning);
+}
+
+.viz-kpi-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: var(--space-1);
+}
+
+.viz-kpi-value {
+    font-family: var(--font-display);
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+}
+
+.viz-kpi-card.kpi-danger .viz-kpi-value {
+    color: var(--danger);
+}
+
+.viz-kpi-card.kpi-success .viz-kpi-value {
+    color: var(--success);
+}
+
+.viz-kpi-card.kpi-warning .viz-kpi-value {
+    color: var(--warning);
+}
+
+.viz-kpi-subtitle {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-top: var(--space-1);
+}
+
+/* ─── Chart Grid ─── */
+.viz-chart-grid {
+    display: grid;
+    gap: var(--space-4);
+    margin-bottom: var(--space-6);
+}
+
+.viz-chart-grid-2 {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.viz-chart-grid-3 {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+@media (max-width: 1100px) {
+    .viz-chart-grid-3 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+
+    .viz-chart-grid-2,
+    .viz-chart-grid-3 {
+        grid-template-columns: 1fr;
+    }
+}
+
+.viz-chart-card {
+    background: var(--surface-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: var(--space-5);
+    box-shadow: var(--shadow-card);
+    transition: all var(--transition-base);
+}
+
+.viz-chart-card:hover {
+    box-shadow: var(--shadow-card-hover);
+}
+
+.viz-chart-header {
+    font-family: var(--font-display);
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: var(--space-4);
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.viz-chart-body {
+    min-height: 280px;
+}
+
+/* ─── Data Table ─── */
+.viz-table-wrap {
+    background: var(--surface-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    box-shadow: var(--shadow-card);
+    margin-bottom: var(--space-6);
+}
+
+.viz-data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+}
+
+.viz-data-table thead {
+    background: var(--surface-elevated);
+}
+
+.viz-data-table th {
+    text-align: left;
+    padding: var(--space-3) var(--space-4);
+    font-family: var(--font-display);
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border-subtle);
+    white-space: nowrap;
+}
+
+.viz-data-table td {
+    padding: var(--space-2) var(--space-4);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.03);
+    color: var(--text-primary);
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.viz-data-table tbody tr {
+    transition: background var(--transition-fast);
+}
+
+.viz-data-table tbody tr:hover {
+    background: rgba(var(--rr-navy-rgb), 0.02);
+}
+
+.viz-data-table tbody tr:nth-child(even) {
+    background: rgba(0, 0, 0, 0.01);
+}
+
+.viz-data-table td.neg {
+    color: var(--danger);
+    font-weight: 600;
+}
+
+.viz-data-table td.pos {
+    color: var(--text-primary);
+}
+
+.viz-table-overflow {
+    text-align: center;
+    padding: var(--space-3);
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    background: var(--surface-elevated);
+    border-top: 1px solid var(--border-subtle);
+}
+
+/* ─── Subsection Headers ─── */
+.viz-subsection {
+    margin-bottom: var(--space-3);
+}
+
+.viz-subsection-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    background: var(--surface-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: var(--space-3) var(--space-5);
+    box-shadow: var(--shadow-xs);
+    transition: all var(--transition-fast);
+}
+
+.viz-subsection-header:hover {
+    box-shadow: var(--shadow-sm);
+}
+
+.viz-subsection-name {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.9rem;
+    flex: 1;
+}
+
+.viz-subsection-total {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--rr-navy);
+}
+
+.viz-subsection-count {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    background: var(--surface-elevated);
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
+}
+
+/* ─── Cross-Reference Panel ─── */
+.viz-crossref-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: var(--space-4);
+    margin-bottom: var(--space-4);
+}
+
+.viz-crossref-card {
+    background: var(--surface-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: var(--space-4);
+    box-shadow: var(--shadow-xs);
+}
+
+.viz-crossref-key {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-weight: 700;
+    font-family: var(--font-display);
+    color: var(--rr-navy);
+    margin-bottom: var(--space-3);
+}
+
+.viz-crossref-key i {
+    width: 16px;
+    height: 16px;
+}
+
+.viz-crossref-files {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.viz-crossref-file {
+    font-size: 0.72rem;
+    background: var(--surface-elevated);
+    border: 1px solid var(--border-subtle);
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
+    color: var(--text-secondary);
+}
+
+/* ─── Warning / Error / Empty ─── */
+.viz-warning-box {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    background: var(--warning-light);
+    border: 1px solid rgba(217, 119, 6, 0.2);
+    border-radius: var(--radius-md);
+    padding: var(--space-4) var(--space-5);
+    color: var(--warning);
+    font-size: 0.85rem;
+    margin-bottom: var(--space-5);
+}
+
+.viz-warning-box i {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.viz-error-card {
+    background: var(--danger-light);
+    border: 1px solid rgba(220, 38, 38, 0.15);
+    border-radius: var(--radius-md);
+    padding: var(--space-5);
+    color: var(--danger);
+    font-size: 0.85rem;
+}
+
+.viz-error-card i {
+    width: 20px;
+    height: 20px;
+    margin-right: var(--space-2);
+}
+
+.viz-error-card ul {
+    margin-top: var(--space-2);
+    padding-left: var(--space-5);
+}
+
+.viz-empty-msg {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.88rem;
+    padding: var(--space-6);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   OPPORTUNITY TRACKER — Commercial Optimisation Dashboard
+   Premium dark-navy theme matching PowerBI reference
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ─── Scoped Container ─── */
+.opp-tracker-dashboard {
+    --opp-bg-deep: #03002E;
+    --opp-bg-card: #0A0842;
+    --opp-bg-card-hover: #110D58;
+    --opp-bg-surface: #0E0A50;
+    --opp-border: rgba(100, 100, 200, 0.15);
+    --opp-border-hover: rgba(130, 130, 220, 0.25);
+    --opp-text: #E8E6F8;
+    --opp-text-muted: #9B97C0;
+    --opp-text-dim: #6B67A0;
+    --opp-accent-blue: #2D8CFF;
+    --opp-accent-green: #00E396;
+    --opp-accent-orange: #FF8B42;
+    --opp-accent-amber: #FFB547;
+    --opp-accent-red: #FF4560;
+    --opp-glow-navy: rgba(16, 6, 159, 0.35);
+    --opp-glow-blue: rgba(45, 140, 255, 0.15);
+    color: var(--opp-text);
+    font-family: var(--font-body);
+}
+
+/* ─── Title Banner ─── */
+.viz-opp-banner {
+    background: linear-gradient(135deg, #10069F 0%, #0D0560 50%, #180E80 100%);
+    border-radius: var(--radius-lg);
+    padding: var(--space-6) var(--space-8);
+    margin-bottom: var(--space-6);
+    color: #fff;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: 0 8px 40px rgba(16, 6, 159, 0.4), 0 2px 12px rgba(0, 0, 0, 0.3);
+}
+
+.viz-opp-banner::before {
+    content: '';
+    position: absolute;
+    top: -60%;
+    right: -15%;
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.04) 0%, transparent 60%);
+    pointer-events: none;
+}
+
+.viz-opp-banner::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+}
+
+.viz-opp-banner-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+    z-index: 1;
+}
+
+.viz-opp-banner-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.35rem;
+    letter-spacing: 0.5px;
+}
+
+.viz-opp-banner-title i {
+    width: 26px;
+    height: 26px;
+    opacity: 0.9;
+    filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.3));
+}
+
+.viz-opp-banner-badge {
+    background: rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: #fff;
+    padding: 6px 18px;
+    border-radius: var(--radius-full);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.viz-opp-banner-rr {
+    font-family: var(--font-display);
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    border: 1.5px solid rgba(255, 255, 255, 0.3);
+    padding: 6px 16px;
+    border-radius: 3px;
+    white-space: nowrap;
+}
+
+/* ─── Financial Hero KPIs (PowerBI top-row style) ─── */
+.viz-opp-hero {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--space-4);
+    margin-bottom: var(--space-6);
+}
+
+@media (max-width: 1000px) {
+    .viz-opp-hero {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+.viz-opp-hero-card {
+    background: var(--opp-bg-card);
+    border: 1px solid var(--opp-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-5) var(--space-6);
+    text-align: center;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.viz-opp-hero-card::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--opp-accent-blue), var(--rr-navy));
+    opacity: 0;
+    transition: opacity 0.25s;
+}
+
+.viz-opp-hero-card:hover {
+    border-color: var(--opp-border-hover);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35), 0 0 20px var(--opp-glow-navy);
+    transform: translateY(-3px);
+}
+
+.viz-opp-hero-card:hover::after {
+    opacity: 1;
+}
+
+.viz-opp-hero-label {
+    font-family: var(--font-display);
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--opp-text-muted);
+    margin-bottom: var(--space-2);
+}
+
+.viz-opp-hero-value {
+    font-family: var(--font-display);
+    font-size: 2rem;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: -0.02em;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.viz-opp-hero-accent {
+    border-left: 3px solid var(--opp-accent-green);
+}
+
+.viz-opp-hero-accent .viz-opp-hero-value {
+    color: var(--opp-accent-green);
+}
+
+.viz-opp-hero-primary {
+    background: linear-gradient(135deg, #10069F 0%, #1A0FB5 50%, #2516D0 100%);
+    border-color: rgba(37, 22, 208, 0.3);
+}
+
+.viz-opp-hero-primary .viz-opp-hero-label {
+    color: rgba(255, 255, 255, 0.65);
+}
+
+.viz-opp-hero-primary .viz-opp-hero-value {
+    color: #fff;
+    text-shadow: 0 3px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* ─── Filters / Tab Bar ─── */
+.opp-filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-bottom: var(--space-5);
+    padding: var(--space-3) var(--space-4);
+    background: var(--opp-bg-card);
+    border: 1px solid var(--opp-border);
+    border-radius: var(--radius-md);
+}
+
+.opp-filter-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 5px 14px;
+    border: 1px solid var(--opp-border);
+    border-radius: var(--radius-full);
+    background: transparent;
+    color: var(--opp-text-muted);
+    font-family: var(--font-body);
+    font-size: 0.78rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.opp-filter-pill:hover {
+    background: rgba(45, 140, 255, 0.08);
+    border-color: var(--opp-accent-blue);
+    color: var(--opp-accent-blue);
+}
+
+.opp-filter-pill.active {
+    background: var(--opp-accent-blue);
+    border-color: var(--opp-accent-blue);
+    color: #fff;
+    font-weight: 600;
+}
+
+.opp-filter-pill i {
+    width: 13px;
+    height: 13px;
+}
+
+/* ─── Priority Cards ─── */
+.opp-tracker-dashboard .viz-kpi-card {
+    background: var(--opp-bg-card);
+    border: 1px solid var(--opp-border);
+    color: var(--opp-text);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.opp-tracker-dashboard .viz-kpi-card::before {
+    opacity: 1;
+}
+
+.opp-tracker-dashboard .viz-kpi-card:hover {
+    background: var(--opp-bg-card-hover);
+    border-color: var(--opp-border-hover);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.opp-tracker-dashboard .viz-kpi-icon {
+    color: var(--opp-accent-blue);
+}
+
+.opp-tracker-dashboard .viz-kpi-card.kpi-success .viz-kpi-icon {
+    color: var(--opp-accent-green);
+}
+
+.opp-tracker-dashboard .viz-kpi-card.kpi-warning .viz-kpi-icon {
+    color: var(--opp-accent-amber);
+}
+
+.opp-tracker-dashboard .viz-kpi-card.kpi-danger .viz-kpi-icon {
+    color: var(--opp-accent-red);
+}
+
+.opp-tracker-dashboard .viz-kpi-label {
+    color: var(--opp-text-muted);
+}
+
+.opp-tracker-dashboard .viz-kpi-value {
+    color: #fff;
+}
+
+.opp-tracker-dashboard .viz-kpi-card.kpi-success .viz-kpi-value {
+    color: var(--opp-accent-green);
+}
+
+.opp-tracker-dashboard .viz-kpi-card.kpi-danger .viz-kpi-value {
+    color: var(--opp-accent-red);
+}
+
+.opp-tracker-dashboard .viz-kpi-card.kpi-warning .viz-kpi-value {
+    color: var(--opp-accent-amber);
+}
+
+.opp-tracker-dashboard .viz-kpi-subtitle {
+    color: var(--opp-text-dim);
+}
+
+.opp-tracker-dashboard .viz-kpi-card.kpi-success::before {
+    background: var(--opp-accent-green);
+}
+
+.opp-tracker-dashboard .viz-kpi-card.kpi-warning::before {
+    background: var(--opp-accent-amber);
+}
+
+.opp-tracker-dashboard .viz-kpi-card.kpi-danger::before {
+    background: var(--opp-accent-red);
+}
+
+/* ─── Chart Cards (dark) ─── */
+.opp-tracker-dashboard .viz-chart-card {
+    background: var(--opp-bg-card);
+    border: 1px solid var(--opp-border);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5) var(--space-5) var(--space-3);
+}
+
+.opp-tracker-dashboard .viz-chart-card:hover {
+    border-color: var(--opp-border-hover);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35), 0 0 15px var(--opp-glow-navy);
+}
+
+.opp-tracker-dashboard .viz-chart-header {
+    color: var(--opp-text);
+    border-bottom-color: var(--opp-border);
+    font-size: 0.88rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+/* ─── Section Headers (dark) ─── */
+.opp-tracker-dashboard .viz-section-header-pill {
+    background: var(--opp-bg-card);
+    border-color: var(--opp-border);
+    color: var(--opp-text);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+.opp-tracker-dashboard .viz-section-header-pill i {
+    color: var(--opp-accent-blue);
+}
+
+.opp-tracker-dashboard .viz-section-badge {
+    background: var(--opp-accent-blue);
+    box-shadow: 0 2px 8px rgba(45, 140, 255, 0.3);
+}
+
+/* ─── Info Chips / Customer Bar (dark) ─── */
+.opp-tracker-dashboard .viz-customer-bar {
+    margin-bottom: var(--space-5);
+}
+
+.opp-tracker-dashboard .viz-info-chip {
+    background: var(--opp-bg-card);
+    border: 1px solid var(--opp-border);
+    color: var(--opp-text-muted);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    transition: all 0.2s;
+}
+
+.opp-tracker-dashboard .viz-info-chip:hover {
+    border-color: var(--opp-border-hover);
+    background: var(--opp-bg-card-hover);
+}
+
+.opp-tracker-dashboard .viz-info-chip b {
+    color: var(--opp-text);
+}
+
+/* ─── Data Tables (dark) ─── */
+.opp-tracker-dashboard .viz-table-wrap {
+    background: var(--opp-bg-card);
+    border: 1px solid var(--opp-border);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.opp-tracker-dashboard .viz-data-table th {
+    background: rgba(16, 6, 159, 0.25);
+    color: var(--opp-text-muted);
+    border-bottom-color: var(--opp-border);
+    font-size: 0.7rem;
+    letter-spacing: 0.8px;
+    padding: var(--space-3) var(--space-4);
+}
+
+.opp-tracker-dashboard .viz-data-table td {
+    color: var(--opp-text);
+    border-bottom-color: rgba(100, 100, 200, 0.08);
+    padding: var(--space-2) var(--space-4);
+    font-size: 0.8rem;
+}
+
+.opp-tracker-dashboard .viz-data-table tbody tr {
+    transition: background 0.15s;
+}
+
+.opp-tracker-dashboard .viz-data-table tbody tr:nth-child(even) {
+    background: rgba(255, 255, 255, 0.015);
+}
+
+.opp-tracker-dashboard .viz-data-table tbody tr:hover {
+    background: rgba(45, 140, 255, 0.06);
+}
+
+.opp-tracker-dashboard .viz-data-table td.neg {
+    color: var(--opp-accent-red);
+}
+
+.opp-tracker-dashboard .viz-data-table td.pos {
+    color: var(--opp-accent-green);
+}
+
+.opp-tracker-dashboard .viz-table-overflow {
+    background: rgba(16, 6, 159, 0.15);
+    color: var(--opp-text-dim);
+    border-top-color: var(--opp-border);
+}
+
+/* ─── Subsections (dark) ─── */
+.opp-tracker-dashboard .viz-subsection-header {
+    background: var(--opp-bg-card);
+    border: 1px solid var(--opp-border);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.opp-tracker-dashboard .viz-subsection-header:hover {
+    border-color: var(--opp-border-hover);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.opp-tracker-dashboard .viz-subsection-name {
+    color: var(--opp-text);
+}
+
+.opp-tracker-dashboard .viz-subsection-total {
+    color: var(--opp-accent-blue);
+}
+
+.opp-tracker-dashboard .viz-subsection-count {
+    background: rgba(45, 140, 255, 0.1);
+    color: var(--opp-accent-blue);
+    border: 1px solid rgba(45, 140, 255, 0.2);
+}
+
+/* ─── Gantt Chart (dark PowerBI style) ─── */
+.opp-tracker-dashboard .viz-gantt-wrap {
+    border-color: var(--opp-border);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    border-radius: var(--radius-md);
+    overflow-x: auto;
+}
+
+.opp-tracker-dashboard .viz-gantt-table thead {
+    background: rgba(16, 6, 159, 0.25);
+}
+
+.opp-tracker-dashboard .viz-gantt-table th {
+    color: var(--opp-text-muted);
+    border-bottom-color: var(--opp-border);
+}
+
+.opp-tracker-dashboard .viz-gantt-table td {
+    border-bottom-color: rgba(100, 100, 200, 0.06);
+}
+
+.opp-tracker-dashboard .viz-gantt-project {
+    color: var(--opp-text);
+}
+
+.opp-tracker-dashboard .viz-gantt-table tbody tr:hover {
+    background: rgba(45, 140, 255, 0.04);
+}
+
+.opp-tracker-dashboard td.viz-gantt-done .viz-gantt-bar {
+    opacity: 0.9;
+    box-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
+}
+
+.opp-tracker-dashboard td.viz-gantt-current .viz-gantt-bar {
+    opacity: 1;
+    box-shadow: 0 0 12px rgba(45, 140, 255, 0.4);
+    animation: ganttPulse 2s ease-in-out infinite;
+}
+
+@keyframes ganttPulse {
+
+    0%,
+    100% {
+        box-shadow: 0 0 8px rgba(45, 140, 255, 0.3);
+    }
+
+    50% {
+        box-shadow: 0 0 16px rgba(45, 140, 255, 0.6);
+    }
+}
+
+.opp-tracker-dashboard td.viz-gantt-future .viz-gantt-bar {
+    opacity: 0.15;
+}
+
+.opp-tracker-dashboard td.viz-gantt-empty .viz-gantt-bar {
+    opacity: 0.06;
+    background: rgba(200, 200, 255, 0.2) !important;
+}
+
+/* ─── Priority Legend (sidebar-style) ─── */
+.opp-legend-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: var(--space-3);
+    margin-bottom: var(--space-5);
+}
+
+.opp-legend-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: 0.78rem;
+    color: var(--opp-text-muted);
+}
+
+.opp-legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+/* ─── Status Badges ─── */
+.opp-status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 10px;
+    border-radius: var(--radius-full);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+}
+
+.opp-status-badge.status-hopper {
+    background: rgba(0, 131, 143, 0.15);
+    color: #26C6DA;
+    border: 1px solid rgba(0, 131, 143, 0.3);
+}
+
+.opp-status-badge.status-ict {
+    background: rgba(94, 53, 177, 0.15);
+    color: #B39DDB;
+    border: 1px solid rgba(94, 53, 177, 0.3);
+}
+
+.opp-status-badge.status-negotiations {
+    background: rgba(249, 168, 37, 0.15);
+    color: var(--opp-accent-amber);
+    border: 1px solid rgba(249, 168, 37, 0.3);
+}
+
+.opp-status-badge.status-contracting {
+    background: rgba(21, 101, 192, 0.15);
+    color: #64B5F6;
+    border: 1px solid rgba(21, 101, 192, 0.3);
+}
+
+.opp-status-badge.status-completed {
+    background: rgba(46, 125, 50, 0.15);
+    color: var(--opp-accent-green);
+    border: 1px solid rgba(46, 125, 50, 0.3);
+}
+
+.opp-status-badge.status-cancelled {
+    background: rgba(198, 40, 40, 0.15);
+    color: var(--opp-accent-red);
+    border: 1px solid rgba(198, 40, 40, 0.3);
+}
+
+/* ─── Probability Indicator ─── */
+.opp-prob-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.opp-prob-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.opp-prob-dot.prob-high {
+    background: #10069F;
+    box-shadow: 0 0 6px rgba(16, 6, 159, 0.5);
+}
+
+.opp-prob-dot.prob-med {
+    background: #1565C0;
+    box-shadow: 0 0 6px rgba(21, 101, 192, 0.5);
+}
+
+.opp-prob-dot.prob-low {
+    background: #00838F;
+    box-shadow: 0 0 6px rgba(0, 131, 143, 0.5);
+}
+
+/* ─── Scroll fade at table edges ─── */
+.opp-tracker-dashboard .viz-table-wrap {
+    position: relative;
+}
+
+.opp-tracker-dashboard .viz-table-wrap::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 40px;
+    background: linear-gradient(90deg, transparent, var(--opp-bg-card));
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.opp-tracker-dashboard .viz-table-wrap.has-overflow::after {
+    opacity: 1;
+}
+
+/* ─── Collapsible Sections ─── */
+.opp-collapse-section {
+    margin-bottom: var(--space-4);
+}
+
+.opp-collapse-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--opp-bg-card);
+    border: 1px solid var(--opp-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-3) var(--space-5);
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
+}
+
+.opp-collapse-header:hover {
+    background: var(--opp-bg-card-hover);
+    border-color: var(--opp-border-hover);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.opp-collapse-header-left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.opp-collapse-title {
+    font-family: var(--font-display);
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--opp-text);
+}
+
+.opp-collapse-count {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--opp-accent-blue);
+    background: rgba(45, 140, 255, 0.1);
+    border: 1px solid rgba(45, 140, 255, 0.2);
+    padding: 2px 10px;
+    border-radius: var(--radius-full);
+    letter-spacing: 0.3px;
+}
+
+.opp-collapse-chevron {
+    width: 18px;
+    height: 18px;
+    color: var(--opp-text-muted);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    flex-shrink: 0;
+}
+
+.opp-collapse-chevron.collapsed {
+    transform: rotate(-90deg);
+}
+
+.opp-collapse-body {
+    padding-top: var(--space-3);
+    animation: collapseIn 0.25s ease;
+}
+
+@keyframes collapseIn {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ─── Responsive ─── */
+@media (max-width: 768px) {
+    .viz-opp-banner {
+        padding: var(--space-4) var(--space-5);
+    }
+
+    .viz-opp-banner-title {
+        font-size: 1rem;
+    }
+
+    .viz-opp-hero-value {
+        font-size: 1.4rem;
+    }
+}
+
+/* ─── Gantt Chart (keep non-scoped for legacy) ─── */
+.viz-gantt-wrap {
+    overflow-x: auto;
+    margin-bottom: var(--space-5);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-subtle);
+    box-shadow: var(--shadow-xs);
+}
+
+.viz-gantt-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+}
+
+.viz-gantt-table thead {
+    background: var(--surface-elevated);
+}
+
+.viz-gantt-table th {
+    text-align: center;
+    padding: var(--space-3) var(--space-2);
+    font-family: var(--font-display);
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    border-bottom: 2px solid var(--border-subtle);
+    white-space: nowrap;
+}
+
+.viz-gantt-table th:first-child {
+    text-align: left;
+    padding-left: var(--space-4);
+}
+
+.viz-gantt-table td {
+    padding: var(--space-1) var(--space-2);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+    position: relative;
+}
+
+.viz-gantt-project {
+    font-weight: 600;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    padding-left: var(--space-4) !important;
+    min-width: 120px;
+}
+
+.viz-gantt-bar {
+    height: 16px;
+    border-radius: 3px;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+td.viz-gantt-done .viz-gantt-bar {
+    opacity: 0.85;
+}
+
+td.viz-gantt-current .viz-gantt-bar {
+    opacity: 1;
+    box-shadow: 0 0 8px rgba(0, 0, 0, 0.2);
+}
+
+td.viz-gantt-future .viz-gantt-bar {
+    opacity: 0.2;
+}
+
+td.viz-gantt-empty .viz-gantt-bar {
+    opacity: 0.04;
+    background: #ccc !important;
+}
+
+.viz-gantt-table tbody tr:hover td.viz-gantt-done .viz-gantt-bar,
+.viz-gantt-table tbody tr:hover td.viz-gantt-current .viz-gantt-bar {
+    opacity: 1;
+}
+
+.viz-gantt-table tbody tr:hover {
+    background: rgba(var(--rr-navy-rgb), 0.03);
+}
+
+/* ─── Sortable Tables ─── */
+.viz-sortable-th {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    padding-right: 28px !important;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.viz-sortable-th:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    /* Light mode hover */
+}
+
+.opp-tracker-dashboard .viz-sortable-th:hover {
+    background-color: rgba(45, 140, 255, 0.1);
+    /* Dark mode hover */
+    color: #fff;
+}
+
+.viz-sort-icon {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 10px;
+    height: 12px;
+    opacity: 0.2;
+    transition: opacity 0.2s;
+}
+
+.viz-sort-icon::before,
+.viz-sort-icon::after {
+    content: '';
+    position: absolute;
+    left: 1px;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+}
+
+.viz-sort-icon::before {
+    top: 0;
+    border-bottom: 4px solid currentColor;
+}
+
+.viz-sort-icon::after {
+    bottom: 0;
+    border-top: 4px solid currentColor;
+}
+
+.viz-sortable-th.sort-asc .viz-sort-icon {
+    opacity: 1;
+}
+
+.viz-sortable-th.sort-asc .viz-sort-icon::after {
+    opacity: 0.2;
+}
+
+.viz-sortable-th.sort-desc .viz-sort-icon {
+    opacity: 1;
+}
+
+.viz-sortable-th.sort-desc .viz-sort-icon::before {
+    opacity: 0.2;
+}

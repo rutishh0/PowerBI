@@ -1,5 +1,5 @@
 /**
- * Rolls-Royce SOA Dashboard — Main Application Controller
+ * Rolls-Royce Data Visualizer — Main Application Controller
  * Handles file upload, API calls, view management, and GSAP animations.
  */
 
@@ -82,15 +82,17 @@ const RRApp = (() => {
     async function _uploadFiles(fileList) {
         const validFiles = [];
 
-        // Filter valid files
+        // Filter valid files — accept all Excel formats + pptx
+        const validExts = ['.xlsx', '.xls', '.xlsb', '.xlsm', '.pptx'];
         for (const file of fileList) {
-            if (file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls') || file.name.toLowerCase().endsWith('.pptx')) {
+            const lower = file.name.toLowerCase();
+            if (validExts.some(ext => lower.endsWith(ext))) {
                 validFiles.push(file);
             }
         }
 
         if (validFiles.length === 0) {
-            RRComponents.showToast('Please upload .xlsx or .pptx files only', 'error');
+            RRComponents.showToast('Please upload Excel (.xlsx/.xls/.xlsb) or .pptx files', 'error');
             return;
         }
 
@@ -147,13 +149,35 @@ const RRApp = (() => {
             // Update file chips in sidebar
             _renderFileChips();
 
-            // Merge all items
+            // Merge all items — handle both old and new parser formats
             _allItems = [];
             Object.entries(_filesData).forEach(([fname, fdata]) => {
-                (fdata.all_items || []).forEach(item => {
-                    _allItems.push({ ...item, _source: fname });
-                });
+                console.log(`[RR Visualizer] File: ${fname}, file_type: ${fdata.file_type}, keys: ${Object.keys(fdata).join(',')}`);
+
+                // New parser format: items in sections[].items (SOA) or items[] (INVOICE_LIST)
+                if (fdata.file_type) {
+                    if (fdata.sections && Array.isArray(fdata.sections)) {
+                        fdata.sections.forEach(sec => {
+                            (sec.items || []).forEach(item => {
+                                _allItems.push({ ...item, _source: fname, _section: sec.name });
+                            });
+                        });
+                    }
+                    if (fdata.items && Array.isArray(fdata.items)) {
+                        fdata.items.forEach(item => {
+                            _allItems.push({ ...item, _source: fname });
+                        });
+                    }
+                }
+                // Old parser format: flat all_items array
+                else if (fdata.all_items) {
+                    (fdata.all_items || []).forEach(item => {
+                        _allItems.push({ ...item, _source: fname });
+                    });
+                }
             });
+
+            console.log(`[RR Visualizer] Total items merged: ${_allItems.length}, hasNewFormat: ${_detectNewParserFormat()}`);
 
             // Show dashboard
             _showDashboard();
@@ -176,11 +200,13 @@ const RRApp = (() => {
         if (!container) return;
 
         let html = '';
-        Object.keys(_filesData).forEach(fname => {
+        Object.entries(_filesData).forEach(([fname, fdata]) => {
+            const ft = fdata.file_type || 'UNKNOWN';
+            const meta = window.RRVisualizer ? RRVisualizer.getFileTypeMeta(ft) : { label: ft, color: '#10069F' };
             html += `
                 <div class="file-chip">
-                    <svg class="file-chip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    <span class="file-chip-name" title="${fname}">${fname}</span>
+                    <span class="file-chip-type-dot" style="background:${meta.color}"></span>
+                    <span class="file-chip-name" title="${fname} (${meta.label})">${fname}</span>
                 </div>`;
         });
         container.innerHTML = html;
@@ -194,6 +220,7 @@ const RRApp = (() => {
     function _showDashboard() {
         const welcome = $('welcomeState');
         const content = $('dashboardContent');
+        const vizContainer = $('visualizerContainer');
         const presContainer = $('presentationContainer');
         const compContainer = $('comparisonContainer');
         const filesContainer = $('filesContainer');
@@ -209,20 +236,52 @@ const RRApp = (() => {
 
         // Hide all view containers first
         if (content) content.style.display = 'none';
+        if (vizContainer) vizContainer.style.display = 'none';
         if (presContainer) presContainer.style.display = 'none';
         if (compContainer) compContainer.style.display = 'none';
         if (filesContainer) filesContainer.style.display = 'none';
         if (aiContainer) aiContainer.style.display = 'none';
 
+        // Detect if data uses the new universal parser format
+        const hasNewFormat = _detectNewParserFormat();
+        console.log('[RR Debug] _showDashboard:', {
+            currentView: _currentView,
+            hasNewFormat,
+            vizContainerExists: !!vizContainer,
+            rrVisualizerExists: !!window.RRVisualizer,
+            fileCount: Object.keys(_filesData).length,
+            fileTypes: Object.entries(_filesData).map(([f, d]) => `${f}: ${d.file_type || 'NO_TYPE'}`),
+        });
+
         // Render based on current view
         switch (_currentView) {
             case 'standard':
-                if (content) content.style.display = 'block';
-                _renderStandardView();
+                if (hasNewFormat && vizContainer && window.RRVisualizer) {
+                    console.log('[RR Debug] → Rendering NEW universal visualizer');
+                    if (content) content.style.display = 'none';
+                    vizContainer.style.display = 'block';
+                    const result = RRVisualizer.renderVisualizer(_filesData, vizContainer);
+                    console.log('[RR Debug] → Visualizer result:', result);
+                    if (result === false) {
+                        // Visualizer said "legacy format, let old view handle it"
+                        vizContainer.style.display = 'none';
+                        if (content) content.style.display = 'block';
+                        _renderStandardView();
+                    }
+                } else {
+                    console.log('[RR Debug] → Falling back to OLD view (hasNewFormat:', hasNewFormat, 'vizContainer:', !!vizContainer, 'RRVisualizer:', !!window.RRVisualizer, ')');
+                    if (content) content.style.display = 'block';
+                    _renderStandardView();
+                }
                 break;
             case 'executive':
-                if (content) content.style.display = 'block';
-                _renderExecutiveView();
+                if (hasNewFormat && vizContainer && window.RRVisualizer) {
+                    vizContainer.style.display = 'block';
+                    RRVisualizer.renderVisualizer(_filesData, vizContainer);
+                } else {
+                    if (content) content.style.display = 'block';
+                    _renderExecutiveView();
+                }
                 break;
             case 'presentation':
                 if (presContainer) presContainer.style.display = 'block';
@@ -241,14 +300,28 @@ const RRApp = (() => {
                 break;
         }
 
-        // Initialize sidebar filters
-        RRComponents.renderSidebarFilters(_allItems);
+        // Initialize sidebar filters only for legacy SOA data
+        if (!hasNewFormat && _allItems.length > 0) {
+            RRComponents.renderSidebarFilters(_allItems);
+        }
 
         // Refresh Lucide icons for new DOM
         if (window.lucide) lucide.createIcons();
 
-        // Animate new content
-        _animateDashboardContent();
+        // Animate new content — only for legacy views;
+        // the new RRVisualizer has its own animation system (_animateVizEntrance)
+        if (!hasNewFormat || !window.RRVisualizer) {
+            _animateDashboardContent();
+        }
+    }
+
+    function _detectNewParserFormat() {
+        // Check if any file uses the new universal parser format
+        // New parser returns file_type as a top-level key
+        return Object.values(_filesData).some(fdata => {
+            return fdata.file_type && ['SOA', 'INVOICE_LIST', 'OPPORTUNITY_TRACKER',
+                'SHOP_VISIT', 'SHOP_VISIT_HISTORY', 'SVRG_MASTER', 'UNKNOWN', 'ERROR'].includes(fdata.file_type);
+        });
     }
 
     function _renderStandardView() {

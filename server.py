@@ -1,8 +1,9 @@
 """
-Rolls-Royce Civil Aerospace — SOA Dashboard Server
-====================================================
+Rolls-Royce Civil Aerospace — Data Visualizer Server
+=====================================================
 Flask API backend serving the premium dashboard frontend.
-Handles file upload, Excel parsing, and PDF export.
+Handles file upload, universal Excel parsing, and PDF export.
+Supports: SOA, Invoice List, Opportunity Tracker, Shop Visit History, SVRG Master.
 
 Usage:
     python server.py
@@ -25,10 +26,61 @@ from flask import Flask, render_template, request, jsonify, send_file, session, 
 from functools import wraps
 from flask_cors import CORS
 
-from parser import parse_soa_workbook, serialize_parsed_data, aging_bucket, fmt_currency, AGING_ORDER, AGING_COLORS
+# Universal parser — handles SOA, INVOICE_LIST, OPPORTUNITY_TRACKER, SHOP_VISIT, SVRG_MASTER
+from parser_universal import parse_file, detect_file_type
+# Keep old parser for PDF export backward compat
+try:
+    from parser import parse_soa_workbook, serialize_parsed_data, aging_bucket, fmt_currency, AGING_ORDER, AGING_COLORS
+except ImportError:
+    parse_soa_workbook = None
+    serialize_parsed_data = None
 from pdf_export import generate_pdf_report
 from ai_chat import build_system_prompt, call_openrouter
 from db import init_db, save_file_to_db
+import math
+import datetime as dt
+
+def _sanitize_for_json(obj):
+    """Recursively sanitize parsed data for JSON serialization.
+    Converts NaN/Infinity to None, datetime to str, pandas types to native Python."""
+    if obj is None:
+        return None
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    if isinstance(obj, (int, bool, str)):
+        return obj
+    if isinstance(obj, (dt.datetime, dt.date)):
+        return obj.isoformat()
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize_for_json(v) for v in obj]
+    # Handle pandas types, numpy types
+    try:
+        import numpy as np
+        if isinstance(obj, (np.integer,)):
+            return int(obj)
+        if isinstance(obj, (np.floating,)):
+            v = float(obj)
+            return None if math.isnan(v) or math.isinf(v) else v
+        if isinstance(obj, np.ndarray):
+            return [_sanitize_for_json(v) for v in obj.tolist()]
+        if isinstance(obj, np.bool_):
+            return bool(obj)
+    except ImportError:
+        pass
+    try:
+        import pandas as pd
+        if isinstance(obj, pd.Timestamp):
+            return obj.isoformat()
+        if pd.isna(obj):
+            return None
+    except (ImportError, TypeError, ValueError):
+        pass
+    # Fallback: convert to string
+    return str(obj)
 
 # ─────────────────────────────────────────────────────────────
 # APP SETUP
@@ -148,23 +200,28 @@ def upload_files():
         except Exception as e:
             print(f"Failed to save {fname} to DB: {e}")
         
-        # ─── EXCEL ───
-        if lower_fname.endswith((".xlsx", ".xls")):
+        # ─── EXCEL (Universal Parser) ───
+        if lower_fname.endswith((".xlsx", ".xls", ".xlsb", ".xlsm")):
             try:
                 buf = io.BytesIO(file_bytes)
-                parsed = parse_soa_workbook(buf)
-                serialized = serialize_parsed_data(parsed)
-                results[fname] = serialized
+                parsed = parse_file(buf, filename=fname)
+                # Sanitize for JSON (handle NaN, datetime, numpy, pandas types)
+                parsed = _sanitize_for_json(parsed)
+                results[fname] = parsed
+                print(f"  Parsed {fname}: file_type={parsed.get('file_type', '??')}")
 
                 # Store raw parsed data
                 if sid not in _parsed_store:
                     _parsed_store[sid] = {}
                 _parsed_store[sid][fname] = {
                     "type": "excel",
+                    "file_type": parsed.get("file_type", "UNKNOWN"),
                     "parsed": parsed,
                     "file_bytes": file_bytes,
                 }
             except Exception as e:
+                import traceback
+                traceback.print_exc()
                 errors.append({"file": fname, "error": str(e)})
 
         # ─── PDF ───
@@ -485,8 +542,16 @@ def chat():
                 "filename": fname
             })
         else:
-            # Excel — use the parsed data in system prompt (text-based)
-            serialized_data[fname] = serialize_parsed_data(fstore["parsed"])
+            # Excel — use the parsed data in system prompt
+            # Universal parser results are already JSON-serializable
+            parsed = fstore.get("parsed", {})
+            if serialize_parsed_data and isinstance(parsed, dict) and "sections" in parsed and hasattr(parsed.get("sections", {}), 'items'):
+                try:
+                    serialized_data[fname] = serialize_parsed_data(parsed)
+                except Exception:
+                    serialized_data[fname] = parsed
+            else:
+                serialized_data[fname] = parsed
 
     system_prompt = build_system_prompt(serialized_data)
 
@@ -638,7 +703,7 @@ if __name__ == "__main__":
     init_db()
 
     port = int(os.environ.get("PORT", 5000))
-    print(f"\n  Rolls-Royce SOA Dashboard")
+    print(f"\n  Rolls-Royce Data Visualizer")
     print(f"  http://localhost:{port}\n")
 
     # Auto-open browser after short delay

@@ -131,8 +131,11 @@ window.RRVisualizer = (() => {
         // Refresh Lucide icons
         if (window.lucide) lucide.createIcons();
 
-        // Animate
-        _animateVizEntrance();
+        // Make tables sortable
+        _makeTablesSortable(container);
+
+        // Animate AFTER charts have rendered (charts use setTimeout 100ms)
+        setTimeout(() => _animateVizEntrance(), 250);
 
         return true; // Signal: we handled the rendering
     }
@@ -215,14 +218,15 @@ window.RRVisualizer = (() => {
         const tableId = opts.id || '';
         let html = `<div class="viz-table-wrap"><table class="viz-data-table" ${tableId ? `id="${tableId}"` : ''}>`;
         html += '<thead><tr>';
-        headers.forEach(h => { html += `<th>${h}</th>`; });
+        headers.forEach(h => { html += `<th class="viz-sortable-th">${h} <span class="viz-sort-icon"></span></th>`; });
         html += '</tr></thead><tbody>';
         rows.slice(0, maxRows).forEach(row => {
             html += '<tr>';
             row.forEach((cell, ci) => {
                 const cls = typeof cell === 'number' ? (cell < 0 ? 'neg' : 'pos') : '';
                 const formatted = typeof cell === 'number' ? _fmtNumber(cell) : _safe(cell);
-                html += `<td class="${cls}">${formatted}</td>`;
+                const rawVal = cell === null || cell === undefined ? '' : String(cell).replace(/"/g, '&quot;');
+                html += `<td class="${cls}" data-raw="${rawVal}">${formatted}</td>`;
             });
             html += '</tr>';
         });
@@ -318,10 +322,10 @@ window.RRVisualizer = (() => {
 
         el.innerHTML = html;
 
-        // Render charts after DOM
+        // Render charts after DOM is ready
         setTimeout(() => {
             _renderSOACharts(donutId, ccId, agingId, sections, allItems, aging);
-        }, 50);
+        }, 100);
     }
 
     function _renderSOACharts(donutId, ccId, agingId, sections, items, agingBuckets) {
@@ -336,10 +340,10 @@ window.RRVisualizer = (() => {
                 series: secValues,
                 labels: secLabels,
                 colors: [COLORS.navy, COLORS.blue2, COLORS.purple, COLORS.teal, COLORS.red, COLORS.orange, COLORS.green, COLORS.gold],
-                legend: { position: 'bottom', fontSize: '11px' },
-                plotOptions: { pie: { donut: { size: '62%' } } },
+                plotOptions: { pie: { donut: { size: '70%' } } },
+                legend: { position: 'bottom', fontSize: '11px', markers: { width: 8, height: 8 } },
                 dataLabels: { enabled: false },
-                theme: { mode: 'light' },
+                stroke: { width: 2, colors: ['#fff'] }
             }).render();
         }
 
@@ -363,8 +367,7 @@ window.RRVisualizer = (() => {
                 colors: [COLORS.red, COLORS.green],
                 plotOptions: { bar: { horizontal: false, columnWidth: '60%', borderRadius: 4 } },
                 legend: { position: 'top' },
-                dataLabels: { enabled: false },
-                theme: { mode: 'light' },
+                dataLabels: { enabled: false }
             }).render();
         }
 
@@ -381,8 +384,7 @@ window.RRVisualizer = (() => {
                 colors: agingColors,
                 plotOptions: { bar: { distributed: true, borderRadius: 4, columnWidth: '65%' } },
                 legend: { show: false },
-                dataLabels: { enabled: false },
-                theme: { mode: 'light' },
+                dataLabels: { enabled: true, formatter: val => val > 0 ? _fmtCurrency(val) : '', offsetY: -20, style: { fontSize: '10px', colors: ['#304758'] } }
             }).render();
         }
     }
@@ -456,7 +458,6 @@ window.RRVisualizer = (() => {
                 fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.5, opacityTo: 0.1 } },
                 stroke: { curve: 'smooth', width: 2 },
                 dataLabels: { enabled: false },
-                theme: { mode: 'light' },
             }).render();
         }
 
@@ -472,7 +473,6 @@ window.RRVisualizer = (() => {
                 plotOptions: { pie: { donut: { size: '62%' } } },
                 dataLabels: { enabled: false },
                 legend: { position: 'bottom' },
-                theme: { mode: 'light' },
             }).render();
         }
     }
@@ -566,6 +566,9 @@ window.RRVisualizer = (() => {
 
         let html = '';
 
+        // Wrap everything in dark-themed scoped container
+        html += '<div class="opp-tracker-dashboard">';
+
         // ═══════════════════════════════════════════
         // TITLE BANNER
         // ═══════════════════════════════════════════
@@ -575,7 +578,10 @@ window.RRVisualizer = (() => {
                     <i data-lucide="target"></i>
                     <span>${cover.title || 'MEA Commercial Optimisation Report'}</span>
                 </div>
-                <div class="viz-opp-banner-badge">OPP TRACKER</div>
+                <div style="display:flex;align-items:center;gap:16px">
+                    <div class="viz-opp-banner-badge">OPP TRACKER</div>
+                    <div class="viz-opp-banner-rr">ROLLS‑ROYCE</div>
+                </div>
             </div>
         </div>`;
 
@@ -710,30 +716,51 @@ window.RRVisualizer = (() => {
         html += '</div>';
 
         // ═══════════════════════════════════════════
+        // COLLAPSIBLE SECTIONS HELPER
+        // ═══════════════════════════════════════════
+        const _collapsible = (title, icon, count, innerHtml, startOpen = false) => {
+            const colId = `opp-col-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+            return `<div class="opp-collapse-section">
+                <div class="opp-collapse-header" data-target="${colId}">
+                    <div class="opp-collapse-header-left">
+                        <i data-lucide="${icon}" style="width:16px;height:16px;color:var(--opp-accent-blue)"></i>
+                        <span class="opp-collapse-title">${title}</span>
+                        <span class="opp-collapse-count">${count}</span>
+                    </div>
+                    <i data-lucide="chevron-down" class="opp-collapse-chevron ${startOpen ? '' : 'collapsed'}"></i>
+                </div>
+                <div class="opp-collapse-body" id="${colId}" style="${startOpen ? '' : 'display:none'}">
+                    ${innerHtml}
+                </div>
+            </div>`;
+        };
+
+        // ═══════════════════════════════════════════
         // CUSTOMER-ASK TABLE (top opportunities by value)
         // ═══════════════════════════════════════════
-        html += _sectionHeader('Top Opportunities by Value', 'trophy');
         const topByValue = [...allRecords].sort((a, b) => _val(b.sum_26_27) - _val(a.sum_26_27)).slice(0, 20);
         const topHeaders = ['Customer', 'Asks', 'Ext Prob', 'Status', 'Sum of Value (26+27)'];
         const topRows = topByValue.map(r => [
             r.customer, _truncate(String(r.asks || ''), 45),
             r.ext_probability, r.status, _val(r.sum_26_27)
         ]);
-        html += _dataTable(topHeaders, topRows, { maxRows: 20 });
+        html += _collapsible('Top Opportunities by Value', 'trophy', `${topByValue.length} items`, _dataTable(topHeaders, topRows, { maxRows: 20 }), true);
 
         // ═══════════════════════════════════════════
         // TABLES BY ESTIMATION LEVEL
         // ═══════════════════════════════════════════
-        html += _sectionHeader('Opportunities by Estimation Level', 'table');
+        let estHtml = '';
         const sheetOrder = Object.keys(opportunities);
+        let totalEstItems = 0;
         sheetOrder.forEach(sheetName => {
             const recs = opportunities[sheetName] || [];
             if (!Array.isArray(recs) || recs.length === 0) return;
+            totalEstItems += recs.length;
             const levelLabel = (meta.estimation_levels || {})[sheetName] || sheetName;
             const sheetSum = recs.reduce((s, r) => s + _val(r.sum_26_27), 0);
             const sheetTerm = recs.reduce((s, r) => s + _val(r.term_benefit), 0);
 
-            html += `<div class="viz-subsection">
+            estHtml += `<div class="viz-subsection">
                 <div class="viz-subsection-header">
                     <span class="viz-subsection-name">${levelLabel} — ${sheetName}</span>
                     <span class="viz-subsection-total">${$m(sheetSum)} (26+27) · ${$m(sheetTerm)} term</span>
@@ -747,16 +774,18 @@ window.RRVisualizer = (() => {
                 _truncate(String(r.asks || ''), 30), r.ext_probability, r.status,
                 r.priority, _val(r.sum_26_27), _val(r.term_benefit),
             ]);
-            html += _dataTable(headers, rows, { maxRows: 50 });
+            estHtml += _dataTable(headers, rows, { maxRows: 50 });
         });
+        if (totalEstItems > 0) {
+            html += _collapsible('Opportunities by Estimation Level', 'table', `${totalEstItems} items`, estHtml);
+        }
 
         // ═══════════════════════════════════════════
         // PROJECT TIMELINE (Gantt-style)
         // ═══════════════════════════════════════════
         const milestones = (timeline.milestones || []).filter(m => m.project && m.milestones);
         if (milestones.length > 0) {
-            html += _sectionHeader('Project Timeline & Milestones', 'calendar');
-
+            let timeHtml = '';
             // Phase progression table
             const phaseHeaders = ['Project', 'Customer', 'Current Phase', 'Days to Sign'];
             const phaseRows = milestones.slice(0, 30).map(m => {
@@ -771,22 +800,22 @@ window.RRVisualizer = (() => {
                     daysToSign,
                 ];
             });
-            html += _dataTable(phaseHeaders, phaseRows);
+            timeHtml += _dataTable(phaseHeaders, phaseRows);
 
             // Gantt visual
-            html += '<div class="viz-gantt-wrap">';
+            timeHtml += '<div class="viz-gantt-wrap">';
             const phases = ['idea_generation', 'approval_to_launch', 'strategy_approval', 'be_generated', 'approval', 'negotiation_strategy', 'proposal_submitted', 'proposal_signed'];
             const phaseLabels = ['Idea Gen', 'Launch', 'Strategy', 'BE Gen', 'Approval', 'Negotiation', 'Submitted', 'Signed'];
-            const phaseColors = ['#10069F', '#1565C0', '#5E35B1', '#00838F', '#2E7D32', '#EF6C00', '#F9A825', '#C62828'];
+            const phaseColors = ['#4361EE', '#3A86FF', '#5E60CE', '#48BFE3', '#00E396', '#FF8B42', '#FFB547', '#FF4560'];
 
-            html += '<table class="viz-gantt-table"><thead><tr><th>Project</th>';
-            phaseLabels.forEach(l => { html += `<th>${l}</th>`; });
-            html += '</tr></thead><tbody>';
+            timeHtml += '<table class="viz-gantt-table"><thead><tr><th>Project</th>';
+            phaseLabels.forEach(l => { timeHtml += `<th>${l}</th>`; });
+            timeHtml += '</tr></thead><tbody>';
 
             milestones.slice(0, 20).forEach(m => {
                 const ms = m.milestones || {};
                 const currentPhase = m.current_phase || '';
-                html += `<tr><td class="viz-gantt-project">${_truncate(String(m.project || ''), 18)}</td>`;
+                timeHtml += `<tr><td class="viz-gantt-project">${_truncate(String(m.project || ''), 18)}</td>`;
                 let foundCurrent = false;
                 phases.forEach((phase, i) => {
                     const date = ms[phase];
@@ -798,11 +827,13 @@ window.RRVisualizer = (() => {
                     if (isPast && !foundCurrent) cls = 'viz-gantt-done';
                     else if (isCurrent) cls = 'viz-gantt-current';
                     else if (isFuture || (!foundCurrent && !isPast)) cls = 'viz-gantt-future';
-                    html += `<td class="${cls}" title="${phase}: ${date || 'N/A'}"><div class="viz-gantt-bar" style="background:${phaseColors[i]}"></div></td>`;
+                    timeHtml += `<td class="${cls}" title="${phase}: ${date || 'N/A'}"><div class="viz-gantt-bar" style="background:${phaseColors[i]}"></div></td>`;
                 });
-                html += '</tr>';
+                timeHtml += '</tr>';
             });
-            html += '</tbody></table></div>';
+            timeHtml += '</tbody></table></div>';
+
+            html += _collapsible('Project Timeline & Milestones', 'calendar', `${milestones.length} projects`, timeHtml);
         }
 
         // ═══════════════════════════════════════════
@@ -810,14 +841,13 @@ window.RRVisualizer = (() => {
         // ═══════════════════════════════════════════
         const oatItems = oppsAndThreats.items || [];
         if (oatItems.length > 0) {
-            html += _sectionHeader('Opportunities & Threats', 'alert-triangle');
             const oatHeaders = ['Project', 'Customer', 'Opportunity', 'Status', 'Owner', 'Pack Improvement', 'Due Date'];
             const oatRows = oatItems.map(i => [
                 i.project, i.customer, _truncate(String(i.opportunity || ''), 40),
                 i.status, i.owner, typeof i.overall_pack_improvement === 'number' ? _fmtNumber(i.overall_pack_improvement) : '—',
                 i.due_date,
             ]);
-            html += _dataTable(oatHeaders, oatRows);
+            html += _collapsible('Opportunities & Threats', 'alert-triangle', `${oatItems.length} items`, _dataTable(oatHeaders, oatRows));
         }
 
         // ═══════════════════════════════════════════
@@ -825,7 +855,6 @@ window.RRVisualizer = (() => {
         // ═══════════════════════════════════════════
         const projects = (projectSummary.projects || []);
         if (projects.length > 0) {
-            html += _sectionHeader('Project Summary', 'briefcase');
             const prjHeaders = ['Group', 'Project', 'Customer', 'Programme', 'CRP Margin ($M)', 'CRP %', 'Onerous'];
             const prjRows = projects.map(p => [
                 p.group, p.project, p.customer, p.programme,
@@ -833,10 +862,45 @@ window.RRVisualizer = (() => {
                 typeof p.current_crp_pct === 'number' ? (p.current_crp_pct * 100).toFixed(1) + '%' : '—',
                 typeof p.onerous_provision === 'number' ? p.onerous_provision.toFixed(1) : '—',
             ]);
-            html += _dataTable(prjHeaders, prjRows);
+            html += _collapsible('Project Summary', 'briefcase', `${projects.length} projects`, _dataTable(prjHeaders, prjRows));
         }
 
+        // Close the opp-tracker-dashboard wrapper
+        html += '</div>';
+
         el.innerHTML = html;
+
+        // Apply dark background to the visualizer container AND all parent containers
+        el.style.background = '#03002E';
+        el.style.borderRadius = '0';
+        el.style.padding = '24px 32px';
+        // Walk up the DOM to darken dashboard-body and header
+        let parent = el.parentElement;
+        while (parent) {
+            if (parent.classList && parent.classList.contains('dashboard-body')) {
+                parent.style.background = '#03002E';
+            }
+            if (parent.classList && parent.classList.contains('main-content')) {
+                parent.style.background = '#03002E';
+            }
+            parent = parent.parentElement;
+        }
+
+        // Re-init Lucide icons for the new HTML
+        if (window.lucide) window.lucide.createIcons();
+
+        // Wire up collapsible sections
+        el.querySelectorAll('.opp-collapse-header').forEach(header => {
+            header.addEventListener('click', () => {
+                const targetId = header.getAttribute('data-target');
+                const body = document.getElementById(targetId);
+                const chevron = header.querySelector('.opp-collapse-chevron');
+                if (!body) return;
+                const isHidden = body.style.display === 'none';
+                body.style.display = isHidden ? 'block' : 'none';
+                if (chevron) chevron.classList.toggle('collapsed', !isHidden);
+            });
+        });
 
         // ═══════════════════════════════════════════
         // RENDER CHARTS
@@ -848,7 +912,7 @@ window.RRVisualizer = (() => {
                 valueByTypeProbObj, valueByStatusProbObj,
                 custTop10, estLevels, byStatus
             });
-        }, 80);
+        }, 100);
     }
 
     function _renderOppCharts(cfg) {
@@ -857,105 +921,197 @@ window.RRVisualizer = (() => {
             valueByTypeProbObj, valueByStatusProbObj,
             custTop10, estLevels, byStatus } = cfg;
 
-        // ─── Value by Opportunity Type × External Probability (Stacked Bar) ───
+        // Text color constants for dark background
+        const TXT = '#C8C6DD';
+        const TXT_BRIGHT = '#E8E6F8';
+        const GRID_COLOR = 'rgba(100,100,200,0.12)';
+
+        // Shared config — NO theme.mode (it overrides custom colors!)
+        const baseGrid = { borderColor: GRID_COLOR, strokeDashArray: 3 };
+        const baseTip = {
+            theme: 'dark', style: { fontSize: '12px' },
+            marker: { show: true }
+        };
+
+        // ─── 1. Value by Opportunity Type × External Probability ───
         if ($(typeChartId) && oppTypes.length > 0) {
             new ApexCharts($(typeChartId), {
-                chart: { type: 'bar', height: 320, background: 'transparent', stacked: true },
+                chart: {
+                    type: 'bar', height: 340, background: 'transparent',
+                    foreColor: TXT, stacked: true, toolbar: { show: false }
+                },
                 series: probLevels.map(p => ({
                     name: p, data: oppTypes.map(t => +(valueByTypeProbObj[t]?.[p] || 0).toFixed(1))
                 })),
-                xaxis: { categories: oppTypes.map(t => _truncate(t, 14)), labels: { rotate: -30, style: { fontSize: '10px' } } },
-                colors: probLevels.map(p => probColors[p]),
-                plotOptions: { bar: { columnWidth: '65%', borderRadius: 3 } },
+                xaxis: {
+                    categories: oppTypes.map(t => _truncate(t, 14)),
+                    labels: { rotate: -30, style: { fontSize: '10px', colors: TXT } },
+                    axisBorder: { color: GRID_COLOR }, axisTicks: { color: GRID_COLOR }
+                },
+                colors: ['#4361EE', '#3A86FF', '#48BFE3'],
+                fill: { opacity: 1 },
+                plotOptions: { bar: { columnWidth: '65%', borderRadius: 4 } },
                 dataLabels: { enabled: false },
-                legend: { position: 'top', fontSize: '11px', markers: { size: 8 } },
-                yaxis: { title: { text: '$M' }, labels: { formatter: v => '$' + v.toFixed(0) + 'm' } },
-                tooltip: { y: { formatter: v => '$' + v.toFixed(1) + 'm' } },
-                theme: { mode: 'light' },
+                legend: {
+                    position: 'top', fontSize: '11px', labels: { colors: TXT },
+                    markers: { size: 8, radius: 3 }
+                },
+                yaxis: {
+                    title: { text: '$M', style: { color: TXT } },
+                    labels: {
+                        formatter: v => '$' + v.toFixed(0) + 'm',
+                        style: { colors: TXT }
+                    }
+                },
+                tooltip: { ...baseTip, y: { formatter: v => '$' + v.toFixed(1) + 'm' } },
+                grid: baseGrid,
             }).render();
         }
 
-        // ─── Value by Status × External Probability (Stacked Bar) ───
-        const activeStatuses = statusList.filter(s => valueByStatusProbObj[s] && (valueByStatusProbObj[s].High + valueByStatusProbObj[s].Med + valueByStatusProbObj[s].Low) > 0);
+        // ─── 2. Value by Status × External Probability ───
+        const activeStatuses = statusList.filter(s =>
+            valueByStatusProbObj[s] && (valueByStatusProbObj[s].High + valueByStatusProbObj[s].Med + valueByStatusProbObj[s].Low) > 0);
         if ($(statusChartId) && activeStatuses.length > 0) {
             new ApexCharts($(statusChartId), {
-                chart: { type: 'bar', height: 320, background: 'transparent', stacked: true },
+                chart: {
+                    type: 'bar', height: 340, background: 'transparent',
+                    foreColor: TXT, stacked: true, toolbar: { show: false }
+                },
                 series: probLevels.map(p => ({
                     name: p, data: activeStatuses.map(s => +(valueByStatusProbObj[s]?.[p] || 0).toFixed(1))
                 })),
-                xaxis: { categories: activeStatuses, labels: { rotate: -30, style: { fontSize: '10px' } } },
-                colors: probLevels.map(p => probColors[p]),
-                plotOptions: { bar: { columnWidth: '60%', borderRadius: 3 } },
+                xaxis: {
+                    categories: activeStatuses,
+                    labels: { rotate: -30, style: { fontSize: '10px', colors: TXT } },
+                    axisBorder: { color: GRID_COLOR }, axisTicks: { color: GRID_COLOR }
+                },
+                colors: ['#4361EE', '#3A86FF', '#48BFE3'],
+                fill: { opacity: 1 },
+                plotOptions: { bar: { columnWidth: '60%', borderRadius: 4 } },
                 dataLabels: { enabled: false },
-                legend: { position: 'top', fontSize: '11px' },
-                yaxis: { title: { text: '$M' }, labels: { formatter: v => '$' + v.toFixed(0) + 'm' } },
-                tooltip: { y: { formatter: v => '$' + v.toFixed(1) + 'm' } },
-                theme: { mode: 'light' },
+                legend: { position: 'top', fontSize: '11px', labels: { colors: TXT } },
+                yaxis: {
+                    title: { text: '$M', style: { color: TXT } },
+                    labels: {
+                        formatter: v => '$' + v.toFixed(0) + 'm',
+                        style: { colors: TXT }
+                    }
+                },
+                tooltip: { ...baseTip, y: { formatter: v => '$' + v.toFixed(1) + 'm' } },
+                grid: baseGrid,
             }).render();
         }
 
-        // ─── Customer Top 15 by Value (Horizontal Bar) ───
+        // ─── 3. Customer Top 15 by Value (Horizontal Bar) ───
         if ($(custChartId) && custTop10.length > 0) {
+            const custColors = ['#48BFE3', '#4361EE', '#3A86FF', '#5E60CE', '#7400B8',
+                '#6930C3', '#64DFDF', '#80FFDB', '#56CFE1', '#72EFDD',
+                '#4EA8DE', '#5390D9', '#6D6875', '#48BFE3', '#4361EE'];
             new ApexCharts($(custChartId), {
-                chart: { type: 'bar', height: 360, background: 'transparent' },
+                chart: {
+                    type: 'bar', height: Math.max(380, custTop10.length * 30),
+                    background: 'transparent', foreColor: TXT, toolbar: { show: false }
+                },
                 series: [{ name: 'Sum 26+27 ($M)', data: custTop10.map(c => +c[1].toFixed(1)) }],
-                xaxis: { categories: custTop10.map(c => c[0]) },
-                colors: [COLORS.teal],
-                plotOptions: { bar: { horizontal: true, borderRadius: 4, distributed: true, barHeight: '70%' } },
-                dataLabels: { enabled: true, formatter: v => '$' + v + 'm', offsetX: 10, style: { fontSize: '10px', colors: [COLORS.dark] } },
+                xaxis: {
+                    categories: custTop10.map(c => c[0]),
+                    labels: { style: { colors: TXT_BRIGHT, fontSize: '11px' } },
+                    axisBorder: { show: false }, axisTicks: { show: false }
+                },
+                colors: custColors,
+                fill: { opacity: 1 },
+                plotOptions: { bar: { horizontal: true, borderRadius: 5, distributed: true, barHeight: '65%' } },
+                dataLabels: {
+                    enabled: true, formatter: v => '$' + v + 'm', offsetX: 18,
+                    style: { fontSize: '11px', fontWeight: 600, colors: [TXT_BRIGHT] }
+                },
                 legend: { show: false },
-                yaxis: { labels: { style: { fontSize: '10px' } } },
-                theme: { mode: 'light' },
+                yaxis: { labels: { style: { fontSize: '11px', colors: TXT_BRIGHT } } },
+                grid: {
+                    borderColor: GRID_COLOR, strokeDashArray: 3,
+                    xaxis: { lines: { show: true } }, yaxis: { lines: { show: false } }
+                },
+                tooltip: { ...baseTip, y: { formatter: v => '$' + v.toFixed(1) + 'm' } },
             }).render();
         }
 
-        // ─── Financial Forecast by Estimation Level (Grouped Bar) ───
+        // ─── 4. Financial Forecast by Estimation Level ───
         const levelEntries = Object.entries(estLevels);
         if ($(finChartId) && levelEntries.length > 0) {
             const names = levelEntries.map(([l]) => l);
             new ApexCharts($(finChartId), {
-                chart: { type: 'bar', height: 320, background: 'transparent' },
+                chart: {
+                    type: 'bar', height: 340, background: 'transparent',
+                    foreColor: TXT, toolbar: { show: false }
+                },
                 series: [
                     { name: 'Term ($M)', data: levelEntries.map(([, s]) => +(s.total_term_benefit || 0).toFixed(1)) },
                     { name: '2026 ($M)', data: levelEntries.map(([, s]) => +(s.total_2026 || 0).toFixed(1)) },
                     { name: '2027 ($M)', data: levelEntries.map(([, s]) => +(s.total_2027 || 0).toFixed(1)) },
                 ],
-                xaxis: { categories: names },
-                colors: [COLORS.navy, COLORS.green, COLORS.blue2],
-                plotOptions: { bar: { horizontal: false, columnWidth: '55%', borderRadius: 4 } },
-                dataLabels: { enabled: true, formatter: v => '$' + v + 'm', style: { fontSize: '10px' } },
-                legend: { position: 'top', fontSize: '11px' },
-                yaxis: { labels: { formatter: v => '$' + v + 'm' } },
-                tooltip: { y: { formatter: v => '$' + v + 'm' } },
-                theme: { mode: 'light' },
+                xaxis: {
+                    categories: names,
+                    labels: { style: { colors: TXT } },
+                    axisBorder: { color: GRID_COLOR }, axisTicks: { color: GRID_COLOR }
+                },
+                colors: ['#FF8B42', '#4361EE', '#00E396'],
+                fill: { opacity: 1 },
+                plotOptions: { bar: { horizontal: false, columnWidth: '55%', borderRadius: 5 } },
+                dataLabels: {
+                    enabled: true, formatter: v => '$' + v + 'm',
+                    style: { fontSize: '10px', colors: [TXT_BRIGHT] }
+                },
+                legend: { position: 'top', fontSize: '11px', labels: { colors: TXT } },
+                yaxis: { labels: { formatter: v => '$' + v + 'm', style: { colors: TXT } } },
+                tooltip: { ...baseTip, y: { formatter: v => '$' + v + 'm' } },
+                grid: baseGrid,
             }).render();
         }
 
-        // ─── Pipeline Status Donut ───
+        // ─── 5. Pipeline Status Donut ───
         const statusColors = {
-            'Completed': '#2E7D32', 'Contracting': '#1565C0', 'Negotiations': '#F9A825',
-            'ICT': '#5E35B1', 'Hopper': '#00838F', 'Cancelled': '#C62828',
+            'Completed': '#00E396', 'Contracting': '#3A86FF', 'Negotiations': '#FFB547',
+            'ICT': '#B39DDB', 'Hopper': '#48BFE3', 'Cancelled': '#FF4560',
         };
         const statusLabels = Object.keys(byStatus).filter(s => byStatus[s] > 0);
         const statusValues = statusLabels.map(s => byStatus[s]);
         if ($(pipeDonutId) && statusLabels.length > 0) {
             new ApexCharts($(pipeDonutId), {
-                chart: { type: 'donut', height: 320, background: 'transparent' },
+                chart: {
+                    type: 'donut', height: 340, background: 'transparent',
+                    foreColor: TXT, toolbar: { show: false }
+                },
                 series: statusValues,
                 labels: statusLabels,
-                colors: statusLabels.map(l => statusColors[l] || COLORS.silver),
+                colors: statusLabels.map(l => statusColors[l] || '#6B67A0'),
+                fill: { opacity: 1 },
                 plotOptions: {
                     pie: {
                         donut: {
-                            size: '55%', labels: {
-                                show: true, total: { show: true, label: 'Total', fontSize: '14px', fontWeight: 700 }
+                            size: '58%',
+                            labels: {
+                                show: true,
+                                name: { color: TXT_BRIGHT, fontSize: '13px' },
+                                value: { color: TXT_BRIGHT, fontSize: '20px', fontWeight: 700 },
+                                total: {
+                                    show: true, label: 'Total', color: TXT, fontSize: '13px',
+                                    fontWeight: 600,
+                                    formatter: w => w.globals.seriesTotals.reduce((a, b) => a + b, 0)
+                                }
                             }
                         }
                     }
                 },
-                dataLabels: { enabled: true, formatter: val => val.toFixed(0) + '%', style: { fontSize: '11px' } },
-                legend: { position: 'bottom', fontSize: '11px' },
-                theme: { mode: 'light' },
+                stroke: { show: true, width: 2, colors: ['#0A0842'] },
+                dataLabels: {
+                    enabled: true, formatter: val => val.toFixed(0) + '%',
+                    style: { fontSize: '11px', colors: [TXT_BRIGHT] },
+                    dropShadow: { enabled: false }
+                },
+                legend: {
+                    position: 'bottom', fontSize: '11px', labels: { colors: TXT },
+                    markers: { radius: 3 }
+                },
             }).render();
         }
     }
@@ -1046,8 +1202,7 @@ window.RRVisualizer = (() => {
                     colors: [COLORS.orange],
                     plotOptions: { bar: { horizontal: true, borderRadius: 4, distributed: true } },
                     dataLabels: { enabled: false },
-                    legend: { show: false },
-                    theme: { mode: 'light' },
+                    legend: { show: false }
                 }).render();
             }
         }, 50);
@@ -1296,14 +1451,74 @@ window.RRVisualizer = (() => {
 
     function _animateVizEntrance() {
         if (!window.gsap) return;
-        gsap.from('.viz-section', {
-            opacity: 0, y: 30, duration: 0.5, stagger: 0.1, ease: 'power2.out',
-        });
-        gsap.from('.viz-kpi-card', {
-            opacity: 0, y: 20, scale: 0.95, duration: 0.4, stagger: 0.05, ease: 'back.out(1.5)', delay: 0.2,
-        });
-        gsap.from('.viz-chart-card', {
-            opacity: 0, y: 20, duration: 0.5, stagger: 0.08, ease: 'power2.out', delay: 0.3,
+        // Use gsap.fromTo with clearProps to avoid leaving stale inline styles
+        // that interfere with ApexCharts rendering inside these containers
+        gsap.fromTo('.viz-section',
+            { opacity: 0, y: 30 },
+            { opacity: 1, y: 0, duration: 0.5, stagger: 0.1, ease: 'power2.out', clearProps: 'all' }
+        );
+        gsap.fromTo('.viz-kpi-card',
+            { opacity: 0, y: 20, scale: 0.95 },
+            { opacity: 1, y: 0, scale: 1, duration: 0.4, stagger: 0.05, ease: 'back.out(1.5)', delay: 0.1, clearProps: 'all' }
+        );
+        gsap.fromTo('.viz-chart-card',
+            { opacity: 0, y: 20 },
+            { opacity: 1, y: 0, duration: 0.5, stagger: 0.08, ease: 'power2.out', delay: 0.15, clearProps: 'all' }
+        );
+    }
+
+    // ═══════════════════════════════════════════════════
+    // INTERACTIVITY
+    // ═══════════════════════════════════════════════════
+
+    function _makeTablesSortable(containerElement) {
+        if (!containerElement) return;
+        const tables = containerElement.querySelectorAll('.viz-data-table');
+        tables.forEach(table => {
+            const headers = table.querySelectorAll('thead th.viz-sortable-th');
+            const tbody = table.querySelector('tbody');
+            if (!tbody || !headers.length) return;
+
+            headers.forEach((th, index) => {
+                th.addEventListener('click', () => {
+                    const isAsc = th.classList.contains('sort-asc');
+
+                    headers.forEach(h => {
+                        h.classList.remove('sort-asc', 'sort-desc');
+                    });
+
+                    const direction = isAsc ? 'desc' : 'asc';
+                    th.classList.add(`sort-${direction}`);
+
+                    const rows = Array.from(tbody.querySelectorAll('tr'));
+
+                    rows.sort((a, b) => {
+                        const cellA = a.children[index];
+                        const cellB = b.children[index];
+                        if (!cellA || !cellB) return 0;
+
+                        const rawA = cellA.getAttribute('data-raw');
+                        const rawB = cellB.getAttribute('data-raw');
+
+                        const numA = Number(rawA);
+                        const numB = Number(rawB);
+                        const isNumA = rawA !== '' && !isNaN(numA);
+                        const isNumB = rawB !== '' && !isNaN(numB);
+
+                        let cmp = 0;
+                        if (isNumA && isNumB) {
+                            cmp = numA - numB;
+                        } else {
+                            cmp = String(rawA).toLowerCase().localeCompare(String(rawB).toLowerCase());
+                        }
+
+                        return direction === 'asc' ? cmp : -cmp;
+                    });
+
+                    // Re-append sorted rows
+                    rows.forEach(row => tbody.appendChild(row));
+                });
+            });
         });
     }
 
