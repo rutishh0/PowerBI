@@ -92,6 +92,18 @@ app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50MB max upload
 
 CORS(app)
 
+# ── Feature Flags ──────────────────────────────────────────
+# Set ENABLE_EXTRA_FEATURES to True to re-enable AI chat, file vault,
+# comparison mode, and the secret admin chat button.
+ENABLE_EXTRA_FEATURES = False
+
+FEATURE_FLAGS = {
+    "show_ai":          ENABLE_EXTRA_FEATURES,
+    "show_files":       ENABLE_EXTRA_FEATURES,
+    "show_compare":     ENABLE_EXTRA_FEATURES,
+    "show_secret_chat": ENABLE_EXTRA_FEATURES,
+}
+
 # In-memory store for parsed data (keyed by session ID)
 # In production, use Redis or similar
 _parsed_store = {}
@@ -124,7 +136,14 @@ def login_required(f):
 @login_required
 def index():
     """Serve the main dashboard SPA."""
-    return render_template("index.html")
+    return render_template("index.html", feature_flags=FEATURE_FLAGS)
+
+
+@app.route("/api/config")
+@login_required
+def get_config():
+    """Expose feature flags to frontend JS."""
+    return jsonify(FEATURE_FLAGS)
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -347,27 +366,49 @@ def export_pdf():
     data = request.get_json(silent=True) or {}
     currency_symbol = data.get("currency_symbol", "USD")
     selected_files = data.get("selected_files", list(stored.keys()))
+    file_type = data.get("file_type")
+    sections_to_include = data.get("sections_to_include", [])
+    filters = data.get("filters", {})
 
-    # Use first file's metadata
     first_key = selected_files[0] if selected_files else list(stored.keys())[0]
     first_parsed = stored[first_key]["parsed"]
-    metadata = first_parsed["metadata"]
-    grand_totals = first_parsed["grand_totals"]
 
-    # Build sections summary
-    sections_summary = {}
+    if file_type == 'OPPORTUNITY_TRACKER' or first_parsed.get("file_type") == 'OPPORTUNITY_TRACKER':
+        try:
+            from pdf_export_opp import generate_opp_pdf_report
+            pdf_bytes = generate_opp_pdf_report(
+                parsed_data=first_parsed,
+                sections_to_include=sections_to_include,
+                filters=filters
+            )
+            cust_name = first_parsed.get("metadata", {}).get("customer", "Report").replace(" ", "_")
+            filename = f"Opportunity_Tracker_{cust_name}.pdf"
+            return send_file(
+                io.BytesIO(pdf_bytes),
+                mimetype="application/pdf",
+                as_attachment=True,
+                download_name=filename,
+            )
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({"error": f"Opp Tracker PDF generation failed: {str(e)}"}), 500
+
+    # Fallback to legacy SOA export
+    metadata = first_parsed.get("metadata", {})
+    grand_totals = first_parsed.get("grand_totals", {})
     all_items = first_parsed.get("all_items", [])
+    sections_summary = {}
 
-    # Convert all_items to DataFrame for PDF export
     if isinstance(all_items, list):
         filtered_df = pd.DataFrame(all_items)
     else:
         filtered_df = all_items
 
-    for sec_name, sec_data in first_parsed["sections"].items():
+    for sec_name, sec_data in first_parsed.get("sections", {}).items():
         sec_rows = sec_data.get("rows", [])
-        sec_charges = sum(r["Amount"] for r in sec_rows if r.get("Amount", 0) > 0)
-        sec_credits = sum(r["Amount"] for r in sec_rows if r.get("Amount", 0) < 0)
+        sec_charges = sum(r.get("Amount", 0) for r in sec_rows if r.get("Amount", 0) > 0)
+        sec_credits = sum(r.get("Amount", 0) for r in sec_rows if r.get("Amount", 0) < 0)
         sections_summary[sec_name] = {
             "total": sec_data.get("totals", {}).get("total", sec_charges + sec_credits),
             "charges": sec_charges,
@@ -379,6 +420,7 @@ def export_pdf():
     source_files = selected_files if len(selected_files) > 1 else None
 
     try:
+        from pdf_export import generate_pdf_report
         pdf_bytes = generate_pdf_report(
             metadata=metadata,
             grand_totals=grand_totals,
@@ -398,7 +440,7 @@ def export_pdf():
             download_name=filename,
         )
     except Exception as e:
-        return jsonify({"error": f"PDF generation failed: {str(e)}"}, 500)
+        return jsonify({"error": f"PDF generation failed: {str(e)}"}), 500
 
 
 # ─────────────────────────────────────────────────────────────

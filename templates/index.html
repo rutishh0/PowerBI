@@ -78,16 +78,22 @@
                     <button class="view-pill" data-view="presentation">
                         <i data-lucide="presentation"></i> Slides
                     </button>
+                    {% if feature_flags.show_compare %}
                     <button class="view-pill" data-view="comparison">
                         <i data-lucide="columns"></i> Compare
                     </button>
+                    {% endif %}
+                    {% if feature_flags.show_files %}
                     <button class="view-pill" data-view="files">
                         <i data-lucide="folder-lock"></i> Files
                     </button>
+                    {% endif %}
+                    {% if feature_flags.show_ai %}
                     <button class="view-pill" data-view="ai">
                         <i data-lucide="bot"></i> AI Assistant
                         <span class="badge-experimental">(Experimental)</span>
                     </button>
+                    {% endif %}
                 </div>
             </div>
 
@@ -479,10 +485,12 @@
 
     <!-- ═══════════════ SECRET CHAT ELEMENTS ═══════════════ -->
 
+    {% if feature_flags.show_secret_chat %}
     <!-- Secret Trigger Button -->
     <div id="secretButton" class="secret-button" title="Debug">
         <i data-lucide="alert-circle"></i>
     </div>
+    {% endif %}
 
     <!-- Password Modal -->
     <div id="passwordModal" class="secret-modal" style="display: none;">
@@ -561,6 +569,60 @@
         </div>
     </div>
 
+    <!-- ═══════════════ PDF EXPORT MODAL ═══════════════ -->
+    <div class="pdf-modal-overlay" id="pdfModalOverlay" style="display: none;">
+        <div class="pdf-modal">
+            <div class="pdf-modal-header">
+                <h3><i data-lucide="file-text"></i> Export PDF Report</h3>
+                <button class="pdf-modal-close" id="pdfModalClose">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <div class="pdf-modal-body">
+                <div class="pdf-section-group">
+                    <div class="pdf-section-group-title">Sections to Include</div>
+                    <div class="pdf-checkbox-list">
+                        <label class="pdf-checkbox-item">
+                            <input type="checkbox" id="pdfIncKPIs" checked>
+                            <span>KPIs &amp; Financial Summary</span>
+                        </label>
+                        <label class="pdf-checkbox-item">
+                            <input type="checkbox" id="pdfIncTopOpps" checked>
+                            <span>Top Opportunities</span>
+                        </label>
+                        <label class="pdf-checkbox-item">
+                            <input type="checkbox" id="pdfIncEstLevel" checked>
+                            <span>Estimation Level breakdown</span>
+                        </label>
+                        <label class="pdf-checkbox-item">
+                            <input type="checkbox" id="pdfIncTimeline" checked>
+                            <span>Project Timeline</span>
+                        </label>
+                        <label class="pdf-checkbox-item">
+                            <input type="checkbox" id="pdfIncOppsThreats" checked>
+                            <span>Opportunities &amp; Threats</span>
+                        </label>
+                        <label class="pdf-checkbox-item">
+                            <input type="checkbox" id="pdfIncProjSummary" checked>
+                            <span>Project Summary</span>
+                        </label>
+                        <label class="pdf-checkbox-item">
+                            <input type="checkbox" id="pdfIncCustomer" checked>
+                            <span>Customer Breakdown (Charts)</span>
+                        </label>
+                    </div>
+                </div>
+                <!-- Future enhancement: format options ( millions vs full value ) -->
+            </div>
+            <div class="pdf-modal-footer">
+                <button class="pdf-btn-cancel" id="pdfModalCancel">Cancel</button>
+                <button class="pdf-btn-generate" id="pdfModalGenerate">
+                    <i data-lucide="download"></i> Generate PDF
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- ═══════════════ SCRIPTS ═══════════════ -->
     <!-- GSAP + ScrollTrigger -->
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
@@ -572,11 +634,22 @@
     <!-- Dashboard JS -->
     <script src="/static/js/charts.js"></script>
     <script src="/static/js/components.js"></script>
+    {% if feature_flags.show_ai %}
     <script src="/static/js/ai-chat.js"></script>
+    {% endif %}
+    {% if feature_flags.show_secret_chat %}
     <script src="/static/js/secret-chat.js"></script>
+    {% endif %}
+    {% if feature_flags.show_files %}
     <script src="/static/js/files.js"></script>
+    {% endif %}
     <script src="/static/js/visualizer.js"></script>
     <script src="/static/js/app.js"></script>
+
+    <script>
+        // Feature flags for JS access
+        window.__FEATURE_FLAGS = {{ feature_flags | tojson }};
+    </script>
 
 </body>
 

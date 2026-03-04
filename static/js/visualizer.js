@@ -239,6 +239,185 @@ window.RRVisualizer = (() => {
     }
 
     // ═══════════════════════════════════════════════════
+    // GLOBAL FILTER BAR (used at top of each visualizer)
+    // ═══════════════════════════════════════════════════
+
+    /**
+     * Build a global filter bar for filtering all data in a renderer.
+     * @param {Object} filterConfig - { fields: [{key, label, values}], onFilter: callback }
+     * @returns {string} HTML string for the filter bar
+     */
+    function _globalFilterBar(filterConfig) {
+        const barId = `gfb-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        let html = `<div class="opp-global-filter-bar" id="${barId}">`;
+        html += '<div class="opp-gfb-left"><i data-lucide="sliders-horizontal" style="width:16px;height:16px;color:var(--opp-accent-blue,#4361EE)"></i><span class="opp-gfb-title">Filters</span></div>';
+        html += '<div class="opp-gfb-fields">';
+        filterConfig.fields.forEach(f => {
+            if (f.type === 'threshold') {
+                html += `<div class="opp-gfb-group">
+                    <label class="opp-gfb-label">${f.label}</label>
+                    <input type="number" class="opp-gfb-input" data-filter-key="${f.key}" placeholder="${f.placeholder || '0'}" step="any" />
+                </div>`;
+            } else {
+                html += `<div class="opp-gfb-group">
+                    <label class="opp-gfb-label">${f.label}</label>
+                    <select class="opp-gfb-select" data-filter-key="${f.key}" ${f.multiple ? 'multiple' : ''}>
+                        <option value="">All</option>
+                        ${(f.values || []).map(v => `<option value="${String(v).replace(/"/g, '&quot;')}">${_truncate(String(v), 30)}</option>`).join('')}
+                    </select>
+                </div>`;
+                // Cascade container for projects
+                if (f.cascade) {
+                    html += `<div class="opp-gfb-group opp-gfb-cascade" data-cascade-parent="${f.key}" data-cascade-key="${f.cascade.key}" style="display:none">
+                        <label class="opp-gfb-label">${f.cascade.label}</label>
+                        <select class="opp-gfb-select" data-filter-key="${f.cascade.key}">
+                            <option value="">All</option>
+                        </select>
+                    </div>`;
+                }
+            }
+        });
+        html += '</div>';
+        html += `<button class="opp-gfb-reset" data-bar-id="${barId}"><i data-lucide="rotate-ccw" style="width:14px;height:14px"></i> Reset</button>`;
+        html += '</div>';
+        return { html, barId };
+    }
+
+    /**
+     * Wire up filter bar event listeners. Call after DOM insertion.
+     * @param {string} barId - The filter bar container ID
+     * @param {Object} cascadeData - { parentKey: { parentValue: [childValues] } }
+     * @param {Function} onFilter - Called with the current filter state object
+     */
+    function _wireGlobalFilterBar(barId, cascadeData, onFilter) {
+        const bar = $(barId);
+        if (!bar) return;
+
+        const getFilters = () => {
+            const filters = {};
+            bar.querySelectorAll('.opp-gfb-select, .opp-gfb-input').forEach(el => {
+                const key = el.dataset.filterKey;
+                if (el.tagName === 'INPUT') {
+                    const val = parseFloat(el.value);
+                    if (!isNaN(val)) filters[key] = val;
+                } else {
+                    const val = el.value;
+                    if (val) filters[key] = val;
+                }
+            });
+            return filters;
+        };
+
+        // Change handler
+        bar.querySelectorAll('.opp-gfb-select, .opp-gfb-input').forEach(el => {
+            el.addEventListener('change', () => {
+                // Handle cascading
+                const key = el.dataset.filterKey;
+                if (cascadeData && cascadeData[key]) {
+                    const cascadeEl = bar.querySelector(`[data-cascade-parent="${key}"]`);
+                    if (cascadeEl) {
+                        const selectedVal = el.value;
+                        const childSelect = cascadeEl.querySelector('select');
+                        if (selectedVal && cascadeData[key][selectedVal]) {
+                            const childValues = cascadeData[key][selectedVal];
+                            childSelect.innerHTML = '<option value="">All</option>' +
+                                childValues.map(v => `<option value="${String(v).replace(/"/g, '&quot;')}">${_truncate(String(v), 30)}</option>`).join('');
+                            cascadeEl.style.display = '';
+                        } else {
+                            childSelect.innerHTML = '<option value="">All</option>';
+                            cascadeEl.style.display = 'none';
+                        }
+                    }
+                }
+                onFilter(getFilters());
+            });
+            // Also trigger on keyup for number inputs (debounced)
+            if (el.tagName === 'INPUT') {
+                let debounce = null;
+                el.addEventListener('input', () => {
+                    clearTimeout(debounce);
+                    debounce = setTimeout(() => onFilter(getFilters()), 400);
+                });
+            }
+        });
+
+        // Reset
+        bar.querySelector('.opp-gfb-reset')?.addEventListener('click', () => {
+            bar.querySelectorAll('.opp-gfb-select').forEach(s => { s.value = ''; });
+            bar.querySelectorAll('.opp-gfb-input').forEach(i => { i.value = ''; });
+            bar.querySelectorAll('.opp-gfb-cascade').forEach(c => { c.style.display = 'none'; });
+            onFilter({});
+        });
+    }
+
+    /**
+     * Build a data table with inline filter dropdowns above it.
+     * @param {string[]} headers - Table column headers
+     * @param {Array[]} allRows - Full rows array (not yet filtered)
+     * @param {Object[]} filterFields - [{col: colIndex, label: 'Customer'}]
+     * @param {Object} opts - Options passed to _dataTable
+     * @returns {{ html: string, containerId: string }}
+     */
+    function _filterableDataTable(headers, allRows, filterFields, opts = {}) {
+        const cid = `fdt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+        // Extract unique values for each filter column
+        const filterMeta = filterFields.map(f => {
+            const vals = [...new Set(allRows.map(r => r[f.col]).filter(v => v != null && v !== ''))].sort();
+            return { ...f, values: vals };
+        });
+
+        let html = `<div class="opp-table-filter-bar" id="${cid}">`;
+        filterMeta.forEach(fm => {
+            html += `<div class="opp-tbl-filter-group">
+                <label>${fm.label}</label>
+                <select data-filter-col="${fm.col}">
+                    <option value="">All</option>
+                    ${fm.values.map(v => `<option value="${String(v).replace(/"/g, '&quot;')}">${_truncate(String(v), 28)}</option>`).join('')}
+                </select>
+            </div>`;
+        });
+        html += '</div>';
+        html += `<div id="${cid}-table">${_dataTable(headers, allRows, opts)}</div>`;
+        return { html, containerId: cid };
+    }
+
+    /**
+     * Wire up a filterable data table. Call after DOM insertion.
+     */
+    function _wireFilterableDataTable(containerId, headers, allRows, opts, onCountChange) {
+        const bar = $(containerId);
+        if (!bar) return;
+        const tableDiv = $(`${containerId}-table`);
+        if (!tableDiv) return;
+
+        const applyFilters = () => {
+            const activeFilters = {};
+            bar.querySelectorAll('select[data-filter-col]').forEach(sel => {
+                const col = parseInt(sel.dataset.filterCol);
+                const val = sel.value;
+                if (val) activeFilters[col] = val;
+            });
+
+            let filtered = allRows;
+            Object.entries(activeFilters).forEach(([col, val]) => {
+                const ci = parseInt(col);
+                filtered = filtered.filter(row => String(row[ci]) === val);
+            });
+
+            tableDiv.innerHTML = _dataTable(headers, filtered, opts);
+            _makeTablesSortable(tableDiv);
+
+            // Update collapse count if callback provided
+            if (onCountChange) onCountChange(filtered.length);
+        };
+
+        bar.querySelectorAll('select').forEach(sel => {
+            sel.addEventListener('change', applyFilters);
+        });
+    }
+
+    // ═══════════════════════════════════════════════════
     // SOA RENDERER
     // ═══════════════════════════════════════════════════
 
@@ -247,85 +426,112 @@ window.RRVisualizer = (() => {
         const sections = data.sections || [];
         const grand = data.grand_totals || {};
         const aging = data.aging_buckets || {};
-        const summarySheet = data.summary_sheet || {};
 
-        let allItems = [];
+        let masterItems = [];
         sections.forEach(sec => {
-            (sec.items || []).forEach(item => {
-                allItems.push({ ...item, _section: sec.name });
+            (sec.items || []).forEach(item => { masterItems.push({ ...item, _section: sec.name }); });
+        });
+
+        // Unique values for filters
+        const uniqueSections = [...new Set(masterItems.map(i => i._section).filter(Boolean))].sort();
+        const uniqueCurrencies = [...new Set(masterItems.map(i => i.currency).filter(Boolean))].sort();
+
+        // Global filter bar (light theme)
+        const { html: filterBarHtml, barId: filterBarId } = _globalFilterBar({
+            fields: [
+                { key: 'section', label: 'Section', values: uniqueSections },
+                { key: 'currency', label: 'Currency', values: uniqueCurrencies },
+                { key: 'min_amount', label: 'Min Amount', type: 'threshold', placeholder: '0' },
+            ],
+        });
+
+        const contentId = `soa-content-${Date.now()}`;
+        el.innerHTML = `${filterBarHtml}<div id="${contentId}"></div>`;
+
+        // Add light theme class to bar
+        const barEl = document.getElementById(filterBarId);
+        if (barEl) barEl.classList.add('gfb-light');
+
+        const renderContent = (filteredItems) => {
+            const contentEl = $(contentId);
+            if (!contentEl) return;
+
+            const totalCharges = filteredItems.filter(i => (i.amount || 0) > 0).reduce((s, i) => s + i.amount, 0);
+            const totalCredits = filteredItems.filter(i => (i.amount || 0) < 0).reduce((s, i) => s + i.amount, 0);
+            const netBalance = totalCharges + totalCredits;
+            const totalOverdue = filteredItems.filter(i => (i.days_late || 0) > 0).reduce((s, i) => s + (i.amount || 0), 0);
+
+            let html = '';
+            html += _sectionHeader(meta.title || 'Statement of Account', 'file-text', { badge: 'SOA', badgeColor: COLORS.navy });
+
+            html += '<div class="viz-customer-bar">';
+            if (meta.customer_name) html += `<div class="viz-info-chip"><b>Customer:</b> ${meta.customer_name}</div>`;
+            if (meta.customer_number) html += `<div class="viz-info-chip"><b>Customer No:</b> ${meta.customer_number}</div>`;
+            if (meta.contact_email) html += `<div class="viz-info-chip"><b>Email:</b> ${meta.contact_email}</div>`;
+            if (meta.lpi_rate) html += `<div class="viz-info-chip"><b>LPI Rate:</b> ${meta.lpi_rate}%</div>`;
+            if (meta.report_date) html += `<div class="viz-info-chip"><b>Report Date:</b> ${meta.report_date}</div>`;
+            if (meta.avg_days_late) html += `<div class="viz-info-chip"><b>Avg Days Late:</b> ${meta.avg_days_late}</div>`;
+            html += '</div>';
+
+            html += '<div class="viz-kpi-grid viz-kpi-grid-5">';
+            html += _kpiCard('Net Balance', _fmtCurrency(netBalance), { icon: 'wallet', colorClass: netBalance >= 0 ? 'kpi-danger' : 'kpi-success' });
+            html += _kpiCard('Total Charges', _fmtCurrency(totalCharges), { icon: 'trending-up', colorClass: 'kpi-danger' });
+            html += _kpiCard('Total Credits', _fmtCurrency(totalCredits), { icon: 'trending-down', colorClass: 'kpi-success' });
+            html += _kpiCard('Total Overdue', _fmtCurrency(totalOverdue), { icon: 'alert-triangle', colorClass: 'kpi-warning' });
+            html += _kpiCard('Line Items', _fmtNumber(filteredItems.length), { icon: 'list' });
+            html += '</div>';
+
+            const donutId = `soa-donut-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+            const agingId = `soa-aging-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+            const ccId = `soa-cc-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+            html += `<div class="viz-chart-grid viz-chart-grid-3">
+                <div class="viz-chart-card"><div class="viz-chart-header">Section Breakdown</div><div id="${donutId}" class="viz-chart-body"></div></div>
+                <div class="viz-chart-card"><div class="viz-chart-header">Charges vs Credits</div><div id="${ccId}" class="viz-chart-body"></div></div>
+                <div class="viz-chart-card"><div class="viz-chart-header">Aging Analysis</div><div id="${agingId}" class="viz-chart-body"></div></div>
+            </div>`;
+
+            html += _sectionHeader('Section Details', 'layers');
+            // Build filtered sections
+            const filteredSections = {};
+            filteredItems.forEach(i => {
+                if (!filteredSections[i._section]) filteredSections[i._section] = [];
+                filteredSections[i._section].push(i);
             });
-        });
-
-        const totalCharges = allItems.filter(i => (i.amount || 0) > 0).reduce((s, i) => s + i.amount, 0);
-        const totalCredits = allItems.filter(i => (i.amount || 0) < 0).reduce((s, i) => s + i.amount, 0);
-        const netBalance = grand.net_balance || (totalCharges + totalCredits);
-        const totalOverdue = grand.total_overdue || 0;
-
-        let html = '';
-
-        // Title
-        html += _sectionHeader(meta.title || 'Statement of Account', 'file-text', {
-            badge: 'SOA', badgeColor: COLORS.navy
-        });
-
-        // Customer info
-        html += '<div class="viz-customer-bar">';
-        if (meta.customer_name) html += `<div class="viz-info-chip"><b>Customer:</b> ${meta.customer_name}</div>`;
-        if (meta.customer_number) html += `<div class="viz-info-chip"><b>Customer No:</b> ${meta.customer_number}</div>`;
-        if (meta.contact_email) html += `<div class="viz-info-chip"><b>Email:</b> ${meta.contact_email}</div>`;
-        if (meta.lpi_rate) html += `<div class="viz-info-chip"><b>LPI Rate:</b> ${meta.lpi_rate}%</div>`;
-        if (meta.report_date) html += `<div class="viz-info-chip"><b>Report Date:</b> ${meta.report_date}</div>`;
-        if (meta.avg_days_late) html += `<div class="viz-info-chip"><b>Avg Days Late:</b> ${meta.avg_days_late}</div>`;
-        html += '</div>';
-
-        // KPIs
-        html += '<div class="viz-kpi-grid viz-kpi-grid-5">';
-        html += _kpiCard('Net Balance', _fmtCurrency(netBalance), { icon: 'wallet', colorClass: netBalance >= 0 ? 'kpi-danger' : 'kpi-success' });
-        html += _kpiCard('Total Charges', _fmtCurrency(totalCharges), { icon: 'trending-up', colorClass: 'kpi-danger' });
-        html += _kpiCard('Total Credits', _fmtCurrency(totalCredits), { icon: 'trending-down', colorClass: 'kpi-success' });
-        html += _kpiCard('Total Overdue', _fmtCurrency(totalOverdue), { icon: 'alert-triangle', colorClass: 'kpi-warning' });
-        html += _kpiCard('Line Items', _fmtNumber(allItems.length), { icon: 'list' });
-        html += '</div>';
-
-        // Charts row
-        const donutId = `soa-donut-${Date.now()}`;
-        const agingId = `soa-aging-${Date.now()}`;
-        const ccId = `soa-cc-${Date.now()}`;
-        html += `<div class="viz-chart-grid viz-chart-grid-3">
-            <div class="viz-chart-card"><div class="viz-chart-header">Section Breakdown</div><div id="${donutId}" class="viz-chart-body"></div></div>
-            <div class="viz-chart-card"><div class="viz-chart-header">Charges vs Credits</div><div id="${ccId}" class="viz-chart-body"></div></div>
-            <div class="viz-chart-card"><div class="viz-chart-header">Aging Analysis</div><div id="${agingId}" class="viz-chart-body"></div></div>
-        </div>`;
-
-        // Section breakdown table
-        html += _sectionHeader('Section Details', 'layers');
-        sections.forEach(sec => {
-            const secItems = sec.items || [];
-            const secTotal = sec.total != null ? sec.total : secItems.reduce((s, i) => s + (i.amount || 0), 0);
-            html += `<div class="viz-subsection">
-                <div class="viz-subsection-header">
-                    <span class="viz-subsection-name">${sec.name}</span>
+            Object.entries(filteredSections).forEach(([secName, secItems]) => {
+                const secTotal = secItems.reduce((s, i) => s + (i.amount || 0), 0);
+                html += `<div class="viz-subsection"><div class="viz-subsection-header">
+                    <span class="viz-subsection-name">${secName}</span>
                     <span class="viz-subsection-total">${_fmtCurrency(secTotal)}</span>
                     <span class="viz-subsection-count">${secItems.length} items</span>
-                </div>
-            </div>`;
+                </div></div>`;
+            });
+
+            html += _sectionHeader('Invoice Register', 'table');
+            const headers = ['Reference', 'Doc Date', 'Due Date', 'Amount', 'Currency', 'Section', 'Text', 'Days Late'];
+            const rows = filteredItems.map(i => [i.reference, i.doc_date, i.due_date, i.amount, i.currency, i._section, _truncate(i.text, 40), i.days_late]);
+            const fdt = _filterableDataTable(headers, rows,
+                [{ col: 4, label: 'Currency' }, { col: 5, label: 'Section' }], { maxRows: 100 });
+            html += fdt.html;
+
+            contentEl.innerHTML = html;
+            if (window.lucide) window.lucide.createIcons();
+
+            // Wire filterable table
+            _wireFilterableDataTable(fdt.containerId, headers, rows, { maxRows: 100 });
+            _makeTablesSortable(contentEl);
+
+            setTimeout(() => { _renderSOACharts(donutId, ccId, agingId, sections, filteredItems, aging); }, 100);
+        };
+
+        renderContent(masterItems);
+
+        _wireGlobalFilterBar(filterBarId, null, (filters) => {
+            let filtered = masterItems;
+            if (filters.section) filtered = filtered.filter(i => i._section === filters.section);
+            if (filters.currency) filtered = filtered.filter(i => i.currency === filters.currency);
+            if (filters.min_amount != null) filtered = filtered.filter(i => Math.abs(i.amount || 0) >= filters.min_amount);
+            renderContent(filtered);
         });
-
-        // Invoice register
-        html += _sectionHeader('Invoice Register', 'table');
-        const headers = ['Reference', 'Doc Date', 'Due Date', 'Amount', 'Currency', 'Section', 'Text', 'Days Late'];
-        const rows = allItems.map(i => [
-            i.reference, i.doc_date, i.due_date, i.amount, i.currency, i._section,
-            _truncate(i.text, 40), i.days_late
-        ]);
-        html += _dataTable(headers, rows, { maxRows: 100 });
-
-        el.innerHTML = html;
-
-        // Render charts after DOM is ready
-        setTimeout(() => {
-            _renderSOACharts(donutId, ccId, agingId, sections, allItems, aging);
-        }, 100);
     }
 
     function _renderSOACharts(donutId, ccId, agingId, sections, items, agingBuckets) {
@@ -395,49 +601,74 @@ window.RRVisualizer = (() => {
 
     function _renderInvoiceList(el, data, fname) {
         const meta = data.metadata || {};
-        const items = data.items || [];
+        const masterItems = data.items || [];
         const totals = data.totals || {};
 
-        let html = '';
-        html += _sectionHeader('Invoice List — Open Items Register', 'receipt', {
-            badge: 'EPI', badgeColor: COLORS.blue2
+        const uniqueCurrencies = [...new Set(masterItems.map(i => i.currency).filter(Boolean))].sort();
+
+        const { html: filterBarHtml, barId: filterBarId } = _globalFilterBar({
+            fields: [
+                { key: 'currency', label: 'Currency', values: uniqueCurrencies },
+                { key: 'min_amount', label: 'Min Amount', type: 'threshold', placeholder: '0' },
+            ],
         });
 
-        // Customer bar
-        html += '<div class="viz-customer-bar">';
-        html += `<div class="viz-info-chip"><b>Source:</b> ${_safe(meta.source_file)}</div>`;
-        html += `<div class="viz-info-chip"><b>Total Items:</b> ${meta.total_items || items.length}</div>`;
-        if (meta.currencies && meta.currencies.length) html += `<div class="viz-info-chip"><b>Currencies:</b> ${meta.currencies.join(', ')}</div>`;
-        html += '</div>';
+        const contentId = `inv-content-${Date.now()}`;
+        el.innerHTML = `${filterBarHtml}<div id="${contentId}"></div>`;
+        const barEl = document.getElementById(filterBarId);
+        if (barEl) barEl.classList.add('gfb-light');
 
-        // KPIs
-        html += '<div class="viz-kpi-grid viz-kpi-grid-4">';
-        html += _kpiCard('Total Amount', _fmtCurrency(totals.total_amount), { icon: 'wallet' });
-        html += _kpiCard('Receivables', _fmtCurrency(totals.total_positive), { icon: 'trending-up', colorClass: 'kpi-danger' });
-        html += _kpiCard('Credits', _fmtCurrency(totals.total_negative), { icon: 'trending-down', colorClass: 'kpi-success' });
-        html += _kpiCard('Line Items', _fmtNumber(totals.item_count || items.length), { icon: 'hash' });
-        html += '</div>';
+        const renderContent = (filteredItems) => {
+            const contentEl = $(contentId);
+            if (!contentEl) return;
 
-        // Charts
-        const timelineId = `inv-timeline-${Date.now()}`;
-        const distId = `inv-dist-${Date.now()}`;
-        html += `<div class="viz-chart-grid viz-chart-grid-2">
-            <div class="viz-chart-card"><div class="viz-chart-header">Amount by Due Date</div><div id="${timelineId}" class="viz-chart-body"></div></div>
-            <div class="viz-chart-card"><div class="viz-chart-header">Amount Distribution</div><div id="${distId}" class="viz-chart-body"></div></div>
-        </div>`;
+            const totalAmt = filteredItems.reduce((s, i) => s + (i.amount || 0), 0);
+            const totalPos = filteredItems.filter(i => (i.amount || 0) > 0).reduce((s, i) => s + i.amount, 0);
+            const totalNeg = filteredItems.filter(i => (i.amount || 0) < 0).reduce((s, i) => s + i.amount, 0);
 
-        // Register table
-        html += _sectionHeader('Invoice Register', 'table');
-        const headers = ['Reference', 'Doc Date', 'Due Date', 'Amount', 'Currency', 'Text', 'Assignment'];
-        const rows = items.map(i => [i.reference, i.doc_date, i.due_date, i.amount, i.currency, _truncate(i.text, 35), i.assignment]);
-        html += _dataTable(headers, rows, { maxRows: 150 });
+            let html = '';
+            html += _sectionHeader('Invoice List — Open Items Register', 'receipt', { badge: 'EPI', badgeColor: COLORS.blue2 });
+            html += '<div class="viz-customer-bar">';
+            html += `<div class="viz-info-chip"><b>Source:</b> ${_safe(meta.source_file)}</div>`;
+            html += `<div class="viz-info-chip"><b>Total Items:</b> ${filteredItems.length}</div>`;
+            if (meta.currencies && meta.currencies.length) html += `<div class="viz-info-chip"><b>Currencies:</b> ${meta.currencies.join(', ')}</div>`;
+            html += '</div>';
 
-        el.innerHTML = html;
+            html += '<div class="viz-kpi-grid viz-kpi-grid-4">';
+            html += _kpiCard('Total Amount', _fmtCurrency(totalAmt), { icon: 'wallet' });
+            html += _kpiCard('Receivables', _fmtCurrency(totalPos), { icon: 'trending-up', colorClass: 'kpi-danger' });
+            html += _kpiCard('Credits', _fmtCurrency(totalNeg), { icon: 'trending-down', colorClass: 'kpi-success' });
+            html += _kpiCard('Line Items', _fmtNumber(filteredItems.length), { icon: 'hash' });
+            html += '</div>';
 
-        // Charts
-        setTimeout(() => {
-            _renderInvoiceCharts(timelineId, distId, items);
-        }, 50);
+            const timelineId = `inv-timeline-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+            const distId = `inv-dist-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+            html += `<div class="viz-chart-grid viz-chart-grid-2">
+                <div class="viz-chart-card"><div class="viz-chart-header">Amount by Due Date</div><div id="${timelineId}" class="viz-chart-body"></div></div>
+                <div class="viz-chart-card"><div class="viz-chart-header">Amount Distribution</div><div id="${distId}" class="viz-chart-body"></div></div>
+            </div>`;
+
+            html += _sectionHeader('Invoice Register', 'table');
+            const headers = ['Reference', 'Doc Date', 'Due Date', 'Amount', 'Currency', 'Text', 'Assignment'];
+            const rows = filteredItems.map(i => [i.reference, i.doc_date, i.due_date, i.amount, i.currency, _truncate(i.text, 35), i.assignment]);
+            const fdt = _filterableDataTable(headers, rows,
+                [{ col: 4, label: 'Currency' }], { maxRows: 150 });
+            html += fdt.html;
+
+            contentEl.innerHTML = html;
+            if (window.lucide) window.lucide.createIcons();
+            _wireFilterableDataTable(fdt.containerId, headers, rows, { maxRows: 150 });
+            _makeTablesSortable(contentEl);
+            setTimeout(() => { _renderInvoiceCharts(timelineId, distId, filteredItems); }, 50);
+        };
+
+        renderContent(masterItems);
+        _wireGlobalFilterBar(filterBarId, null, (filters) => {
+            let filtered = masterItems;
+            if (filters.currency) filtered = filtered.filter(i => i.currency === filters.currency);
+            if (filters.min_amount != null) filtered = filtered.filter(i => Math.abs(i.amount || 0) >= filters.min_amount);
+            renderContent(filtered);
+        });
     }
 
     function _renderInvoiceCharts(timelineId, distId, items) {
@@ -482,1054 +713,1150 @@ window.RRVisualizer = (() => {
     // ═══════════════════════════════════════════════════
 
     function _renderOpportunityTracker(el, data, fname) {
-        const meta = data.metadata || {};
-        const summary = data.summary || {};
-        const opportunities = data.opportunities || {};
-        const projectSummary = data.project_summary || {};
-        const timeline = data.timeline || {};
-        const customerAnalytics = data.customer_analytics || {};
-        const cover = data.cover || {};
-        const oppsAndThreats = data.opps_and_threats || {};
+            const meta = data.metadata || {};
+            const summary = data.summary || {};
+            const opportunities = data.opportunities || {};
+            const projectSummary = data.project_summary || {};
+            const timeline = data.timeline || {};
+            const customerAnalytics = data.customer_analytics || {};
+            const cover = data.cover || {};
+            const oppsAndThreats = data.opps_and_threats || {};
 
-        // Flatten all opportunity records
-        let allRecords = [];
-        Object.entries(opportunities).forEach(([sheet, recs]) => {
-            if (Array.isArray(recs)) recs.forEach(r => { allRecords.push({ ...r, _sheet: sheet }); });
-        });
-
-        // ─── Compute Aggregations client-side ───
-        const _val = (v) => (typeof v === 'number' && isFinite(v)) ? v : 0;
-        const _sumField = (arr, field) => arr.reduce((s, r) => s + _val(r[field]), 0);
-
-        const totalOpps = allRecords.length;
-        const total2026 = _sumField(allRecords, 'benefit_2026');
-        const total2027 = _sumField(allRecords, 'benefit_2027');
-        const totalSum2627 = _sumField(allRecords, 'sum_26_27');
-        const totalTerm = _sumField(allRecords, 'term_benefit');
-
-        const byStatus = summary.by_status || {};
-        const byProgramme = summary.by_programme || {};
-        const byCustomer = summary.by_customer || {};
-        const byOppType = summary.by_opportunity_type || {};
-        const estLevels = summary.estimation_level_sums || {};
-
-        const activeOpps = totalOpps - (byStatus['Cancelled'] || 0);
-        const completedOpps = byStatus['Completed'] || 0;
-
-        // Aggregate value by opp type × ext probability (for stacked bar)
-        const probLevels = ['High', 'Med', 'Low'];
-        const probColors = { 'High': '#10069F', 'Med': '#1565C0', 'Low': '#00838F' };
-        const oppTypes = [...new Set(allRecords.map(r => r.opportunity_type).filter(Boolean))];
-        const statusList = ['Hopper', 'ICT', 'Negotiations', 'Contracting', 'Completed', 'Cancelled'];
-
-        // Value by Type × Probability
-        const valueByTypeProbObj = {};
-        oppTypes.forEach(t => { valueByTypeProbObj[t] = { High: 0, Med: 0, Low: 0 }; });
-        allRecords.forEach(r => {
-            const t = r.opportunity_type;
-            const p = r.ext_probability;
-            if (t && p && valueByTypeProbObj[t]) valueByTypeProbObj[t][p] += _val(r.sum_26_27);
-        });
-
-        // Value by Status × Probability
-        const valueByStatusProbObj = {};
-        statusList.forEach(s => { valueByStatusProbObj[s] = { High: 0, Med: 0, Low: 0 }; });
-        allRecords.forEach(r => {
-            const s = r.status;
-            const p = r.ext_probability;
-            if (s && p && valueByStatusProbObj[s]) valueByStatusProbObj[s][p] += _val(r.sum_26_27);
-        });
-
-        // Value by Customer (top 10 by sum_26_27)
-        const custValues = {};
-        allRecords.forEach(r => {
-            const c = r.customer;
-            if (c) custValues[c] = (custValues[c] || 0) + _val(r.sum_26_27);
-        });
-        const custTop10 = Object.entries(custValues).sort((a, b) => b[1] - a[1]).slice(0, 15);
-
-        // By priority
-        const byPriority = {};
-        allRecords.forEach(r => {
-            const p = String(r.priority || '?').replace('.0', '');
-            if (!byPriority[p]) byPriority[p] = { count: 0, term: 0, sum_26_27: 0 };
-            byPriority[p].count += 1;
-            byPriority[p].term += _val(r.term_benefit);
-            byPriority[p].sum_26_27 += _val(r.sum_26_27);
-        });
-
-        // Dollar formatter ($M)
-        const $m = (v) => {
-            if (v == null || isNaN(v)) return '—';
-            return `$${Math.abs(v).toFixed(1)}m`;
-        };
-
-        let html = '';
-
-        // Wrap everything in dark-themed scoped container
-        html += '<div class="opp-tracker-dashboard">';
-
-        // ═══════════════════════════════════════════
-        // TITLE BANNER
-        // ═══════════════════════════════════════════
-        html += `<div class="viz-opp-banner">
-            <div class="viz-opp-banner-inner">
-                <div class="viz-opp-banner-title">
-                    <i data-lucide="target"></i>
-                    <span>${cover.title || 'MEA Commercial Optimisation Report'}</span>
-                </div>
-                <div style="display:flex;align-items:center;gap:16px">
-                    <div class="viz-opp-banner-badge">OPP TRACKER</div>
-                    <div class="viz-opp-banner-rr">ROLLS‑ROYCE</div>
-                </div>
-            </div>
-        </div>`;
-
-        // ═══════════════════════════════════════════
-        // FINANCIAL HERO KPIs
-        // ═══════════════════════════════════════════
-        html += `<div class="viz-opp-hero">
-            <div class="viz-opp-hero-card">
-                <div class="viz-opp-hero-label">2026</div>
-                <div class="viz-opp-hero-value">${$m(total2026)}</div>
-            </div>
-            <div class="viz-opp-hero-card">
-                <div class="viz-opp-hero-label">2027</div>
-                <div class="viz-opp-hero-value">${$m(total2027)}</div>
-            </div>
-            <div class="viz-opp-hero-card viz-opp-hero-accent">
-                <div class="viz-opp-hero-label">2026 + 2027</div>
-                <div class="viz-opp-hero-value">${$m(totalSum2627)}</div>
-            </div>
-            <div class="viz-opp-hero-card viz-opp-hero-primary">
-                <div class="viz-opp-hero-label">Term Impact</div>
-                <div class="viz-opp-hero-value">${$m(totalTerm)}</div>
-            </div>
-        </div>`;
-
-        // Meta bar
-        html += '<div class="viz-customer-bar">';
-        if (meta.away_day_date) html += `<div class="viz-info-chip"><b>Away Day:</b> ${meta.away_day_date}</div>`;
-        if (meta.sheets_parsed) html += `<div class="viz-info-chip"><b>Sheets:</b> ${meta.sheets_parsed.join(', ')}</div>`;
-        html += `<div class="viz-info-chip"><b>Opportunities:</b> ${totalOpps} (${activeOpps} active)</div>`;
-        html += `<div class="viz-info-chip"><b>Customers:</b> ${Object.keys(byCustomer).length}</div>`;
-        html += `<div class="viz-info-chip"><b>Programmes:</b> ${Object.keys(byProgramme).length}</div>`;
-        html += '</div>';
-
-        // ═══════════════════════════════════════════
-        // PRIORITY BREAKDOWN
-        // ═══════════════════════════════════════════
-        const priorityKeys = Object.keys(byPriority).sort();
-        if (priorityKeys.length > 0) {
-            html += `<div class="viz-kpi-grid viz-kpi-grid-${Math.min(priorityKeys.length + 2, 5)}">`;
-            priorityKeys.forEach(p => {
-                const d = byPriority[p];
-                html += _kpiCard(`Priority ${p}`, $m(d.sum_26_27), {
-                    icon: p === '1' ? 'star' : p === '2' ? 'circle' : 'minus',
-                    colorClass: p === '1' ? 'kpi-success' : '',
-                    subtitle: `${d.count} opps · Term: ${$m(d.term)}`
-                });
+            // Flatten all opportunity records
+            let masterRecords = [];
+            Object.entries(opportunities).forEach(([sheet, recs]) => {
+                if (Array.isArray(recs)) recs.forEach(r => { masterRecords.push({ ...r, _sheet: sheet }); });
             });
-            // Add overall completed & pipeline KPIs
-            html += _kpiCard('Completed', _fmtNumber(completedOpps), {
-                icon: 'check-circle', colorClass: 'kpi-success',
-                subtitle: `${((completedOpps / totalOpps) * 100).toFixed(0)}% of total`
+
+            // Build cascade data: customer → projects
+            const custProjects = {};
+            masterRecords.forEach(r => {
+                const c = r.customer, p = r.project;
+                if (c && p) {
+                    if (!custProjects[c]) custProjects[c] = new Set();
+                    custProjects[c].add(p);
+                }
             });
-            html += _kpiCard('Pipeline', _fmtNumber(activeOpps - completedOpps), {
-                icon: 'git-branch', colorClass: 'kpi-warning',
-                subtitle: `${(byStatus['ICT'] || 0)} ICT · ${(byStatus['Negotiations'] || 0)} Neg · ${(byStatus['Contracting'] || 0)} Ctr`
+            const cascadeData = { customer: {} };
+            Object.entries(custProjects).forEach(([c, pSet]) => {
+                cascadeData.customer[c] = [...pSet].sort();
             });
-            html += '</div>';
-        }
 
-        // ═══════════════════════════════════════════
-        // CHARTS ROW 1: Value by Type+Prob | Value by Status+Prob
-        // ═══════════════════════════════════════════
-        const typeChartId = `opp-type-val-${Date.now()}`;
-        const statusChartId = `opp-status-val-${Date.now()}`;
-        html += `<div class="viz-chart-grid viz-chart-grid-2">
-            <div class="viz-chart-card"><div class="viz-chart-header">Sum of Value by Type of Opportunity & External Probability</div><div id="${typeChartId}" class="viz-chart-body"></div></div>
-            <div class="viz-chart-card"><div class="viz-chart-header">Sum of Value by Status & External Probability</div><div id="${statusChartId}" class="viz-chart-body"></div></div>
-        </div>`;
+            // Unique values for filter dropdowns
+            const uniqueCustomers = [...new Set(masterRecords.map(r => r.customer).filter(Boolean))].sort();
+            const uniqueStatuses = [...new Set(masterRecords.map(r => r.status).filter(Boolean))].sort();
+            const uniqueProbs = [...new Set(masterRecords.map(r => r.ext_probability).filter(Boolean))].sort();
+            const uniquePriorities = [...new Set(masterRecords.map(r => String(r.priority || '').replace('.0', '')).filter(v => v && v !== 'undefined'))].sort();
+            const uniqueOppTypes = [...new Set(masterRecords.map(r => r.opportunity_type).filter(Boolean))].sort();
 
-        // ═══════════════════════════════════════════
-        // CHARTS ROW 2: Customer Top | Financial Forecast
-        // ═══════════════════════════════════════════
-        const custChartId = `opp-cust-val-${Date.now()}`;
-        const finChartId = `opp-fin-${Date.now()}`;
-        const pipeDonutId = `opp-pipe-${Date.now()}`;
-        html += `<div class="viz-chart-grid viz-chart-grid-3">
-            <div class="viz-chart-card"><div class="viz-chart-header">Sum of Value by Customer</div><div id="${custChartId}" class="viz-chart-body"></div></div>
-            <div class="viz-chart-card"><div class="viz-chart-header">Financial Forecast by Level</div><div id="${finChartId}" class="viz-chart-body"></div></div>
-            <div class="viz-chart-card"><div class="viz-chart-header">Pipeline Status</div><div id="${pipeDonutId}" class="viz-chart-body"></div></div>
-        </div>`;
-
-        // ═══════════════════════════════════════════
-        // ESTIMATION LEVEL CARDS
-        // ═══════════════════════════════════════════
-        const levelEntries = Object.entries(estLevels);
-        if (levelEntries.length > 0) {
-            html += _sectionHeader('Estimation Level Breakdown', 'layers');
-            html += `<div class="viz-kpi-grid viz-kpi-grid-${Math.min(levelEntries.length, 3)}">`;
-            levelEntries.forEach(([level, sums]) => {
-                const iconMap = { 'ICT': 'zap', 'Contract': 'file-check', 'Hopper': 'inbox' };
-                html += _kpiCard(
-                    `${level} Estimates`,
-                    $m(sums.total_sum_26_27 || 0),
+            // Build global filter bar
+            const { html: filterBarHtml, barId: filterBarId } = _globalFilterBar({
+                fields: [
                     {
-                        icon: iconMap[level] || 'layers',
-                        colorClass: level === 'Contract' ? 'kpi-success' : '',
-                        subtitle: `${sums.count} opps · Term: ${$m(sums.total_term_benefit)} · 2026: ${$m(sums.total_2026)} · 2027: ${$m(sums.total_2027)}`
-                    }
-                );
+                        key: 'customer', label: 'Customer', values: uniqueCustomers,
+                        cascade: { key: 'project', label: 'Project' }
+                    },
+                    { key: 'status', label: 'Status', values: uniqueStatuses },
+                    { key: 'ext_probability', label: 'Ext Probability', values: uniqueProbs },
+                    { key: 'priority', label: 'Priority', values: uniquePriorities },
+                    { key: 'opportunity_type', label: 'Opp Type', values: uniqueOppTypes },
+                    { key: 'min_value', label: 'Min Value ($M)', type: 'threshold', placeholder: '0' },
+                ],
             });
-            html += '</div>';
-        }
 
-        // ═══════════════════════════════════════════
-        // EXT PROBABILITY BREAKDOWN
-        // ═══════════════════════════════════════════
-        html += _sectionHeader('External Probability & Opportunity Types', 'bar-chart-3');
-        html += '<div class="viz-customer-bar">';
-        // Probability chips
-        const probAgg = {};
-        allRecords.forEach(r => {
-            const p = r.ext_probability || '?';
-            if (!probAgg[p]) probAgg[p] = { count: 0, sum: 0, term: 0 };
-            probAgg[p].count += 1;
-            probAgg[p].sum += _val(r.sum_26_27);
-            probAgg[p].term += _val(r.term_benefit);
-        });
-        Object.entries(probAgg).forEach(([prob, d]) => {
-            const color = probColors[prob] || '#9E9E9E';
-            html += `<div class="viz-info-chip" style="border-left:3px solid ${color}"><b>${prob}:</b> ${d.count} opps · ${$m(d.sum)} (26+27) · ${$m(d.term)} term</div>`;
-        });
-        html += '</div>';
-        // Opp type chips
-        html += '<div class="viz-customer-bar" style="margin-top:8px">';
-        const typeColors = [COLORS.navy, COLORS.blue2, COLORS.green, COLORS.teal, COLORS.orange, COLORS.purple, COLORS.red, COLORS.gold];
-        Object.entries(byOppType).forEach(([type, count], i) => {
-            const color = typeColors[i % typeColors.length];
-            const typeVal = allRecords.filter(r => r.opportunity_type === type).reduce((s, r) => s + _val(r.sum_26_27), 0);
-            html += `<div class="viz-info-chip" style="border-left:3px solid ${color}"><b>${type}:</b> ${count} · ${$m(typeVal)}</div>`;
-        });
-        html += '</div>';
+            // Setup containers
+            const contentId = `opp-content-${Date.now()}`;
+            el.innerHTML = `<div class="opp-tracker-dashboard">${filterBarHtml}<div id="${contentId}"></div></div>`;
 
-        // ═══════════════════════════════════════════
-        // COLLAPSIBLE SECTIONS HELPER
-        // ═══════════════════════════════════════════
-        const _collapsible = (title, icon, count, innerHtml, startOpen = false) => {
-            const colId = `opp-col-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-            return `<div class="opp-collapse-section">
-                <div class="opp-collapse-header" data-target="${colId}">
-                    <div class="opp-collapse-header-left">
-                        <i data-lucide="${icon}" style="width:16px;height:16px;color:var(--opp-accent-blue)"></i>
-                        <span class="opp-collapse-title">${title}</span>
-                        <span class="opp-collapse-count">${count}</span>
+            // Apply dark background
+            el.style.background = '#03002E';
+            el.style.borderRadius = '0';
+            el.style.padding = '24px 32px';
+            let parent = el.parentElement;
+            while (parent) {
+                if (parent.classList && parent.classList.contains('dashboard-body')) parent.style.background = '#03002E';
+                if (parent.classList && parent.classList.contains('main-content')) parent.style.background = '#03002E';
+                parent = parent.parentElement;
+            }
+
+            // ─── Render content with given filtered records ───
+            const renderContent = (filteredRecords) => {
+                const contentEl = $(contentId);
+                if (!contentEl) return;
+
+                const _val = (v) => (typeof v === 'number' && isFinite(v)) ? v : 0;
+                const _sumField = (arr, field) => arr.reduce((s, r) => s + _val(r[field]), 0);
+                const $m = (v) => { if (v == null || isNaN(v)) return '—'; return `$${Math.abs(v).toFixed(1)}m`; };
+
+                const totalOpps = filteredRecords.length;
+                const total2026 = _sumField(filteredRecords, 'benefit_2026');
+                const total2027 = _sumField(filteredRecords, 'benefit_2027');
+                const totalSum2627 = _sumField(filteredRecords, 'sum_26_27');
+                const totalTerm = _sumField(filteredRecords, 'term_benefit');
+
+                // Status / programme / customer counts from filtered
+                const byStatus = {};
+                const byCustomer = {};
+                const byProgramme = {};
+                const byOppType = {};
+                filteredRecords.forEach(r => {
+                    if (r.status) byStatus[r.status] = (byStatus[r.status] || 0) + 1;
+                    if (r.customer) byCustomer[r.customer] = (byCustomer[r.customer] || 0) + 1;
+                    if (r.programme) byProgramme[r.programme] = (byProgramme[r.programme] || 0) + 1;
+                    if (r.opportunity_type) byOppType[r.opportunity_type] = (byOppType[r.opportunity_type] || 0) + 1;
+                });
+
+                const activeOpps = totalOpps - (byStatus['Cancelled'] || 0);
+                const completedOpps = byStatus['Completed'] || 0;
+
+                // Aggregate value by opp type x ext probability
+                const probLevels = ['High', 'Med', 'Low'];
+                const probColors = { 'High': '#10069F', 'Med': '#1565C0', 'Low': '#00838F' };
+                const oppTypes = [...new Set(filteredRecords.map(r => r.opportunity_type).filter(Boolean))];
+                const statusList = ['Hopper', 'ICT', 'Negotiations', 'Contracting', 'Completed', 'Cancelled'];
+
+                const valueByTypeProbObj = {};
+                oppTypes.forEach(t => { valueByTypeProbObj[t] = { High: 0, Med: 0, Low: 0 }; });
+                filteredRecords.forEach(r => {
+                    const t = r.opportunity_type, p = r.ext_probability;
+                    if (t && p && valueByTypeProbObj[t]) valueByTypeProbObj[t][p] += _val(r.sum_26_27);
+                });
+
+                const valueByStatusProbObj = {};
+                statusList.forEach(s => { valueByStatusProbObj[s] = { High: 0, Med: 0, Low: 0 }; });
+                filteredRecords.forEach(r => {
+                    const s = r.status, p = r.ext_probability;
+                    if (s && p && valueByStatusProbObj[s]) valueByStatusProbObj[s][p] += _val(r.sum_26_27);
+                });
+
+                const custValues = {};
+                filteredRecords.forEach(r => {
+                    const c = r.customer;
+                    if (c) custValues[c] = (custValues[c] || 0) + _val(r.sum_26_27);
+                });
+                const custTop10 = Object.entries(custValues).sort((a, b) => b[1] - a[1]).slice(0, 15);
+
+                const byPriority = {};
+                filteredRecords.forEach(r => {
+                    const p = String(r.priority || '?').replace('.0', '');
+                    if (!byPriority[p]) byPriority[p] = { count: 0, term: 0, sum_26_27: 0 };
+                    byPriority[p].count += 1;
+                    byPriority[p].term += _val(r.term_benefit);
+                    byPriority[p].sum_26_27 += _val(r.sum_26_27);
+                });
+
+                const estLevels = {};
+                const sheetOrder = Object.keys(opportunities);
+                sheetOrder.forEach(sheetName => {
+                    const recs = (opportunities[sheetName] || []).filter(r =>
+                        filteredRecords.some(fr => fr._sheet === sheetName && fr.number === r.number && fr.asks === r.asks)
+                    );
+                    if (recs.length === 0) return;
+                    const levelLabel = (meta.estimation_levels || {})[sheetName] || sheetName;
+                    estLevels[levelLabel] = {
+                        count: recs.length,
+                        total_sum_26_27: recs.reduce((s, r) => s + _val(r.sum_26_27), 0),
+                        total_term_benefit: recs.reduce((s, r) => s + _val(r.term_benefit), 0),
+                        total_2026: recs.reduce((s, r) => s + _val(r.benefit_2026), 0),
+                        total_2027: recs.reduce((s, r) => s + _val(r.benefit_2027), 0),
+                    };
+                });
+
+                let html = '';
+
+                // TITLE BANNER
+                html += `<div class="viz-opp-banner">
+                <div class="viz-opp-banner-inner">
+                    <div class="viz-opp-banner-title"><i data-lucide="target"></i><span>${cover.title || 'MEA Commercial Optimisation Report'}</span></div>
+                    <div style="display:flex;align-items:center;gap:16px">
+                        <div class="viz-opp-banner-badge">OPP TRACKER</div>
+                        <div class="viz-opp-banner-rr">ROLLS‑ROYCE</div>
                     </div>
-                    <i data-lucide="chevron-down" class="opp-collapse-chevron ${startOpen ? '' : 'collapsed'}"></i>
-                </div>
-                <div class="opp-collapse-body" id="${colId}" style="${startOpen ? '' : 'display:none'}">
-                    ${innerHtml}
                 </div>
             </div>`;
-        };
 
-        // ═══════════════════════════════════════════
-        // CUSTOMER-ASK TABLE (top opportunities by value)
-        // ═══════════════════════════════════════════
-        const topByValue = [...allRecords].sort((a, b) => _val(b.sum_26_27) - _val(a.sum_26_27)).slice(0, 20);
-        const topHeaders = ['Customer', 'Asks', 'Ext Prob', 'Status', 'Sum of Value (26+27)'];
-        const topRows = topByValue.map(r => [
-            r.customer, _truncate(String(r.asks || ''), 45),
-            r.ext_probability, r.status, _val(r.sum_26_27)
-        ]);
-        html += _collapsible('Top Opportunities by Value', 'trophy', `${topByValue.length} items`, _dataTable(topHeaders, topRows, { maxRows: 20 }), true);
+                // FINANCIAL HERO KPIs
+                html += `<div class="viz-opp-hero">
+                <div class="viz-opp-hero-card"><div class="viz-opp-hero-label">2026</div><div class="viz-opp-hero-value">${$m(total2026)}</div></div>
+                <div class="viz-opp-hero-card"><div class="viz-opp-hero-label">2027</div><div class="viz-opp-hero-value">${$m(total2027)}</div></div>
+                <div class="viz-opp-hero-card viz-opp-hero-accent"><div class="viz-opp-hero-label">2026 + 2027</div><div class="viz-opp-hero-value">${$m(totalSum2627)}</div></div>
+                <div class="viz-opp-hero-card viz-opp-hero-primary"><div class="viz-opp-hero-label">Term Impact</div><div class="viz-opp-hero-value">${$m(totalTerm)}</div></div>
+            </div>`;
 
-        // ═══════════════════════════════════════════
-        // TABLES BY ESTIMATION LEVEL
-        // ═══════════════════════════════════════════
-        let estHtml = '';
-        const sheetOrder = Object.keys(opportunities);
-        let totalEstItems = 0;
-        sheetOrder.forEach(sheetName => {
-            const recs = opportunities[sheetName] || [];
-            if (!Array.isArray(recs) || recs.length === 0) return;
-            totalEstItems += recs.length;
-            const levelLabel = (meta.estimation_levels || {})[sheetName] || sheetName;
-            const sheetSum = recs.reduce((s, r) => s + _val(r.sum_26_27), 0);
-            const sheetTerm = recs.reduce((s, r) => s + _val(r.term_benefit), 0);
+                // Meta bar
+                html += '<div class="viz-customer-bar">';
+                if (meta.away_day_date) html += `<div class="viz-info-chip"><b>Away Day:</b> ${meta.away_day_date}</div>`;
+                if (meta.sheets_parsed) html += `<div class="viz-info-chip"><b>Sheets:</b> ${meta.sheets_parsed.join(', ')}</div>`;
+                html += `<div class="viz-info-chip"><b>Opportunities:</b> ${totalOpps} (${activeOpps} active)</div>`;
+                html += `<div class="viz-info-chip"><b>Customers:</b> ${Object.keys(byCustomer).length}</div>`;
+                html += `<div class="viz-info-chip"><b>Programmes:</b> ${Object.keys(byProgramme).length}</div>`;
+                html += '</div>';
 
-            estHtml += `<div class="viz-subsection">
-                <div class="viz-subsection-header">
+                // PRIORITY BREAKDOWN
+                const priorityKeys = Object.keys(byPriority).sort();
+                if (priorityKeys.length > 0) {
+                    html += `<div class="viz-kpi-grid viz-kpi-grid-${Math.min(priorityKeys.length + 2, 5)}">`;
+                    priorityKeys.forEach(p => {
+                        const d = byPriority[p];
+                        html += _kpiCard(`Priority ${p}`, $m(d.sum_26_27), {
+                            icon: p === '1' ? 'star' : p === '2' ? 'circle' : 'minus',
+                            colorClass: p === '1' ? 'kpi-success' : '',
+                            subtitle: `${d.count} opps · Term: ${$m(d.term)}`
+                        });
+                    });
+                    html += _kpiCard('Completed', _fmtNumber(completedOpps), {
+                        icon: 'check-circle', colorClass: 'kpi-success',
+                        subtitle: `${totalOpps > 0 ? ((completedOpps / totalOpps) * 100).toFixed(0) : 0}% of total`
+                    });
+                    html += _kpiCard('Pipeline', _fmtNumber(activeOpps - completedOpps), {
+                        icon: 'git-branch', colorClass: 'kpi-warning',
+                        subtitle: `${(byStatus['ICT'] || 0)} ICT · ${(byStatus['Negotiations'] || 0)} Neg · ${(byStatus['Contracting'] || 0)} Ctr`
+                    });
+                    html += '</div>';
+                }
+
+                // CHARTS ROW 1
+                const typeChartId = `opp-type-val-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+                const statusChartId = `opp-status-val-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+                html += `<div class="viz-chart-grid viz-chart-grid-2">
+                <div class="viz-chart-card"><div class="viz-chart-header">Sum of Value by Type & External Probability</div><div id="${typeChartId}" class="viz-chart-body"></div></div>
+                <div class="viz-chart-card"><div class="viz-chart-header">Sum of Value by Status & External Probability</div><div id="${statusChartId}" class="viz-chart-body"></div></div>
+            </div>`;
+
+                // CHARTS ROW 2
+                const custChartId = `opp-cust-val-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+                const finChartId = `opp-fin-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+                const pipeDonutId = `opp-pipe-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+                html += `<div class="viz-chart-grid viz-chart-grid-3">
+                <div class="viz-chart-card"><div class="viz-chart-header">Sum of Value by Customer</div><div id="${custChartId}" class="viz-chart-body"></div></div>
+                <div class="viz-chart-card"><div class="viz-chart-header">Financial Forecast by Level</div><div id="${finChartId}" class="viz-chart-body"></div></div>
+                <div class="viz-chart-card"><div class="viz-chart-header">Pipeline Status</div><div id="${pipeDonutId}" class="viz-chart-body"></div></div>
+            </div>`;
+
+                // ESTIMATION LEVEL CARDS
+                const levelEntries = Object.entries(estLevels);
+                if (levelEntries.length > 0) {
+                    html += _sectionHeader('Estimation Level Breakdown', 'layers');
+                    html += `<div class="viz-kpi-grid viz-kpi-grid-${Math.min(levelEntries.length, 3)}">`;
+                    levelEntries.forEach(([level, sums]) => {
+                        const iconMap = { 'ICT': 'zap', 'Contract': 'file-check', 'Hopper': 'inbox' };
+                        html += _kpiCard(
+                            `${level} Estimates`, $m(sums.total_sum_26_27 || 0),
+                            {
+                                icon: iconMap[level] || 'layers', colorClass: level === 'Contract' ? 'kpi-success' : '',
+                                subtitle: `${sums.count} opps · Term: ${$m(sums.total_term_benefit)} · 2026: ${$m(sums.total_2026)} · 2027: ${$m(sums.total_2027)}`
+                            }
+                        );
+                    });
+                    html += '</div>';
+                }
+
+                // EXT PROBABILITY BREAKDOWN
+                html += _sectionHeader('External Probability & Opportunity Types', 'bar-chart-3');
+                html += '<div class="viz-customer-bar">';
+                const probAgg = {};
+                filteredRecords.forEach(r => {
+                    const p = r.ext_probability || '?';
+                    if (!probAgg[p]) probAgg[p] = { count: 0, sum: 0, term: 0 };
+                    probAgg[p].count += 1;
+                    probAgg[p].sum += _val(r.sum_26_27);
+                    probAgg[p].term += _val(r.term_benefit);
+                });
+                Object.entries(probAgg).forEach(([prob, d]) => {
+                    const color = probColors[prob] || '#9E9E9E';
+                    html += `<div class="viz-info-chip" style="border-left:3px solid ${color}"><b>${prob}:</b> ${d.count} opps · ${$m(d.sum)} (26+27) · ${$m(d.term)} term</div>`;
+                });
+                html += '</div>';
+                html += '<div class="viz-customer-bar" style="margin-top:8px">';
+                const typeColors = [COLORS.navy, COLORS.blue2, COLORS.green, COLORS.teal, COLORS.orange, COLORS.purple, COLORS.red, COLORS.gold];
+                Object.entries(byOppType).forEach(([type, count], i) => {
+                    const color = typeColors[i % typeColors.length];
+                    const typeVal = filteredRecords.filter(r => r.opportunity_type === type).reduce((s, r) => s + _val(r.sum_26_27), 0);
+                    html += `<div class="viz-info-chip" style="border-left:3px solid ${color}"><b>${type}:</b> ${count} · ${$m(typeVal)}</div>`;
+                });
+                html += '</div>';
+
+                // ── COLLAPSIBLE HELPER ──
+                const _col = (title, icon, count, innerHtml, startOpen = false) => {
+                    const colId = `opp-col-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+                    return `<div class="opp-collapse-section">
+                    <div class="opp-collapse-header" data-target="${colId}">
+                        <div class="opp-collapse-header-left">
+                            <i data-lucide="${icon}" style="width:16px;height:16px;color:var(--opp-accent-blue)"></i>
+                            <span class="opp-collapse-title">${title}</span>
+                            <span class="opp-collapse-count">${count}</span>
+                        </div>
+                        <i data-lucide="chevron-down" class="opp-collapse-chevron ${startOpen ? '' : 'collapsed'}"></i>
+                    </div>
+                    <div class="opp-collapse-body" id="${colId}" style="${startOpen ? '' : 'display:none'}">${innerHtml}</div>
+                </div>`;
+                };
+
+                // ── TOP OPPORTUNITIES TABLE (filterable) ──
+                const topByValue = [...filteredRecords].sort((a, b) => _val(b.sum_26_27) - _val(a.sum_26_27)).slice(0, 30);
+                const topHeaders = ['Customer', 'Asks', 'Ext Prob', 'Status', 'Sum of Value (26+27)'];
+                const topRows = topByValue.map(r => [r.customer, _truncate(String(r.asks || ''), 45), r.ext_probability, r.status, _val(r.sum_26_27)]);
+                const topFdt = _filterableDataTable(topHeaders, topRows,
+                    [{ col: 0, label: 'Customer' }, { col: 2, label: 'Ext Prob' }, { col: 3, label: 'Status' }], { maxRows: 30 });
+                html += _col('Top Opportunities by Value', 'trophy', `${topByValue.length} items`, topFdt.html, true);
+
+                // ── BY ESTIMATION LEVEL (filterable) ──
+                let estHtml = '';
+                let totalEstItems = 0;
+                const estFdts = [];
+                const sheetOrderEst = Object.keys(opportunities);
+                sheetOrderEst.forEach(sheetName => {
+                    const recs = (opportunities[sheetName] || []).filter(r =>
+                        filteredRecords.some(fr => fr._sheet === sheetName && fr.number === r.number && fr.asks === r.asks));
+                    if (!Array.isArray(recs) || recs.length === 0) return;
+                    totalEstItems += recs.length;
+                    const levelLabel = (meta.estimation_levels || {})[sheetName] || sheetName;
+                    const sheetSum = recs.reduce((s, r) => s + _val(r.sum_26_27), 0);
+                    const sheetTerm = recs.reduce((s, r) => s + _val(r.term_benefit), 0);
+                    estHtml += `<div class="viz-subsection"><div class="viz-subsection-header">
                     <span class="viz-subsection-name">${levelLabel} — ${sheetName}</span>
                     <span class="viz-subsection-total">${$m(sheetSum)} (26+27) · ${$m(sheetTerm)} term</span>
                     <span class="viz-subsection-count">${recs.length} opps</span>
-                </div>
-            </div>`;
-            const headers = ['#', 'Project', 'Programme', 'Customer', 'Asks', 'Ext Prob', 'Status', 'Priority', 'Sum $M', 'Term $M'];
-            const rows = recs.map(r => [
-                r.number, _truncate(String(r.project || ''), 18),
-                _truncate(String(r.programme || ''), 14), _truncate(String(r.customer || ''), 14),
-                _truncate(String(r.asks || ''), 30), r.ext_probability, r.status,
-                r.priority, _val(r.sum_26_27), _val(r.term_benefit),
-            ]);
-            estHtml += _dataTable(headers, rows, { maxRows: 50 });
-        });
-        if (totalEstItems > 0) {
-            html += _collapsible('Opportunities by Estimation Level', 'table', `${totalEstItems} items`, estHtml);
-        }
-
-        // ═══════════════════════════════════════════
-        // PROJECT TIMELINE (Gantt-style)
-        // ═══════════════════════════════════════════
-        const milestones = (timeline.milestones || []).filter(m => m.project && m.milestones);
-        if (milestones.length > 0) {
-            let timeHtml = '';
-            // Phase progression table
-            const phaseHeaders = ['Project', 'Customer', 'Current Phase', 'Days to Sign'];
-            const phaseRows = milestones.slice(0, 30).map(m => {
-                const ms = m.milestones || {};
-                const signedDate = ms.proposal_signed ? new Date(ms.proposal_signed) : null;
-                const now = new Date();
-                const daysToSign = signedDate ? Math.round((signedDate - now) / (1000 * 60 * 60 * 24)) : '—';
-                return [
-                    _truncate(String(m.project || ''), 20),
-                    _truncate(String(m.customer || ''), 16),
-                    String(m.current_phase || '').replace(/_/g, ' '),
-                    daysToSign,
-                ];
-            });
-            timeHtml += _dataTable(phaseHeaders, phaseRows);
-
-            // Gantt visual
-            timeHtml += '<div class="viz-gantt-wrap">';
-            const phases = ['idea_generation', 'approval_to_launch', 'strategy_approval', 'be_generated', 'approval', 'negotiation_strategy', 'proposal_submitted', 'proposal_signed'];
-            const phaseLabels = ['Idea Gen', 'Launch', 'Strategy', 'BE Gen', 'Approval', 'Negotiation', 'Submitted', 'Signed'];
-            const phaseColors = ['#4361EE', '#3A86FF', '#5E60CE', '#48BFE3', '#00E396', '#FF8B42', '#FFB547', '#FF4560'];
-
-            timeHtml += '<table class="viz-gantt-table"><thead><tr><th>Project</th>';
-            phaseLabels.forEach(l => { timeHtml += `<th>${l}</th>`; });
-            timeHtml += '</tr></thead><tbody>';
-
-            milestones.slice(0, 20).forEach(m => {
-                const ms = m.milestones || {};
-                const currentPhase = m.current_phase || '';
-                timeHtml += `<tr><td class="viz-gantt-project">${_truncate(String(m.project || ''), 18)}</td>`;
-                let foundCurrent = false;
-                phases.forEach((phase, i) => {
-                    const date = ms[phase];
-                    const isCurrent = currentPhase === phase;
-                    const isPast = date && new Date(date) <= new Date();
-                    const isFuture = date && new Date(date) > new Date();
-                    if (isCurrent) foundCurrent = true;
-                    let cls = 'viz-gantt-empty';
-                    if (isPast && !foundCurrent) cls = 'viz-gantt-done';
-                    else if (isCurrent) cls = 'viz-gantt-current';
-                    else if (isFuture || (!foundCurrent && !isPast)) cls = 'viz-gantt-future';
-                    timeHtml += `<td class="${cls}" title="${phase}: ${date || 'N/A'}"><div class="viz-gantt-bar" style="background:${phaseColors[i]}"></div></td>`;
+                </div></div>`;
+                    const eHeaders = ['#', 'Project', 'Programme', 'Customer', 'Asks', 'Ext Prob', 'Status', 'Priority', 'Sum $M', 'Term $M'];
+                    const eRows = recs.map(r => [r.number, _truncate(String(r.project || ''), 18),
+                    _truncate(String(r.programme || ''), 14), _truncate(String(r.customer || ''), 14),
+                    _truncate(String(r.asks || ''), 30), r.ext_probability, r.status, r.priority,
+                    _val(r.sum_26_27), _val(r.term_benefit)]);
+                    const eFdt = _filterableDataTable(eHeaders, eRows,
+                        [{ col: 3, label: 'Customer' }, { col: 5, label: 'Ext Prob' }, { col: 6, label: 'Status' }], { maxRows: 50 });
+                    estHtml += eFdt.html;
+                    estFdts.push({ containerId: eFdt.containerId, headers: eHeaders, rows: eRows });
                 });
-                timeHtml += '</tr>';
+                if (totalEstItems > 0) html += _col('Opportunities by Estimation Level', 'table', `${totalEstItems} items`, estHtml);
+
+                // ── PROJECT TIMELINE ──
+                const milestones = (timeline.milestones || []).filter(m => m.project && m.milestones);
+                if (milestones.length > 0) {
+                    let timeHtml = '';
+                    const phaseHeaders = ['Project', 'Customer', 'Current Phase', 'Days to Sign'];
+                    const phaseRows = milestones.slice(0, 30).map(m => {
+                        const ms = m.milestones || {};
+                        const signedDate = ms.proposal_signed ? new Date(ms.proposal_signed) : null;
+                        const now = new Date();
+                        const daysToSign = signedDate ? Math.round((signedDate - now) / (1000 * 60 * 60 * 24)) : '—';
+                        return [_truncate(String(m.project || ''), 20), _truncate(String(m.customer || ''), 16),
+                        String(m.current_phase || '').replace(/_/g, ' '), daysToSign];
+                    });
+                    timeHtml += _dataTable(phaseHeaders, phaseRows);
+                    timeHtml += '<div class="viz-gantt-wrap">';
+                    const phases = ['idea_generation', 'approval_to_launch', 'strategy_approval', 'be_generated', 'approval', 'negotiation_strategy', 'proposal_submitted', 'proposal_signed'];
+                    const phaseLabels = ['Idea Gen', 'Launch', 'Strategy', 'BE Gen', 'Approval', 'Negotiation', 'Submitted', 'Signed'];
+                    const phaseColorArr = ['#4361EE', '#3A86FF', '#5E60CE', '#48BFE3', '#00E396', '#FF8B42', '#FFB547', '#FF4560'];
+                    timeHtml += '<table class="viz-gantt-table"><thead><tr><th>Project</th>';
+                    phaseLabels.forEach(l => { timeHtml += `<th>${l}</th>`; });
+                    timeHtml += '</tr></thead><tbody>';
+                    milestones.slice(0, 20).forEach(m => {
+                        const ms = m.milestones || {};
+                        const currentPhase = m.current_phase || '';
+                        timeHtml += `<tr><td class="viz-gantt-project">${_truncate(String(m.project || ''), 18)}</td>`;
+                        let foundCurrent = false;
+                        phases.forEach((phase, i) => {
+                            const date = ms[phase];
+                            const isCurrent = currentPhase === phase;
+                            const isPast = date && new Date(date) <= new Date();
+                            if (isCurrent) foundCurrent = true;
+                            let cls = 'viz-gantt-empty';
+                            if (isPast && !foundCurrent) cls = 'viz-gantt-done';
+                            else if (isCurrent) cls = 'viz-gantt-current';
+                            else cls = 'viz-gantt-future';
+                            timeHtml += `<td class="${cls}" title="${phase}: ${date || 'N/A'}"><div class="viz-gantt-bar" style="background:${phaseColorArr[i]}"></div></td>`;
+                        });
+                        timeHtml += '</tr>';
+                    });
+                    timeHtml += '</tbody></table></div>';
+                    html += _col('Project Timeline & Milestones', 'calendar', `${milestones.length} projects`, timeHtml);
+                }
+
+                // ── OPPS & THREATS (filterable) ──
+                const oatItems = oppsAndThreats.items || [];
+                let oatFdt = null;
+                if (oatItems.length > 0) {
+                    const oatHeaders = ['Project', 'Customer', 'Opportunity', 'Status', 'Owner', 'Pack Improvement', 'Due Date'];
+                    const oatRows = oatItems.map(i => [i.project, i.customer, _truncate(String(i.opportunity || ''), 40),
+                    i.status, i.owner, typeof i.overall_pack_improvement === 'number' ? _fmtNumber(i.overall_pack_improvement) : '—', i.due_date]);
+                    oatFdt = _filterableDataTable(oatHeaders, oatRows,
+                        [{ col: 1, label: 'Customer' }, { col: 3, label: 'Status' }, { col: 4, label: 'Owner' }]);
+                    html += _col('Opportunities & Threats', 'alert-triangle', `${oatItems.length} items`, oatFdt.html);
+                }
+
+                // ── PROJECT SUMMARY (filterable) ──
+                const projects = (projectSummary.projects || []);
+                let prjFdt = null;
+                if (projects.length > 0) {
+                    const prjHeaders = ['Group', 'Project', 'Customer', 'Programme', 'CRP Margin ($M)', 'CRP %', 'Onerous'];
+                    const prjRows = projects.map(p => [p.group, p.project, p.customer, p.programme,
+                    typeof p.current_crp_margin === 'number' ? p.current_crp_margin.toFixed(1) : '—',
+                    typeof p.current_crp_pct === 'number' ? (p.current_crp_pct * 100).toFixed(1) + '%' : '—',
+                    typeof p.onerous_provision === 'number' ? p.onerous_provision.toFixed(1) : '—']);
+                    prjFdt = _filterableDataTable(prjHeaders, prjRows,
+                        [{ col: 0, label: 'Group' }, { col: 2, label: 'Customer' }, { col: 3, label: 'Programme' }]);
+                    html += _col('Project Summary', 'briefcase', `${projects.length} projects`, prjFdt.html);
+                }
+
+                contentEl.innerHTML = html;
+                if (window.lucide) window.lucide.createIcons();
+
+                // Wire up collapsible sections
+                contentEl.querySelectorAll('.opp-collapse-header').forEach(header => {
+                    header.addEventListener('click', () => {
+                        const targetId = header.getAttribute('data-target');
+                        const body = document.getElementById(targetId);
+                        const chevron = header.querySelector('.opp-collapse-chevron');
+                        if (!body) return;
+                        const isHidden = body.style.display === 'none';
+                        body.style.display = isHidden ? 'block' : 'none';
+                        if (chevron) chevron.classList.toggle('collapsed', !isHidden);
+                    });
+                });
+
+                // Wire up filterable data tables
+                _wireFilterableDataTable(topFdt.containerId, topHeaders, topRows, { maxRows: 30 });
+                estFdts.forEach(fdt => _wireFilterableDataTable(fdt.containerId, fdt.headers, fdt.rows, { maxRows: 50 }));
+                if (oatFdt) _wireFilterableDataTable(oatFdt.containerId,
+                    ['Project', 'Customer', 'Opportunity', 'Status', 'Owner', 'Pack Improvement', 'Due Date'],
+                    oatItems.map(i => [i.project, i.customer, _truncate(String(i.opportunity || ''), 40),
+                    i.status, i.owner, typeof i.overall_pack_improvement === 'number' ? _fmtNumber(i.overall_pack_improvement) : '—', i.due_date]));
+                if (prjFdt) _wireFilterableDataTable(prjFdt.containerId,
+                    ['Group', 'Project', 'Customer', 'Programme', 'CRP Margin ($M)', 'CRP %', 'Onerous'],
+                    projects.map(p => [p.group, p.project, p.customer, p.programme,
+                    typeof p.current_crp_margin === 'number' ? p.current_crp_margin.toFixed(1) : '—',
+                    typeof p.current_crp_pct === 'number' ? (p.current_crp_pct * 100).toFixed(1) + '%' : '—',
+                    typeof p.onerous_provision === 'number' ? p.onerous_provision.toFixed(1) : '—']));
+
+                // Make tables sortable
+                _makeTablesSortable(contentEl);
+
+                // Render charts
+                setTimeout(() => {
+                    _renderOppCharts({
+                        typeChartId, statusChartId, custChartId, finChartId, pipeDonutId,
+                        oppTypes, statusList, probLevels, probColors,
+                        valueByTypeProbObj, valueByStatusProbObj,
+                        custTop10, estLevels, byStatus
+                    });
+                }, 100);
+            };
+
+            // ─── Initial render ───
+            renderContent(masterRecords);
+
+            // ─── Wire global filter bar ───
+            if (window.lucide) window.lucide.createIcons();
+            _wireGlobalFilterBar(filterBarId, cascadeData, (filters) => {
+                let filtered = masterRecords;
+                if (filters.customer) filtered = filtered.filter(r => r.customer === filters.customer);
+                if (filters.project) filtered = filtered.filter(r => r.project === filters.project);
+                if (filters.status) filtered = filtered.filter(r => r.status === filters.status);
+                if (filters.ext_probability) filtered = filtered.filter(r => r.ext_probability === filters.ext_probability);
+                if (filters.priority) filtered = filtered.filter(r => String(r.priority || '').replace('.0', '') === filters.priority);
+                if (filters.opportunity_type) filtered = filtered.filter(r => r.opportunity_type === filters.opportunity_type);
+                if (filters.min_value != null) filtered = filtered.filter(r => {
+                    const v = (typeof r.sum_26_27 === 'number' && isFinite(r.sum_26_27)) ? r.sum_26_27 : 0;
+                    return v >= filters.min_value;
+                });
+                renderContent(filtered);
             });
-            timeHtml += '</tbody></table></div>';
-
-            html += _collapsible('Project Timeline & Milestones', 'calendar', `${milestones.length} projects`, timeHtml);
         }
 
-        // ═══════════════════════════════════════════
-        // OPPS & THREATS
-        // ═══════════════════════════════════════════
-        const oatItems = oppsAndThreats.items || [];
-        if (oatItems.length > 0) {
-            const oatHeaders = ['Project', 'Customer', 'Opportunity', 'Status', 'Owner', 'Pack Improvement', 'Due Date'];
-            const oatRows = oatItems.map(i => [
-                i.project, i.customer, _truncate(String(i.opportunity || ''), 40),
-                i.status, i.owner, typeof i.overall_pack_improvement === 'number' ? _fmtNumber(i.overall_pack_improvement) : '—',
-                i.due_date,
-            ]);
-            html += _collapsible('Opportunities & Threats', 'alert-triangle', `${oatItems.length} items`, _dataTable(oatHeaders, oatRows));
-        }
-
-        // ═══════════════════════════════════════════
-        // PROJECT SUMMARY
-        // ═══════════════════════════════════════════
-        const projects = (projectSummary.projects || []);
-        if (projects.length > 0) {
-            const prjHeaders = ['Group', 'Project', 'Customer', 'Programme', 'CRP Margin ($M)', 'CRP %', 'Onerous'];
-            const prjRows = projects.map(p => [
-                p.group, p.project, p.customer, p.programme,
-                typeof p.current_crp_margin === 'number' ? p.current_crp_margin.toFixed(1) : '—',
-                typeof p.current_crp_pct === 'number' ? (p.current_crp_pct * 100).toFixed(1) + '%' : '—',
-                typeof p.onerous_provision === 'number' ? p.onerous_provision.toFixed(1) : '—',
-            ]);
-            html += _collapsible('Project Summary', 'briefcase', `${projects.length} projects`, _dataTable(prjHeaders, prjRows));
-        }
-
-        // Close the opp-tracker-dashboard wrapper
-        html += '</div>';
-
-        el.innerHTML = html;
-
-        // Apply dark background to the visualizer container AND all parent containers
-        el.style.background = '#03002E';
-        el.style.borderRadius = '0';
-        el.style.padding = '24px 32px';
-        // Walk up the DOM to darken dashboard-body and header
-        let parent = el.parentElement;
-        while (parent) {
-            if (parent.classList && parent.classList.contains('dashboard-body')) {
-                parent.style.background = '#03002E';
-            }
-            if (parent.classList && parent.classList.contains('main-content')) {
-                parent.style.background = '#03002E';
-            }
-            parent = parent.parentElement;
-        }
-
-        // Re-init Lucide icons for the new HTML
-        if (window.lucide) window.lucide.createIcons();
-
-        // Wire up collapsible sections
-        el.querySelectorAll('.opp-collapse-header').forEach(header => {
-            header.addEventListener('click', () => {
-                const targetId = header.getAttribute('data-target');
-                const body = document.getElementById(targetId);
-                const chevron = header.querySelector('.opp-collapse-chevron');
-                if (!body) return;
-                const isHidden = body.style.display === 'none';
-                body.style.display = isHidden ? 'block' : 'none';
-                if (chevron) chevron.classList.toggle('collapsed', !isHidden);
-            });
-        });
-
-        // ═══════════════════════════════════════════
-        // RENDER CHARTS
-        // ═══════════════════════════════════════════
-        setTimeout(() => {
-            _renderOppCharts({
-                typeChartId, statusChartId, custChartId, finChartId, pipeDonutId,
+        function _renderOppCharts(cfg) {
+            const { typeChartId, statusChartId, custChartId, finChartId, pipeDonutId,
                 oppTypes, statusList, probLevels, probColors,
                 valueByTypeProbObj, valueByStatusProbObj,
-                custTop10, estLevels, byStatus
-            });
-        }, 100);
-    }
+                custTop10, estLevels, byStatus } = cfg;
 
-    function _renderOppCharts(cfg) {
-        const { typeChartId, statusChartId, custChartId, finChartId, pipeDonutId,
-            oppTypes, statusList, probLevels, probColors,
-            valueByTypeProbObj, valueByStatusProbObj,
-            custTop10, estLevels, byStatus } = cfg;
+            // Text color constants for dark background
+            const TXT = '#C8C6DD';
+            const TXT_BRIGHT = '#E8E6F8';
+            const GRID_COLOR = 'rgba(100,100,200,0.12)';
 
-        // Text color constants for dark background
-        const TXT = '#C8C6DD';
-        const TXT_BRIGHT = '#E8E6F8';
-        const GRID_COLOR = 'rgba(100,100,200,0.12)';
+            // Shared config — NO theme.mode (it overrides custom colors!)
+            const baseGrid = { borderColor: GRID_COLOR, strokeDashArray: 3 };
+            const baseTip = {
+                theme: 'dark', style: { fontSize: '12px' },
+                marker: { show: true }
+            };
 
-        // Shared config — NO theme.mode (it overrides custom colors!)
-        const baseGrid = { borderColor: GRID_COLOR, strokeDashArray: 3 };
-        const baseTip = {
-            theme: 'dark', style: { fontSize: '12px' },
-            marker: { show: true }
-        };
+            // ─── 1. Value by Opportunity Type × External Probability ───
+            if ($(typeChartId) && oppTypes.length > 0) {
+                new ApexCharts($(typeChartId), {
+                    chart: {
+                        type: 'bar', height: 340, background: 'transparent',
+                        foreColor: TXT, stacked: true, toolbar: { show: false }
+                    },
+                    series: probLevels.map(p => ({
+                        name: p, data: oppTypes.map(t => +(valueByTypeProbObj[t]?.[p] || 0).toFixed(1))
+                    })),
+                    xaxis: {
+                        categories: oppTypes.map(t => _truncate(t, 14)),
+                        labels: { rotate: -30, style: { fontSize: '10px', colors: TXT } },
+                        axisBorder: { color: GRID_COLOR }, axisTicks: { color: GRID_COLOR }
+                    },
+                    colors: ['#4361EE', '#3A86FF', '#48BFE3'],
+                    fill: { opacity: 1 },
+                    plotOptions: { bar: { columnWidth: '65%', borderRadius: 4 } },
+                    dataLabels: { enabled: false },
+                    legend: {
+                        position: 'top', fontSize: '11px', labels: { colors: TXT },
+                        markers: { size: 8, radius: 3 }
+                    },
+                    yaxis: {
+                        title: { text: '$M', style: { color: TXT } },
+                        labels: {
+                            formatter: v => '$' + v.toFixed(0) + 'm',
+                            style: { colors: TXT }
+                        }
+                    },
+                    tooltip: { ...baseTip, y: { formatter: v => '$' + v.toFixed(1) + 'm' } },
+                    grid: baseGrid,
+                }).render();
+            }
 
-        // ─── 1. Value by Opportunity Type × External Probability ───
-        if ($(typeChartId) && oppTypes.length > 0) {
-            new ApexCharts($(typeChartId), {
-                chart: {
-                    type: 'bar', height: 340, background: 'transparent',
-                    foreColor: TXT, stacked: true, toolbar: { show: false }
-                },
-                series: probLevels.map(p => ({
-                    name: p, data: oppTypes.map(t => +(valueByTypeProbObj[t]?.[p] || 0).toFixed(1))
-                })),
-                xaxis: {
-                    categories: oppTypes.map(t => _truncate(t, 14)),
-                    labels: { rotate: -30, style: { fontSize: '10px', colors: TXT } },
-                    axisBorder: { color: GRID_COLOR }, axisTicks: { color: GRID_COLOR }
-                },
-                colors: ['#4361EE', '#3A86FF', '#48BFE3'],
-                fill: { opacity: 1 },
-                plotOptions: { bar: { columnWidth: '65%', borderRadius: 4 } },
-                dataLabels: { enabled: false },
-                legend: {
-                    position: 'top', fontSize: '11px', labels: { colors: TXT },
-                    markers: { size: 8, radius: 3 }
-                },
-                yaxis: {
-                    title: { text: '$M', style: { color: TXT } },
-                    labels: {
-                        formatter: v => '$' + v.toFixed(0) + 'm',
-                        style: { colors: TXT }
-                    }
-                },
-                tooltip: { ...baseTip, y: { formatter: v => '$' + v.toFixed(1) + 'm' } },
-                grid: baseGrid,
-            }).render();
-        }
+            // ─── 2. Value by Status × External Probability ───
+            const activeStatuses = statusList.filter(s =>
+                valueByStatusProbObj[s] && (valueByStatusProbObj[s].High + valueByStatusProbObj[s].Med + valueByStatusProbObj[s].Low) > 0);
+            if ($(statusChartId) && activeStatuses.length > 0) {
+                new ApexCharts($(statusChartId), {
+                    chart: {
+                        type: 'bar', height: 340, background: 'transparent',
+                        foreColor: TXT, stacked: true, toolbar: { show: false }
+                    },
+                    series: probLevels.map(p => ({
+                        name: p, data: activeStatuses.map(s => +(valueByStatusProbObj[s]?.[p] || 0).toFixed(1))
+                    })),
+                    xaxis: {
+                        categories: activeStatuses,
+                        labels: { rotate: -30, style: { fontSize: '10px', colors: TXT } },
+                        axisBorder: { color: GRID_COLOR }, axisTicks: { color: GRID_COLOR }
+                    },
+                    colors: ['#4361EE', '#3A86FF', '#48BFE3'],
+                    fill: { opacity: 1 },
+                    plotOptions: { bar: { columnWidth: '60%', borderRadius: 4 } },
+                    dataLabels: { enabled: false },
+                    legend: { position: 'top', fontSize: '11px', labels: { colors: TXT } },
+                    yaxis: {
+                        title: { text: '$M', style: { color: TXT } },
+                        labels: {
+                            formatter: v => '$' + v.toFixed(0) + 'm',
+                            style: { colors: TXT }
+                        }
+                    },
+                    tooltip: { ...baseTip, y: { formatter: v => '$' + v.toFixed(1) + 'm' } },
+                    grid: baseGrid,
+                }).render();
+            }
 
-        // ─── 2. Value by Status × External Probability ───
-        const activeStatuses = statusList.filter(s =>
-            valueByStatusProbObj[s] && (valueByStatusProbObj[s].High + valueByStatusProbObj[s].Med + valueByStatusProbObj[s].Low) > 0);
-        if ($(statusChartId) && activeStatuses.length > 0) {
-            new ApexCharts($(statusChartId), {
-                chart: {
-                    type: 'bar', height: 340, background: 'transparent',
-                    foreColor: TXT, stacked: true, toolbar: { show: false }
-                },
-                series: probLevels.map(p => ({
-                    name: p, data: activeStatuses.map(s => +(valueByStatusProbObj[s]?.[p] || 0).toFixed(1))
-                })),
-                xaxis: {
-                    categories: activeStatuses,
-                    labels: { rotate: -30, style: { fontSize: '10px', colors: TXT } },
-                    axisBorder: { color: GRID_COLOR }, axisTicks: { color: GRID_COLOR }
-                },
-                colors: ['#4361EE', '#3A86FF', '#48BFE3'],
-                fill: { opacity: 1 },
-                plotOptions: { bar: { columnWidth: '60%', borderRadius: 4 } },
-                dataLabels: { enabled: false },
-                legend: { position: 'top', fontSize: '11px', labels: { colors: TXT } },
-                yaxis: {
-                    title: { text: '$M', style: { color: TXT } },
-                    labels: {
-                        formatter: v => '$' + v.toFixed(0) + 'm',
-                        style: { colors: TXT }
-                    }
-                },
-                tooltip: { ...baseTip, y: { formatter: v => '$' + v.toFixed(1) + 'm' } },
-                grid: baseGrid,
-            }).render();
-        }
+            // ─── 3. Customer Top 15 by Value (Horizontal Bar) ───
+            if ($(custChartId) && custTop10.length > 0) {
+                const custColors = ['#48BFE3', '#4361EE', '#3A86FF', '#5E60CE', '#7400B8',
+                    '#6930C3', '#64DFDF', '#80FFDB', '#56CFE1', '#72EFDD',
+                    '#4EA8DE', '#5390D9', '#6D6875', '#48BFE3', '#4361EE'];
+                new ApexCharts($(custChartId), {
+                    chart: {
+                        type: 'bar', height: Math.max(380, custTop10.length * 30),
+                        background: 'transparent', foreColor: TXT, toolbar: { show: false }
+                    },
+                    series: [{ name: 'Sum 26+27 ($M)', data: custTop10.map(c => +c[1].toFixed(1)) }],
+                    xaxis: {
+                        categories: custTop10.map(c => c[0]),
+                        labels: { style: { colors: TXT_BRIGHT, fontSize: '11px' } },
+                        axisBorder: { show: false }, axisTicks: { show: false }
+                    },
+                    colors: custColors,
+                    fill: { opacity: 1 },
+                    plotOptions: { bar: { horizontal: true, borderRadius: 5, distributed: true, barHeight: '65%' } },
+                    dataLabels: {
+                        enabled: true, formatter: v => '$' + v + 'm', offsetX: 18,
+                        style: { fontSize: '11px', fontWeight: 600, colors: [TXT_BRIGHT] }
+                    },
+                    legend: { show: false },
+                    yaxis: { labels: { style: { fontSize: '11px', colors: TXT_BRIGHT } } },
+                    grid: {
+                        borderColor: GRID_COLOR, strokeDashArray: 3,
+                        xaxis: { lines: { show: true } }, yaxis: { lines: { show: false } }
+                    },
+                    tooltip: { ...baseTip, y: { formatter: v => '$' + v.toFixed(1) + 'm' } },
+                }).render();
+            }
 
-        // ─── 3. Customer Top 15 by Value (Horizontal Bar) ───
-        if ($(custChartId) && custTop10.length > 0) {
-            const custColors = ['#48BFE3', '#4361EE', '#3A86FF', '#5E60CE', '#7400B8',
-                '#6930C3', '#64DFDF', '#80FFDB', '#56CFE1', '#72EFDD',
-                '#4EA8DE', '#5390D9', '#6D6875', '#48BFE3', '#4361EE'];
-            new ApexCharts($(custChartId), {
-                chart: {
-                    type: 'bar', height: Math.max(380, custTop10.length * 30),
-                    background: 'transparent', foreColor: TXT, toolbar: { show: false }
-                },
-                series: [{ name: 'Sum 26+27 ($M)', data: custTop10.map(c => +c[1].toFixed(1)) }],
-                xaxis: {
-                    categories: custTop10.map(c => c[0]),
-                    labels: { style: { colors: TXT_BRIGHT, fontSize: '11px' } },
-                    axisBorder: { show: false }, axisTicks: { show: false }
-                },
-                colors: custColors,
-                fill: { opacity: 1 },
-                plotOptions: { bar: { horizontal: true, borderRadius: 5, distributed: true, barHeight: '65%' } },
-                dataLabels: {
-                    enabled: true, formatter: v => '$' + v + 'm', offsetX: 18,
-                    style: { fontSize: '11px', fontWeight: 600, colors: [TXT_BRIGHT] }
-                },
-                legend: { show: false },
-                yaxis: { labels: { style: { fontSize: '11px', colors: TXT_BRIGHT } } },
-                grid: {
-                    borderColor: GRID_COLOR, strokeDashArray: 3,
-                    xaxis: { lines: { show: true } }, yaxis: { lines: { show: false } }
-                },
-                tooltip: { ...baseTip, y: { formatter: v => '$' + v.toFixed(1) + 'm' } },
-            }).render();
-        }
+            // ─── 4. Financial Forecast by Estimation Level ───
+            const levelEntries = Object.entries(estLevels);
+            if ($(finChartId) && levelEntries.length > 0) {
+                const names = levelEntries.map(([l]) => l);
+                new ApexCharts($(finChartId), {
+                    chart: {
+                        type: 'bar', height: 340, background: 'transparent',
+                        foreColor: TXT, toolbar: { show: false }
+                    },
+                    series: [
+                        { name: 'Term ($M)', data: levelEntries.map(([, s]) => +(s.total_term_benefit || 0).toFixed(1)) },
+                        { name: '2026 ($M)', data: levelEntries.map(([, s]) => +(s.total_2026 || 0).toFixed(1)) },
+                        { name: '2027 ($M)', data: levelEntries.map(([, s]) => +(s.total_2027 || 0).toFixed(1)) },
+                    ],
+                    xaxis: {
+                        categories: names,
+                        labels: { style: { colors: TXT } },
+                        axisBorder: { color: GRID_COLOR }, axisTicks: { color: GRID_COLOR }
+                    },
+                    colors: ['#FF8B42', '#4361EE', '#00E396'],
+                    fill: { opacity: 1 },
+                    plotOptions: { bar: { horizontal: false, columnWidth: '55%', borderRadius: 5 } },
+                    dataLabels: {
+                        enabled: true, formatter: v => '$' + v + 'm',
+                        style: { fontSize: '10px', colors: [TXT_BRIGHT] }
+                    },
+                    legend: { position: 'top', fontSize: '11px', labels: { colors: TXT } },
+                    yaxis: { labels: { formatter: v => '$' + v + 'm', style: { colors: TXT } } },
+                    tooltip: { ...baseTip, y: { formatter: v => '$' + v + 'm' } },
+                    grid: baseGrid,
+                }).render();
+            }
 
-        // ─── 4. Financial Forecast by Estimation Level ───
-        const levelEntries = Object.entries(estLevels);
-        if ($(finChartId) && levelEntries.length > 0) {
-            const names = levelEntries.map(([l]) => l);
-            new ApexCharts($(finChartId), {
-                chart: {
-                    type: 'bar', height: 340, background: 'transparent',
-                    foreColor: TXT, toolbar: { show: false }
-                },
-                series: [
-                    { name: 'Term ($M)', data: levelEntries.map(([, s]) => +(s.total_term_benefit || 0).toFixed(1)) },
-                    { name: '2026 ($M)', data: levelEntries.map(([, s]) => +(s.total_2026 || 0).toFixed(1)) },
-                    { name: '2027 ($M)', data: levelEntries.map(([, s]) => +(s.total_2027 || 0).toFixed(1)) },
-                ],
-                xaxis: {
-                    categories: names,
-                    labels: { style: { colors: TXT } },
-                    axisBorder: { color: GRID_COLOR }, axisTicks: { color: GRID_COLOR }
-                },
-                colors: ['#FF8B42', '#4361EE', '#00E396'],
-                fill: { opacity: 1 },
-                plotOptions: { bar: { horizontal: false, columnWidth: '55%', borderRadius: 5 } },
-                dataLabels: {
-                    enabled: true, formatter: v => '$' + v + 'm',
-                    style: { fontSize: '10px', colors: [TXT_BRIGHT] }
-                },
-                legend: { position: 'top', fontSize: '11px', labels: { colors: TXT } },
-                yaxis: { labels: { formatter: v => '$' + v + 'm', style: { colors: TXT } } },
-                tooltip: { ...baseTip, y: { formatter: v => '$' + v + 'm' } },
-                grid: baseGrid,
-            }).render();
-        }
-
-        // ─── 5. Pipeline Status Donut ───
-        const statusColors = {
-            'Completed': '#00E396', 'Contracting': '#3A86FF', 'Negotiations': '#FFB547',
-            'ICT': '#B39DDB', 'Hopper': '#48BFE3', 'Cancelled': '#FF4560',
-        };
-        const statusLabels = Object.keys(byStatus).filter(s => byStatus[s] > 0);
-        const statusValues = statusLabels.map(s => byStatus[s]);
-        if ($(pipeDonutId) && statusLabels.length > 0) {
-            new ApexCharts($(pipeDonutId), {
-                chart: {
-                    type: 'donut', height: 340, background: 'transparent',
-                    foreColor: TXT, toolbar: { show: false }
-                },
-                series: statusValues,
-                labels: statusLabels,
-                colors: statusLabels.map(l => statusColors[l] || '#6B67A0'),
-                fill: { opacity: 1 },
-                plotOptions: {
-                    pie: {
-                        donut: {
-                            size: '58%',
-                            labels: {
-                                show: true,
-                                name: { color: TXT_BRIGHT, fontSize: '13px' },
-                                value: { color: TXT_BRIGHT, fontSize: '20px', fontWeight: 700 },
-                                total: {
-                                    show: true, label: 'Total', color: TXT, fontSize: '13px',
-                                    fontWeight: 600,
-                                    formatter: w => w.globals.seriesTotals.reduce((a, b) => a + b, 0)
+            // ─── 5. Pipeline Status Donut ───
+            const statusColors = {
+                'Completed': '#00E396', 'Contracting': '#3A86FF', 'Negotiations': '#FFB547',
+                'ICT': '#B39DDB', 'Hopper': '#48BFE3', 'Cancelled': '#FF4560',
+            };
+            const statusLabels = Object.keys(byStatus).filter(s => byStatus[s] > 0);
+            const statusValues = statusLabels.map(s => byStatus[s]);
+            if ($(pipeDonutId) && statusLabels.length > 0) {
+                new ApexCharts($(pipeDonutId), {
+                    chart: {
+                        type: 'donut', height: 340, background: 'transparent',
+                        foreColor: TXT, toolbar: { show: false }
+                    },
+                    series: statusValues,
+                    labels: statusLabels,
+                    colors: statusLabels.map(l => statusColors[l] || '#6B67A0'),
+                    fill: { opacity: 1 },
+                    plotOptions: {
+                        pie: {
+                            donut: {
+                                size: '58%',
+                                labels: {
+                                    show: true,
+                                    name: { color: TXT_BRIGHT, fontSize: '13px' },
+                                    value: { color: TXT_BRIGHT, fontSize: '20px', fontWeight: 700 },
+                                    total: {
+                                        show: true, label: 'Total', color: TXT, fontSize: '13px',
+                                        fontWeight: 600,
+                                        formatter: w => w.globals.seriesTotals.reduce((a, b) => a + b, 0)
+                                    }
                                 }
                             }
                         }
-                    }
-                },
-                stroke: { show: true, width: 2, colors: ['#0A0842'] },
-                dataLabels: {
-                    enabled: true, formatter: val => val.toFixed(0) + '%',
-                    style: { fontSize: '11px', colors: [TXT_BRIGHT] },
-                    dropShadow: { enabled: false }
-                },
-                legend: {
-                    position: 'bottom', fontSize: '11px', labels: { colors: TXT },
-                    markers: { radius: 3 }
-                },
-            }).render();
-        }
-    }
-
-    // ═══════════════════════════════════════════════════
-    // SHOP VISIT RENDERER
-    // ═══════════════════════════════════════════════════
-
-    function _renderShopVisit(el, data, fname) {
-        const meta = data.metadata || {};
-        const shopVisits = data.shop_visits || [];
-        const maintenance = data.maintenance_actions || [];
-        const currentStatus = data.current_status || [];
-        const stats = data.statistics || {};
-
-        let html = '';
-        html += _sectionHeader('Trent Engine Shop Visit History', 'wrench', {
-            badge: 'SHOP VISIT', badgeColor: COLORS.orange
-        });
-
-        // Meta
-        html += '<div class="viz-customer-bar">';
-        html += `<div class="viz-info-chip"><b>Source:</b> ${_safe(meta.source_file)}</div>`;
-        if (meta.engine_models && meta.engine_models.length) html += `<div class="viz-info-chip"><b>Engine Models:</b> ${meta.engine_models.join(', ')}</div>`;
-        if (meta.operators && meta.operators.length) html += `<div class="viz-info-chip"><b>Operators:</b> ${meta.operators.slice(0, 5).join(', ')}${meta.operators.length > 5 ? '...' : ''}</div>`;
-        html += '</div>';
-
-        // KPIs
-        html += '<div class="viz-kpi-grid viz-kpi-grid-4">';
-        html += _kpiCard('Engines Tracked', _fmtNumber(stats.total_engines_tracked || meta.total_engines), { icon: 'disc' });
-        html += _kpiCard('Shop Visits', _fmtNumber(stats.total_shop_visits || shopVisits.length), { icon: 'wrench', colorClass: 'kpi-warning' });
-        html += _kpiCard('Maintenance Actions', _fmtNumber(stats.total_maintenance || maintenance.length), { icon: 'settings' });
-        html += _kpiCard('Current Status', _fmtNumber(currentStatus.length), { icon: 'activity', colorClass: 'kpi-success' });
-        html += '</div>';
-
-        // Charts
-        const svTypeId = `sv-type-${Date.now()}`;
-        const svLocId = `sv-loc-${Date.now()}`;
-        html += `<div class="viz-chart-grid viz-chart-grid-2">
-            <div class="viz-chart-card"><div class="viz-chart-header">Shop Visit Types</div><div id="${svTypeId}" class="viz-chart-body"></div></div>
-            <div class="viz-chart-card"><div class="viz-chart-header">Shop Visit Locations</div><div id="${svLocId}" class="viz-chart-body"></div></div>
-        </div>`;
-
-        // Shop visits table
-        html += _sectionHeader('Shop Visit Events', 'table');
-        const headers = ['Serial No.', 'Event Date', 'Operator', 'Action Code', 'Rework Level', 'SV Type', 'SV Location', 'HSN', 'CSN'];
-        const rows = shopVisits.map(sv => [
-            sv.serial_number, sv.event_datetime, sv.operator, sv.action_code,
-            sv.rework_level, sv.sv_type, sv.sv_location, sv.hsn, sv.csn
-        ]);
-        html += _dataTable(headers, rows, { maxRows: 150 });
-
-        // Current status table
-        if (currentStatus.length > 0) {
-            html += _sectionHeader('Current Engine Status', 'activity');
-            const csHeaders = ['Serial No.', 'Part Number', 'Operator', 'Registration', 'HSN', 'CSN'];
-            const csRows = currentStatus.map(s => [s.serial_number, s.part_number, s.operator, s.registration, s.hsn, s.csn]);
-            html += _dataTable(csHeaders, csRows);
-        }
-
-        el.innerHTML = html;
-
-        // Charts
-        setTimeout(() => {
-            const svTypes = stats.sv_types || {};
-            const svLocs = stats.sv_locations || {};
-
-            if ($(svTypeId) && Object.keys(svTypes).length > 0) {
-                new ApexCharts($(svTypeId), {
-                    chart: { type: 'donut', height: 280, background: 'transparent' },
-                    series: Object.values(svTypes),
-                    labels: Object.keys(svTypes),
-                    colors: [COLORS.orange, COLORS.amber, COLORS.teal, COLORS.blue2, COLORS.purple],
-                    plotOptions: { pie: { donut: { size: '62%' } } },
-                    dataLabels: { enabled: false },
-                    legend: { position: 'bottom' },
-                    theme: { mode: 'light' },
+                    },
+                    stroke: { show: true, width: 2, colors: ['#0A0842'] },
+                    dataLabels: {
+                        enabled: true, formatter: val => val.toFixed(0) + '%',
+                        style: { fontSize: '11px', colors: [TXT_BRIGHT] },
+                        dropShadow: { enabled: false }
+                    },
+                    legend: {
+                        position: 'bottom', fontSize: '11px', labels: { colors: TXT },
+                        markers: { radius: 3 }
+                    },
                 }).render();
             }
-
-            if ($(svLocId) && Object.keys(svLocs).length > 0) {
-                const locLabels = Object.keys(svLocs);
-                const locValues = Object.values(svLocs);
-                new ApexCharts($(svLocId), {
-                    chart: { type: 'bar', height: 280, background: 'transparent' },
-                    series: [{ name: 'Visits', data: locValues }],
-                    xaxis: { categories: locLabels.map(l => _truncate(l, 15)) },
-                    colors: [COLORS.orange],
-                    plotOptions: { bar: { horizontal: true, borderRadius: 4, distributed: true } },
-                    dataLabels: { enabled: false },
-                    legend: { show: false }
-                }).render();
-            }
-        }, 50);
-    }
-
-    // ═══════════════════════════════════════════════════
-    // SVRG MASTER RENDERER
-    // ═══════════════════════════════════════════════════
-
-    function _renderSVRG(el, data, fname) {
-        const meta = data.metadata || {};
-        const claimsSummary = data.claims_summary || {};
-        const eventEntries = data.event_entries || {};
-        const claims = claimsSummary.claims || [];
-        const events = eventEntries.events || [];
-
-        let html = '';
-        html += _sectionHeader('SVRG Master — Guarantee Administration', 'shield-check', {
-            badge: 'SVRG', badgeColor: COLORS.purple
-        });
-
-        // Meta
-        html += '<div class="viz-customer-bar">';
-        if (meta.customer) html += `<div class="viz-info-chip"><b>Customer:</b> ${meta.customer}</div>`;
-        if (meta.engine_model) html += `<div class="viz-info-chip"><b>Engine Model:</b> ${meta.engine_model}</div>`;
-        html += `<div class="viz-info-chip"><b>Source:</b> ${_safe(meta.source_file)}</div>`;
-        html += '</div>';
-
-        // KPIs
-        html += '<div class="viz-kpi-grid viz-kpi-grid-5">';
-        html += _kpiCard('Total Claims', _fmtNumber(claimsSummary.total_claims || claims.length), { icon: 'file-check' });
-        html += _kpiCard('Total Credit Value', _fmtCurrency(claimsSummary.total_credit_value, '$'), { icon: 'credit-card', colorClass: 'kpi-success' });
-        html += _kpiCard('Total Events', _fmtNumber(eventEntries.total_events || events.length), { icon: 'alert-circle' });
-
-        const qualifications = eventEntries.qualifications || {};
-        const qualified = qualifications['Qualified'] || qualifications['qualified'] || 0;
-        html += _kpiCard('Qualified Events', _fmtNumber(qualified), { icon: 'check-circle', colorClass: 'kpi-success' });
-
-        const guaranteeTypes = eventEntries.guarantee_types || {};
-        html += _kpiCard('Guarantee Types', Object.keys(guaranteeTypes).filter(k => k !== 'Unknown').join(', ') || '—', { icon: 'shield' });
-        html += '</div>';
-
-        // Charts
-        const claimsChartId = `svrg-claims-${Date.now()}`;
-        const qualChartId = `svrg-qual-${Date.now()}`;
-        html += `<div class="viz-chart-grid viz-chart-grid-2">
-            <div class="viz-chart-card"><div class="viz-chart-header">Claims Over Time</div><div id="${claimsChartId}" class="viz-chart-body"></div></div>
-            <div class="viz-chart-card"><div class="viz-chart-header">Event Qualification</div><div id="${qualChartId}" class="viz-chart-body"></div></div>
-        </div>`;
-
-        // Claims table
-        if (claims.length > 0) {
-            html += _sectionHeader('Claims Summary', 'table');
-            const headers = ['Date', 'Year', 'Credit Ref', 'Guarantee', 'Credit Value', 'Cumulative'];
-            const rows = claims.map(c => [c.date, c.year, c.credit_ref, c.guarantee, c.credit_value, c.cumulative_value]);
-            html += _dataTable(headers, rows);
         }
 
-        // Events table
-        if (events.length > 0) {
-            html += _sectionHeader('Event Entries', 'clipboard-list');
-            const evHeaders = ['Event Type', 'Date', 'Engine Serial', 'Aircraft', 'Description', 'Qualification', 'Coverage'];
-            const evRows = events.map(e => [
-                e.event_type, e.date, e.engine_serial, e.aircraft,
-                _truncate(e.description, 40), e.qualification, e.guarantee_coverage
-            ]);
-            html += _dataTable(evHeaders, evRows);
-        }
+        // ═══════════════════════════════════════════════════
+        // SHOP VISIT RENDERER
+        // ═══════════════════════════════════════════════════
 
-        // Available sheets info (SVRG files have many specialized sheets)
-        const availSheets = data.available_sheets || {};
-        const sheetNames = Object.keys(availSheets);
-        if (sheetNames.length > 0) {
-            html += _sectionHeader('Available Data Sheets', 'database');
-            const shHeaders = ['Sheet Name', 'Rows', 'Columns'];
-            const shRows = sheetNames.map(name => [
-                name, availSheets[name].row_count, availSheets[name].col_count
-            ]);
-            html += _dataTable(shHeaders, shRows);
-        }
+        function _renderShopVisit(el, data, fname) {
+            const meta = data.metadata || {};
+            const masterSV = data.shop_visits || [];
+            const maintenance = data.maintenance_actions || [];
+            const currentStatus = data.current_status || [];
+            const stats = data.statistics || {};
 
-        el.innerHTML = html;
+            const uniqueOperators = [...new Set(masterSV.map(s => s.operator).filter(Boolean))].sort();
+            const uniqueSVTypes = [...new Set(masterSV.map(s => s.sv_type).filter(Boolean))].sort();
+            const uniqueSVLocs = [...new Set(masterSV.map(s => s.sv_location).filter(Boolean))].sort();
 
-        // Charts
-        setTimeout(() => {
-            // Claims timeline
-            if ($(claimsChartId) && claims.length > 0) {
-                const claimDates = claims.filter(c => c.date).map(c => c.date);
-                const claimValues = claims.filter(c => c.date).map(c => c.credit_value || 0);
-                const cumValues = claims.filter(c => c.date).map(c => c.cumulative_value || 0);
+            const { html: filterBarHtml, barId: filterBarId } = _globalFilterBar({
+                fields: [
+                    { key: 'operator', label: 'Operator', values: uniqueOperators },
+                    { key: 'sv_type', label: 'SV Type', values: uniqueSVTypes },
+                    { key: 'sv_location', label: 'Location', values: uniqueSVLocs },
+                ],
+            });
 
-                new ApexCharts($(claimsChartId), {
-                    chart: { type: 'line', height: 280, background: 'transparent' },
-                    series: [
-                        { name: 'Credit Value', type: 'column', data: claimValues },
-                        { name: 'Cumulative', type: 'line', data: cumValues },
-                    ],
-                    xaxis: { categories: claimDates, labels: { rotate: -45, style: { fontSize: '10px' } } },
-                    colors: [COLORS.purple, COLORS.navy],
-                    stroke: { width: [0, 3] },
-                    plotOptions: { bar: { columnWidth: '50%', borderRadius: 3 } },
-                    dataLabels: { enabled: false },
-                    legend: { position: 'top' },
-                    theme: { mode: 'light' },
-                }).render();
-            }
+            const contentId = `sv-content-${Date.now()}`;
+            el.innerHTML = `${filterBarHtml}<div id="${contentId}"></div>`;
+            const barEl = document.getElementById(filterBarId);
+            if (barEl) barEl.classList.add('gfb-light');
 
-            // Qualification donut
-            if ($(qualChartId) && Object.keys(qualifications).length > 0) {
-                new ApexCharts($(qualChartId), {
-                    chart: { type: 'donut', height: 280, background: 'transparent' },
-                    series: Object.values(qualifications),
-                    labels: Object.keys(qualifications),
-                    colors: [COLORS.green, COLORS.red, COLORS.amber, COLORS.silver],
-                    plotOptions: { pie: { donut: { size: '62%' } } },
-                    dataLabels: { enabled: false },
-                    legend: { position: 'bottom' },
-                    theme: { mode: 'light' },
-                }).render();
-            }
-        }, 50);
-    }
+            const renderContent = (filteredSV) => {
+                const contentEl = $(contentId);
+                if (!contentEl) return;
 
-    // ═══════════════════════════════════════════════════
-    // UNKNOWN / FALLBACK RENDERER
-    // ═══════════════════════════════════════════════════
-
-    function _renderUnknown(el, data, fname) {
-        const sheets = data.sheets || {};
-        const sheetNames = Object.keys(sheets);
-
-        let html = '';
-        html += _sectionHeader('Data File — Generic View', 'file-spreadsheet', {
-            badge: data.file_type || 'UNKNOWN', badgeColor: '#9E9E9E'
-        });
-
-        html += '<div class="viz-customer-bar">';
-        html += `<div class="viz-info-chip"><b>Source:</b> ${_safe(fname)}</div>`;
-        html += `<div class="viz-info-chip"><b>Sheets:</b> ${sheetNames.length}</div>`;
-        html += '</div>';
-
-        if (data.errors && data.errors.length > 0) {
-            html += `<div class="viz-warning-box"><i data-lucide="alert-triangle"></i> ${data.errors.join('; ')}</div>`;
-        }
-
-        sheetNames.forEach(sheetName => {
-            const sheet = sheets[sheetName];
-            const sheetHeaders = sheet.headers || [];
-            const sheetRows = sheet.rows || [];
-            html += _sectionHeader(`Sheet: ${sheetName}`, 'table', { badge: `${sheet.row_count || sheetRows.length} rows` });
-
-            if (sheetRows.length > 0) {
-                const displayHeaders = sheetHeaders.slice(0, 15);
-                const displayRows = sheetRows.map(row => {
-                    return displayHeaders.map(h => row[h] != null ? row[h] : '');
+                // Recompute stats from filtered
+                const svTypeCounts = {};
+                const svLocCounts = {};
+                filteredSV.forEach(sv => {
+                    if (sv.sv_type) svTypeCounts[sv.sv_type] = (svTypeCounts[sv.sv_type] || 0) + 1;
+                    if (sv.sv_location) svLocCounts[sv.sv_location] = (svLocCounts[sv.sv_location] || 0) + 1;
                 });
-                html += _dataTable(displayHeaders, displayRows, { maxRows: 100 });
-            } else {
-                html += '<p class="viz-empty-msg">No data rows found in this sheet.</p>';
+
+                let html = '';
+                html += _sectionHeader('Trent Engine Shop Visit History', 'wrench', { badge: 'SHOP VISIT', badgeColor: COLORS.orange });
+
+                html += '<div class="viz-customer-bar">';
+                html += `<div class="viz-info-chip"><b>Source:</b> ${_safe(meta.source_file)}</div>`;
+                if (meta.engine_models && meta.engine_models.length) html += `<div class="viz-info-chip"><b>Engine Models:</b> ${meta.engine_models.join(', ')}</div>`;
+                html += `<div class="viz-info-chip"><b>Operators:</b> ${[...new Set(filteredSV.map(s => s.operator).filter(Boolean))].length}</div>`;
+                html += '</div>';
+
+                html += '<div class="viz-kpi-grid viz-kpi-grid-4">';
+                const uniqueSerials = new Set(filteredSV.map(s => s.serial_number).filter(Boolean));
+                html += _kpiCard('Engines Tracked', _fmtNumber(uniqueSerials.size || meta.total_engines), { icon: 'disc' });
+                html += _kpiCard('Shop Visits', _fmtNumber(filteredSV.length), { icon: 'wrench', colorClass: 'kpi-warning' });
+                html += _kpiCard('Maintenance Actions', _fmtNumber(stats.total_maintenance || maintenance.length), { icon: 'settings' });
+                html += _kpiCard('Current Status', _fmtNumber(currentStatus.length), { icon: 'activity', colorClass: 'kpi-success' });
+                html += '</div>';
+
+                const svTypeId = `sv-type-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+                const svLocId = `sv-loc-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+                html += `<div class="viz-chart-grid viz-chart-grid-2">
+                    <div class="viz-chart-card"><div class="viz-chart-header">Shop Visit Types</div><div id="${svTypeId}" class="viz-chart-body"></div></div>
+                    <div class="viz-chart-card"><div class="viz-chart-header">Shop Visit Locations</div><div id="${svLocId}" class="viz-chart-body"></div></div>
+                </div>`;
+
+                html += _sectionHeader('Shop Visit Events', 'table');
+                const headers = ['Serial No.', 'Event Date', 'Operator', 'Action Code', 'Rework Level', 'SV Type', 'SV Location', 'HSN', 'CSN'];
+                const rows = filteredSV.map(sv => [sv.serial_number, sv.event_datetime, sv.operator, sv.action_code, sv.rework_level, sv.sv_type, sv.sv_location, sv.hsn, sv.csn]);
+                const fdt = _filterableDataTable(headers, rows,
+                    [{ col: 2, label: 'Operator' }, { col: 5, label: 'SV Type' }, { col: 6, label: 'Location' }], { maxRows: 150 });
+                html += fdt.html;
+
+                if (currentStatus.length > 0) {
+                    html += _sectionHeader('Current Engine Status', 'activity');
+                    const csHeaders = ['Serial No.', 'Part Number', 'Operator', 'Registration', 'HSN', 'CSN'];
+                    const csRows = currentStatus.map(s => [s.serial_number, s.part_number, s.operator, s.registration, s.hsn, s.csn]);
+                    html += _dataTable(csHeaders, csRows);
+                }
+
+                contentEl.innerHTML = html;
+                if (window.lucide) window.lucide.createIcons();
+                _wireFilterableDataTable(fdt.containerId, headers, rows, { maxRows: 150 });
+                _makeTablesSortable(contentEl);
+
+                setTimeout(() => {
+                    if ($(svTypeId) && Object.keys(svTypeCounts).length > 0) {
+                        new ApexCharts($(svTypeId), {
+                            chart: { type: 'donut', height: 280, background: 'transparent' },
+                            series: Object.values(svTypeCounts),
+                            labels: Object.keys(svTypeCounts),
+                            colors: [COLORS.orange, COLORS.amber, COLORS.teal, COLORS.blue2, COLORS.purple],
+                            plotOptions: { pie: { donut: { size: '62%' } } },
+                            dataLabels: { enabled: false },
+                            legend: { position: 'bottom' },
+                            theme: { mode: 'light' },
+                        }).render();
+                    }
+                    if ($(svLocId) && Object.keys(svLocCounts).length > 0) {
+                        new ApexCharts($(svLocId), {
+                            chart: { type: 'bar', height: 280, background: 'transparent' },
+                            series: [{ name: 'Visits', data: Object.values(svLocCounts) }],
+                            xaxis: { categories: Object.keys(svLocCounts).map(l => _truncate(l, 15)) },
+                            colors: [COLORS.orange],
+                            plotOptions: { bar: { horizontal: true, borderRadius: 4, distributed: true } },
+                            dataLabels: { enabled: false },
+                            legend: { show: false }
+                        }).render();
+                    }
+                }, 50);
+            };
+
+            renderContent(masterSV);
+            _wireGlobalFilterBar(filterBarId, null, (filters) => {
+                let filtered = masterSV;
+                if (filters.operator) filtered = filtered.filter(s => s.operator === filters.operator);
+                if (filters.sv_type) filtered = filtered.filter(s => s.sv_type === filters.sv_type);
+                if (filters.sv_location) filtered = filtered.filter(s => s.sv_location === filters.sv_location);
+                renderContent(filtered);
+            });
+        }
+
+        // ═══════════════════════════════════════════════════
+        // SVRG MASTER RENDERER
+        // ═══════════════════════════════════════════════════
+
+        function _renderSVRG(el, data, fname) {
+            const meta = data.metadata || {};
+            const claimsSummary = data.claims_summary || {};
+            const eventEntries = data.event_entries || {};
+            const masterClaims = claimsSummary.claims || [];
+            const masterEvents = eventEntries.events || [];
+
+            const uniqueGuarantees = [...new Set([
+                ...masterClaims.map(c => c.guarantee),
+                ...masterEvents.map(e => e.guarantee_coverage)
+            ].filter(Boolean))].sort();
+            const uniqueQualifications = [...new Set(masterEvents.map(e => e.qualification).filter(Boolean))].sort();
+            const uniqueYears = [...new Set(masterClaims.map(c => c.year).filter(Boolean))].sort();
+
+            const { html: filterBarHtml, barId: filterBarId } = _globalFilterBar({
+                fields: [
+                    { key: 'guarantee', label: 'Guarantee', values: uniqueGuarantees },
+                    { key: 'qualification', label: 'Qualification', values: uniqueQualifications },
+                    { key: 'year', label: 'Year', values: uniqueYears },
+                ],
+            });
+
+            const contentId = `svrg-content-${Date.now()}`;
+            el.innerHTML = `${filterBarHtml}<div id="${contentId}"></div>`;
+            const barEl = document.getElementById(filterBarId);
+            if (barEl) barEl.classList.add('gfb-light');
+
+            const renderContent = (filteredClaims, filteredEvents) => {
+                const contentEl = $(contentId);
+                if (!contentEl) return;
+
+                const qualCounts = {};
+                filteredEvents.forEach(e => {
+                    const q = e.qualification || 'Unknown';
+                    qualCounts[q] = (qualCounts[q] || 0) + 1;
+                });
+                const qualifiedCount = qualCounts['Qualified'] || qualCounts['qualified'] || 0;
+                const totalCreditVal = filteredClaims.reduce((s, c) => s + (c.credit_value || 0), 0);
+
+                let html = '';
+                html += _sectionHeader('SVRG Master — Guarantee Administration', 'shield-check', { badge: 'SVRG', badgeColor: COLORS.purple });
+
+                html += '<div class="viz-customer-bar">';
+                if (meta.customer) html += `<div class="viz-info-chip"><b>Customer:</b> ${meta.customer}</div>`;
+                if (meta.engine_model) html += `<div class="viz-info-chip"><b>Engine Model:</b> ${meta.engine_model}</div>`;
+                html += `<div class="viz-info-chip"><b>Source:</b> ${_safe(meta.source_file)}</div>`;
+                html += '</div>';
+
+                html += '<div class="viz-kpi-grid viz-kpi-grid-5">';
+                html += _kpiCard('Total Claims', _fmtNumber(filteredClaims.length), { icon: 'file-check' });
+                html += _kpiCard('Total Credit Value', _fmtCurrency(totalCreditVal, '$'), { icon: 'credit-card', colorClass: 'kpi-success' });
+                html += _kpiCard('Total Events', _fmtNumber(filteredEvents.length), { icon: 'alert-circle' });
+                html += _kpiCard('Qualified Events', _fmtNumber(qualifiedCount), { icon: 'check-circle', colorClass: 'kpi-success' });
+                const gTypes = [...new Set(filteredClaims.map(c => c.guarantee).filter(v => v && v !== 'Unknown'))];
+                html += _kpiCard('Guarantee Types', gTypes.join(', ') || '—', { icon: 'shield' });
+                html += '</div>';
+
+                const claimsChartId = `svrg-claims-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+                const qualChartId = `svrg-qual-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+                html += `<div class="viz-chart-grid viz-chart-grid-2">
+                    <div class="viz-chart-card"><div class="viz-chart-header">Claims Over Time</div><div id="${claimsChartId}" class="viz-chart-body"></div></div>
+                    <div class="viz-chart-card"><div class="viz-chart-header">Event Qualification</div><div id="${qualChartId}" class="viz-chart-body"></div></div>
+                </div>`;
+
+                if (filteredClaims.length > 0) {
+                    html += _sectionHeader('Claims Summary', 'table');
+                    const cHeaders = ['Date', 'Year', 'Credit Ref', 'Guarantee', 'Credit Value', 'Cumulative'];
+                    const cRows = filteredClaims.map(c => [c.date, c.year, c.credit_ref, c.guarantee, c.credit_value, c.cumulative_value]);
+                    const cFdt = _filterableDataTable(cHeaders, cRows,
+                        [{ col: 3, label: 'Guarantee' }, { col: 1, label: 'Year' }]);
+                    html += cFdt.html;
+                }
+
+                if (filteredEvents.length > 0) {
+                    html += _sectionHeader('Event Entries', 'clipboard-list');
+                    const eHeaders = ['Event Type', 'Date', 'Engine Serial', 'Aircraft', 'Description', 'Qualification', 'Coverage'];
+                    const eRows = filteredEvents.map(e => [e.event_type, e.date, e.engine_serial, e.aircraft, _truncate(e.description, 40), e.qualification, e.guarantee_coverage]);
+                    const eFdt = _filterableDataTable(eHeaders, eRows,
+                        [{ col: 5, label: 'Qualification' }, { col: 6, label: 'Coverage' }]);
+                    html += eFdt.html;
+                }
+
+                const availSheets = data.available_sheets || {};
+                const sheetNames = Object.keys(availSheets);
+                if (sheetNames.length > 0) {
+                    html += _sectionHeader('Available Data Sheets', 'database');
+                    const shHeaders = ['Sheet Name', 'Rows', 'Columns'];
+                    const shRows = sheetNames.map(name => [name, availSheets[name].row_count, availSheets[name].col_count]);
+                    html += _dataTable(shHeaders, shRows);
+                }
+
+                contentEl.innerHTML = html;
+                if (window.lucide) window.lucide.createIcons();
+                _makeTablesSortable(contentEl);
+
+                // Wire filterable tables
+                contentEl.querySelectorAll('.opp-table-filter-bar').forEach(bar => {
+                    const cid = bar.id;
+                    // We need the headers/rows from above; use data attributes approach
+                    // For simplicity, re-wire based on the IDs we just created
+                });
+                if (filteredClaims.length > 0) {
+                    const cHeaders = ['Date', 'Year', 'Credit Ref', 'Guarantee', 'Credit Value', 'Cumulative'];
+                    const cRows = filteredClaims.map(c => [c.date, c.year, c.credit_ref, c.guarantee, c.credit_value, c.cumulative_value]);
+                    const bars = contentEl.querySelectorAll('.opp-table-filter-bar');
+                    if (bars[0]) _wireFilterableDataTable(bars[0].id, cHeaders, cRows);
+                }
+                if (filteredEvents.length > 0) {
+                    const eHeaders = ['Event Type', 'Date', 'Engine Serial', 'Aircraft', 'Description', 'Qualification', 'Coverage'];
+                    const eRows = filteredEvents.map(e => [e.event_type, e.date, e.engine_serial, e.aircraft, _truncate(e.description, 40), e.qualification, e.guarantee_coverage]);
+                    const bars = contentEl.querySelectorAll('.opp-table-filter-bar');
+                    const idx = filteredClaims.length > 0 ? 1 : 0;
+                    if (bars[idx]) _wireFilterableDataTable(bars[idx].id, eHeaders, eRows);
+                }
+
+                setTimeout(() => {
+                    if ($(claimsChartId) && filteredClaims.length > 0) {
+                        const claimDates = filteredClaims.filter(c => c.date).map(c => c.date);
+                        const claimValues = filteredClaims.filter(c => c.date).map(c => c.credit_value || 0);
+                        const cumValues = filteredClaims.filter(c => c.date).map(c => c.cumulative_value || 0);
+                        new ApexCharts($(claimsChartId), {
+                            chart: { type: 'line', height: 280, background: 'transparent' },
+                            series: [
+                                { name: 'Credit Value', type: 'column', data: claimValues },
+                                { name: 'Cumulative', type: 'line', data: cumValues },
+                            ],
+                            xaxis: { categories: claimDates, labels: { rotate: -45, style: { fontSize: '10px' } } },
+                            colors: [COLORS.purple, COLORS.navy],
+                            stroke: { width: [0, 3] },
+                            plotOptions: { bar: { columnWidth: '50%', borderRadius: 3 } },
+                            dataLabels: { enabled: false },
+                            legend: { position: 'top' },
+                            theme: { mode: 'light' },
+                        }).render();
+                    }
+                    if ($(qualChartId) && Object.keys(qualCounts).length > 0) {
+                        new ApexCharts($(qualChartId), {
+                            chart: { type: 'donut', height: 280, background: 'transparent' },
+                            series: Object.values(qualCounts),
+                            labels: Object.keys(qualCounts),
+                            colors: [COLORS.green, COLORS.red, COLORS.amber, COLORS.silver],
+                            plotOptions: { pie: { donut: { size: '62%' } } },
+                            dataLabels: { enabled: false },
+                            legend: { position: 'bottom' },
+                            theme: { mode: 'light' },
+                        }).render();
+                    }
+                }, 50);
+            };
+
+            renderContent(masterClaims, masterEvents);
+            _wireGlobalFilterBar(filterBarId, null, (filters) => {
+                let filteredC = masterClaims;
+                let filteredE = masterEvents;
+                if (filters.guarantee) {
+                    filteredC = filteredC.filter(c => c.guarantee === filters.guarantee);
+                    filteredE = filteredE.filter(e => e.guarantee_coverage === filters.guarantee);
+                }
+                if (filters.qualification) filteredE = filteredE.filter(e => e.qualification === filters.qualification);
+                if (filters.year) filteredC = filteredC.filter(c => String(c.year) === String(filters.year));
+                renderContent(filteredC, filteredE);
+            });
+        }
+
+        // ═══════════════════════════════════════════════════
+        // UNKNOWN / FALLBACK RENDERER
+        // ═══════════════════════════════════════════════════
+
+        function _renderUnknown(el, data, fname) {
+            const sheets = data.sheets || {};
+            const sheetNames = Object.keys(sheets);
+
+            let html = '';
+            html += _sectionHeader('Data File — Generic View', 'file-spreadsheet', {
+                badge: data.file_type || 'UNKNOWN', badgeColor: '#9E9E9E'
+            });
+
+            html += '<div class="viz-customer-bar">';
+            html += `<div class="viz-info-chip"><b>Source:</b> ${_safe(fname)}</div>`;
+            html += `<div class="viz-info-chip"><b>Sheets:</b> ${sheetNames.length}</div>`;
+            html += '</div>';
+
+            if (data.errors && data.errors.length > 0) {
+                html += `<div class="viz-warning-box"><i data-lucide="alert-triangle"></i> ${data.errors.join('; ')}</div>`;
             }
-        });
 
-        el.innerHTML = html;
-    }
+            sheetNames.forEach(sheetName => {
+                const sheet = sheets[sheetName];
+                const sheetHeaders = sheet.headers || [];
+                const sheetRows = sheet.rows || [];
+                html += _sectionHeader(`Sheet: ${sheetName}`, 'table', { badge: `${sheet.row_count || sheetRows.length} rows` });
 
-    // ═══════════════════════════════════════════════════
-    // ERROR RENDERER
-    // ═══════════════════════════════════════════════════
+                if (sheetRows.length > 0) {
+                    const displayHeaders = sheetHeaders.slice(0, 15);
+                    const displayRows = sheetRows.map(row => {
+                        return displayHeaders.map(h => row[h] != null ? row[h] : '');
+                    });
+                    html += _dataTable(displayHeaders, displayRows, { maxRows: 100 });
+                } else {
+                    html += '<p class="viz-empty-msg">No data rows found in this sheet.</p>';
+                }
+            });
 
-    function _renderError(el, data, fname) {
-        const errors = data.errors || ['Unknown error'];
-        el.innerHTML = `
+            el.innerHTML = html;
+        }
+
+        // ═══════════════════════════════════════════════════
+        // ERROR RENDERER
+        // ═══════════════════════════════════════════════════
+
+        function _renderError(el, data, fname) {
+            const errors = data.errors || ['Unknown error'];
+            el.innerHTML = `
             ${_sectionHeader('Parse Error', 'alert-triangle')}
             <div class="viz-error-card">
                 <p><b>File:</b> ${_safe(fname)}</p>
                 <ul>${errors.map(e => `<li>${e}</li>`).join('')}</ul>
             </div>`;
-    }
+        }
 
-    // ═══════════════════════════════════════════════════
-    // CROSS-REFERENCE PANEL
-    // ═══════════════════════════════════════════════════
+        // ═══════════════════════════════════════════════════
+        // CROSS-REFERENCE PANEL
+        // ═══════════════════════════════════════════════════
 
-    function _renderCrossRefHints(el, filesData) {
-        if (!el) return;
+        function _renderCrossRefHints(el, filesData) {
+            if (!el) return;
 
-        // Simple cross-reference: find shared customers, references across files
-        const fileEntries = Object.entries(filesData);
-        const customersByFile = {};
-        fileEntries.forEach(([fname, data]) => {
-            const customers = new Set();
-            // SOA
-            if (data.metadata && data.metadata.customer_name) customers.add(data.metadata.customer_name);
-            if (data.metadata && data.metadata.customer) customers.add(data.metadata.customer);
-            // Opportunity
-            if (data.summary && data.summary.by_customer) {
-                Object.keys(data.summary.by_customer).forEach(c => customers.add(c));
-            }
-            customersByFile[fname] = customers;
-        });
+            // Simple cross-reference: find shared customers, references across files
+            const fileEntries = Object.entries(filesData);
+            const customersByFile = {};
+            fileEntries.forEach(([fname, data]) => {
+                const customers = new Set();
+                // SOA
+                if (data.metadata && data.metadata.customer_name) customers.add(data.metadata.customer_name);
+                if (data.metadata && data.metadata.customer) customers.add(data.metadata.customer);
+                // Opportunity
+                if (data.summary && data.summary.by_customer) {
+                    Object.keys(data.summary.by_customer).forEach(c => customers.add(c));
+                }
+                customersByFile[fname] = customers;
+            });
 
-        // Find common customers
-        const allCustomers = new Set();
-        Object.values(customersByFile).forEach(set => set.forEach(c => allCustomers.add(c)));
+            // Find common customers
+            const allCustomers = new Set();
+            Object.values(customersByFile).forEach(set => set.forEach(c => allCustomers.add(c)));
 
-        const sharedCustomers = [];
-        allCustomers.forEach(c => {
-            const files = fileEntries.filter(([fname]) => customersByFile[fname] && customersByFile[fname].has(c)).map(([fname]) => fname);
-            if (files.length > 1) sharedCustomers.push({ customer: c, files });
-        });
+            const sharedCustomers = [];
+            allCustomers.forEach(c => {
+                const files = fileEntries.filter(([fname]) => customersByFile[fname] && customersByFile[fname].has(c)).map(([fname]) => fname);
+                if (files.length > 1) sharedCustomers.push({ customer: c, files });
+            });
 
-        let html = _sectionHeader('Cross-File References', 'link-2');
+            let html = _sectionHeader('Cross-File References', 'link-2');
 
-        if (sharedCustomers.length > 0) {
-            html += '<div class="viz-crossref-grid">';
-            sharedCustomers.forEach(({ customer, files }) => {
-                html += `<div class="viz-crossref-card">
+            if (sharedCustomers.length > 0) {
+                html += '<div class="viz-crossref-grid">';
+                sharedCustomers.forEach(({ customer, files }) => {
+                    html += `<div class="viz-crossref-card">
                     <div class="viz-crossref-key"><i data-lucide="user"></i> ${customer}</div>
                     <div class="viz-crossref-files">${files.map(f => `<span class="viz-crossref-file">${_truncate(f, 25)}</span>`).join('')}</div>
                 </div>`;
+                });
+                html += '</div>';
+            } else {
+                html += '<p class="viz-empty-msg">No shared references found across uploaded files.</p>';
+            }
+
+            // File type summary
+            html += '<div class="viz-kpi-grid viz-kpi-grid-3" style="margin-top:16px;">';
+            const typeCount = {};
+            fileEntries.forEach(([, data]) => {
+                const ft = data.file_type || 'UNKNOWN';
+                typeCount[ft] = (typeCount[ft] || 0) + 1;
+            });
+            Object.entries(typeCount).forEach(([ft, count]) => {
+                const meta = FILE_TYPE_META[ft] || FILE_TYPE_META.UNKNOWN;
+                html += _kpiCard(meta.label, `${count} file(s)`, { icon: meta.icon });
             });
             html += '</div>';
-        } else {
-            html += '<p class="viz-empty-msg">No shared references found across uploaded files.</p>';
+
+            el.innerHTML = html;
         }
 
-        // File type summary
-        html += '<div class="viz-kpi-grid viz-kpi-grid-3" style="margin-top:16px;">';
-        const typeCount = {};
-        fileEntries.forEach(([, data]) => {
-            const ft = data.file_type || 'UNKNOWN';
-            typeCount[ft] = (typeCount[ft] || 0) + 1;
-        });
-        Object.entries(typeCount).forEach(([ft, count]) => {
-            const meta = FILE_TYPE_META[ft] || FILE_TYPE_META.UNKNOWN;
-            html += _kpiCard(meta.label, `${count} file(s)`, { icon: meta.icon });
-        });
-        html += '</div>';
+        // ═══════════════════════════════════════════════════
+        // ANIMATIONS
+        // ═══════════════════════════════════════════════════
 
-        el.innerHTML = html;
-    }
+        function _animateVizEntrance() {
+            if (!window.gsap) return;
+            // Use gsap.fromTo with clearProps to avoid leaving stale inline styles
+            // that interfere with ApexCharts rendering inside these containers
+            gsap.fromTo('.viz-section',
+                { opacity: 0, y: 30 },
+                { opacity: 1, y: 0, duration: 0.5, stagger: 0.1, ease: 'power2.out', clearProps: 'all' }
+            );
+            gsap.fromTo('.viz-kpi-card',
+                { opacity: 0, y: 20, scale: 0.95 },
+                { opacity: 1, y: 0, scale: 1, duration: 0.4, stagger: 0.05, ease: 'back.out(1.5)', delay: 0.1, clearProps: 'all' }
+            );
+            gsap.fromTo('.viz-chart-card',
+                { opacity: 0, y: 20 },
+                { opacity: 1, y: 0, duration: 0.5, stagger: 0.08, ease: 'power2.out', delay: 0.15, clearProps: 'all' }
+            );
+        }
 
-    // ═══════════════════════════════════════════════════
-    // ANIMATIONS
-    // ═══════════════════════════════════════════════════
+        // ═══════════════════════════════════════════════════
+        // INTERACTIVITY
+        // ═══════════════════════════════════════════════════
 
-    function _animateVizEntrance() {
-        if (!window.gsap) return;
-        // Use gsap.fromTo with clearProps to avoid leaving stale inline styles
-        // that interfere with ApexCharts rendering inside these containers
-        gsap.fromTo('.viz-section',
-            { opacity: 0, y: 30 },
-            { opacity: 1, y: 0, duration: 0.5, stagger: 0.1, ease: 'power2.out', clearProps: 'all' }
-        );
-        gsap.fromTo('.viz-kpi-card',
-            { opacity: 0, y: 20, scale: 0.95 },
-            { opacity: 1, y: 0, scale: 1, duration: 0.4, stagger: 0.05, ease: 'back.out(1.5)', delay: 0.1, clearProps: 'all' }
-        );
-        gsap.fromTo('.viz-chart-card',
-            { opacity: 0, y: 20 },
-            { opacity: 1, y: 0, duration: 0.5, stagger: 0.08, ease: 'power2.out', delay: 0.15, clearProps: 'all' }
-        );
-    }
+        function _makeTablesSortable(containerElement) {
+            if (!containerElement) return;
+            const tables = containerElement.querySelectorAll('.viz-data-table');
+            tables.forEach(table => {
+                const headers = table.querySelectorAll('thead th.viz-sortable-th');
+                const tbody = table.querySelector('tbody');
+                if (!tbody || !headers.length) return;
 
-    // ═══════════════════════════════════════════════════
-    // INTERACTIVITY
-    // ═══════════════════════════════════════════════════
+                headers.forEach((th, index) => {
+                    th.addEventListener('click', () => {
+                        const isAsc = th.classList.contains('sort-asc');
 
-    function _makeTablesSortable(containerElement) {
-        if (!containerElement) return;
-        const tables = containerElement.querySelectorAll('.viz-data-table');
-        tables.forEach(table => {
-            const headers = table.querySelectorAll('thead th.viz-sortable-th');
-            const tbody = table.querySelector('tbody');
-            if (!tbody || !headers.length) return;
+                        headers.forEach(h => {
+                            h.classList.remove('sort-asc', 'sort-desc');
+                        });
 
-            headers.forEach((th, index) => {
-                th.addEventListener('click', () => {
-                    const isAsc = th.classList.contains('sort-asc');
+                        const direction = isAsc ? 'desc' : 'asc';
+                        th.classList.add(`sort-${direction}`);
 
-                    headers.forEach(h => {
-                        h.classList.remove('sort-asc', 'sort-desc');
+                        const rows = Array.from(tbody.querySelectorAll('tr'));
+
+                        rows.sort((a, b) => {
+                            const cellA = a.children[index];
+                            const cellB = b.children[index];
+                            if (!cellA || !cellB) return 0;
+
+                            const rawA = cellA.getAttribute('data-raw');
+                            const rawB = cellB.getAttribute('data-raw');
+
+                            const numA = Number(rawA);
+                            const numB = Number(rawB);
+                            const isNumA = rawA !== '' && !isNaN(numA);
+                            const isNumB = rawB !== '' && !isNaN(numB);
+
+                            let cmp = 0;
+                            if (isNumA && isNumB) {
+                                cmp = numA - numB;
+                            } else {
+                                cmp = String(rawA).toLowerCase().localeCompare(String(rawB).toLowerCase());
+                            }
+
+                            return direction === 'asc' ? cmp : -cmp;
+                        });
+
+                        // Re-append sorted rows
+                        rows.forEach(row => tbody.appendChild(row));
                     });
-
-                    const direction = isAsc ? 'desc' : 'asc';
-                    th.classList.add(`sort-${direction}`);
-
-                    const rows = Array.from(tbody.querySelectorAll('tr'));
-
-                    rows.sort((a, b) => {
-                        const cellA = a.children[index];
-                        const cellB = b.children[index];
-                        if (!cellA || !cellB) return 0;
-
-                        const rawA = cellA.getAttribute('data-raw');
-                        const rawB = cellB.getAttribute('data-raw');
-
-                        const numA = Number(rawA);
-                        const numB = Number(rawB);
-                        const isNumA = rawA !== '' && !isNaN(numA);
-                        const isNumB = rawB !== '' && !isNaN(numB);
-
-                        let cmp = 0;
-                        if (isNumA && isNumB) {
-                            cmp = numA - numB;
-                        } else {
-                            cmp = String(rawA).toLowerCase().localeCompare(String(rawB).toLowerCase());
-                        }
-
-                        return direction === 'asc' ? cmp : -cmp;
-                    });
-
-                    // Re-append sorted rows
-                    rows.forEach(row => tbody.appendChild(row));
                 });
             });
-        });
-    }
+        }
 
-    // ═══════════════════════════════════════════════════
-    // PUBLIC
-    // ═══════════════════════════════════════════════════
+        // ═══════════════════════════════════════════════════
+        // PUBLIC
+        // ═══════════════════════════════════════════════════
 
-    return {
-        renderVisualizer,
-        getFileTypeMeta,
-        FILE_TYPE_META,
-    };
+        return {
+            renderVisualizer,
+            getFileTypeMeta,
+            FILE_TYPE_META,
+        };
 
-})();
+    })();
