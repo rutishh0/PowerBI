@@ -95,7 +95,7 @@ CORS(app)
 # ── Feature Flags ──────────────────────────────────────────
 # Set ENABLE_EXTRA_FEATURES to True to re-enable AI chat, file vault,
 # comparison mode, and the secret admin chat button.
-ENABLE_EXTRA_FEATURES = False
+ENABLE_EXTRA_FEATURES = true
 
 FEATURE_FLAGS = {
     "show_ai":          ENABLE_EXTRA_FEATURES,
