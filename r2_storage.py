@@ -132,3 +132,89 @@ def list_r2_objects(prefix="uploads/", max_keys=100):
     except ClientError as e:
         print(f"R2 list error: {e}")
         return []
+
+
+# ─────────────────────────────────────────────────────────────
+# S3 MULTIPART UPLOAD (streams chunks directly to R2, no reassembly)
+# ─────────────────────────────────────────────────────────────
+
+def generate_r2_key(original_filename):
+    """Generate a unique R2 key for a file."""
+    now = datetime.now()
+    prefix = now.strftime("uploads/%Y-%m")
+    unique_id = uuid.uuid4().hex[:12]
+    safe_name = original_filename.replace(" ", "_").replace("/", "_").replace("\\", "_")
+    return f"{prefix}/{unique_id}_{safe_name}"
+
+
+def create_multipart_upload(r2_key):
+    """Start a multipart upload on R2. Returns the UploadId or None."""
+    client = get_r2_client()
+    if not client:
+        return None
+
+    try:
+        response = client.create_multipart_upload(Bucket=R2_BUCKET_NAME, Key=r2_key)
+        upload_id = response["UploadId"]
+        print(f"Multipart upload started: {r2_key} (UploadId={upload_id[:16]}...)")
+        return upload_id
+    except ClientError as e:
+        print(f"R2 create_multipart_upload error: {e}")
+        return None
+
+
+def upload_part(r2_key, upload_id, part_number, part_bytes):
+    """Upload a single part. Returns ETag or None."""
+    client = get_r2_client()
+    if not client:
+        return None
+
+    try:
+        response = client.upload_part(
+            Bucket=R2_BUCKET_NAME,
+            Key=r2_key,
+            UploadId=upload_id,
+            PartNumber=part_number,
+            Body=part_bytes,
+        )
+        etag = response["ETag"]
+        print(f"  Part {part_number} uploaded ({len(part_bytes)} bytes, ETag={etag})")
+        return etag
+    except ClientError as e:
+        print(f"R2 upload_part error (part {part_number}): {e}")
+        return None
+
+
+def complete_multipart_upload(r2_key, upload_id, parts):
+    """Complete multipart upload. parts = [{"PartNumber": int, "ETag": str}, ...]"""
+    client = get_r2_client()
+    if not client:
+        return False
+
+    try:
+        client.complete_multipart_upload(
+            Bucket=R2_BUCKET_NAME,
+            Key=r2_key,
+            UploadId=upload_id,
+            MultipartUpload={"Parts": parts},
+        )
+        print(f"Multipart upload completed: {r2_key} ({len(parts)} parts)")
+        return True
+    except ClientError as e:
+        print(f"R2 complete_multipart_upload error: {e}")
+        return False
+
+
+def abort_multipart_upload(r2_key, upload_id):
+    """Abort a multipart upload (cleanup on failure)."""
+    client = get_r2_client()
+    if not client:
+        return
+
+    try:
+        client.abort_multipart_upload(
+            Bucket=R2_BUCKET_NAME, Key=r2_key, UploadId=upload_id
+        )
+        print(f"Multipart upload aborted: {r2_key}")
+    except ClientError as e:
+        print(f"R2 abort_multipart_upload error: {e}")

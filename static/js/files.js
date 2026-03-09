@@ -133,6 +133,19 @@ const FilesModule = (() => {
         });
     }
 
+    /**
+     * Safely parse JSON from a response, handling 502/503 HTML error pages.
+     */
+    async function _safeJson(resp) {
+        const text = await resp.text();
+        try {
+            return JSON.parse(text);
+        } catch {
+            // Server returned HTML (e.g. 502/503 proxy error)
+            throw new Error(`Server error ${resp.status}: ${text.substring(0, 120)}`);
+        }
+    }
+
     async function _handleR2Upload(fileList) {
         const files = Array.from(fileList);
         const progressContainer = $('r2UploadProgressContainer');
@@ -163,8 +176,8 @@ const FilesModule = (() => {
             }
 
             try {
-                // Step 1: Init chunked upload
-                _updateR2Progress(0, totalChunks, 'Initializing upload session...');
+                // Step 1: Init multipart upload on R2
+                _updateR2Progress(0, totalChunks, 'Starting multipart upload on R2...');
                 const initResp = await fetch('/api/r2/chunk-init', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -172,23 +185,22 @@ const FilesModule = (() => {
                 });
 
                 if (!initResp.ok) {
-                    const err = await initResp.json();
-                    throw new Error(err.error || 'Failed to init upload');
+                    const err = await _safeJson(initResp);
+                    throw new Error(err.error || `Init failed (${initResp.status})`);
                 }
 
                 const { upload_id } = await initResp.json();
 
-                // Step 2: Send chunks sequentially
+                // Step 2: Send chunks sequentially — each goes directly to R2 as a multipart part
                 for (let i = 0; i < totalChunks; i++) {
                     const start = i * CHUNK_SIZE;
                     const end = Math.min(start + CHUNK_SIZE, file.size);
                     const blob = file.slice(start, end);
 
-                    // Read chunk as ArrayBuffer then convert to base64
                     const arrayBuf = await blob.arrayBuffer();
                     const b64 = _arrayBufferToBase64(arrayBuf);
 
-                    _updateR2Progress(i, totalChunks, `Uploading chunk ${i + 1} of ${totalChunks}...`);
+                    _updateR2Progress(i, totalChunks, `Streaming part ${i + 1} of ${totalChunks} to R2...`);
 
                     const chunkResp = await fetch('/api/r2/chunk-upload', {
                         method: 'POST',
@@ -201,13 +213,13 @@ const FilesModule = (() => {
                     });
 
                     if (!chunkResp.ok) {
-                        const err = await chunkResp.json();
-                        throw new Error(err.error || `Chunk ${i} upload failed`);
+                        const err = await _safeJson(chunkResp);
+                        throw new Error(err.error || `Part ${i + 1} failed (${chunkResp.status})`);
                     }
                 }
 
-                // Step 3: Finalize
-                _updateR2Progress(totalChunks, totalChunks, 'Assembling & uploading to R2...');
+                // Step 3: Finalize — R2 assembles the parts server-side (no memory needed)
+                _updateR2Progress(totalChunks, totalChunks, 'Completing multipart upload on R2...');
 
                 const finalResp = await fetch('/api/r2/chunk-finalize', {
                     method: 'POST',
@@ -216,8 +228,8 @@ const FilesModule = (() => {
                 });
 
                 if (!finalResp.ok) {
-                    const err = await finalResp.json();
-                    throw new Error(err.error || 'Finalize failed');
+                    const err = await _safeJson(finalResp);
+                    throw new Error(err.error || `Finalize failed (${finalResp.status})`);
                 }
 
                 const result = await finalResp.json();
@@ -231,6 +243,8 @@ const FilesModule = (() => {
                     const statusEl = $('r2UploadStatus');
                     if (statusEl) statusEl.innerHTML = `<span style="color:var(--rr-error);">Failed: ${error.message}</span>`;
                 }
+                // Stop processing remaining files if server crashed
+                break;
             }
         }
 
@@ -540,7 +554,7 @@ const FilesModule = (() => {
                 <td>
                     <div style="display:flex; gap: 8px;">
                         <a href="/api/r2/files/${file.id}" target="_blank" class="btn-ghost btn-sm" title="Download from R2">
-                            <i data-lucide="download-cloud"></i>
+                            <i data-lucide="download"></i>
                         </a>
                         <button class="btn-ghost btn-sm" style="color:#F6821F;" title="Parse & Load to Dashboard" onclick="FilesModule.parseR2File(${file.id}, '${file.filename.replace(/'/g, "\\'")}')">
                             <i data-lucide="play-circle"></i>

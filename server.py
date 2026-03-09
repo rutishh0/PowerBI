@@ -37,12 +37,16 @@ except ImportError:
 from pdf_export import generate_pdf_report
 from ai_chat import build_system_prompt, call_openrouter
 from db import init_db, save_file_to_db
-from r2_storage import upload_to_r2, download_from_r2, delete_from_r2
+from r2_storage import (
+    upload_to_r2, download_from_r2, delete_from_r2,
+    generate_r2_key, create_multipart_upload, upload_part,
+    complete_multipart_upload, abort_multipart_upload, R2_PUBLIC_URL,
+)
 import math
 import datetime as dt
 
-# In-memory buffer for chunked uploads: { upload_id: { chunks: {idx: bytes}, total: int, filename: str } }
-_chunk_buffers = {}
+# Tracks active multipart uploads: { session_upload_id: { r2_key, r2_upload_id, parts[], filename, total, file_size } }
+_multipart_sessions = {}
 
 def _sanitize_for_json(obj):
     """Recursively sanitize parsed data for JSON serialization.
@@ -92,7 +96,7 @@ def _sanitize_for_json(obj):
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "rr-soa-dashboard-" + uuid.uuid4().hex[:8])
-app.config["MAX_CONTENT_LENGTH"] = 200 * 1024 * 1024  # 200MB max upload (for R2 chunked reassembly)
+app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50MB per request (R2 chunks are ~11MB each)
 
 CORS(app)
 
@@ -539,7 +543,7 @@ def delete_file(file_id):
 @app.route("/api/r2/chunk-init", methods=["POST"])
 @login_required
 def r2_chunk_init():
-    """Initialize a chunked upload session. Returns an upload_id."""
+    """Start an S3 multipart upload on R2. Returns session_id for subsequent chunk uploads."""
     data = request.get_json(silent=True) or {}
     filename = data.get("filename")
     total_chunks = data.get("total_chunks")
@@ -547,31 +551,40 @@ def r2_chunk_init():
     if not filename or not total_chunks:
         return jsonify({"error": "filename and total_chunks required"}), 400
 
-    upload_id = uuid.uuid4().hex
-    _chunk_buffers[upload_id] = {
+    # Generate R2 key and start multipart upload
+    r2_key = generate_r2_key(filename)
+    r2_upload_id = create_multipart_upload(r2_key)
+    if not r2_upload_id:
+        return jsonify({"error": "Failed to start multipart upload on R2"}), 500
+
+    session_id = uuid.uuid4().hex
+    _multipart_sessions[session_id] = {
         "filename": filename,
+        "r2_key": r2_key,
+        "r2_upload_id": r2_upload_id,
         "total": int(total_chunks),
-        "chunks": {},
+        "parts": [],       # [{"PartNumber": int, "ETag": str}, ...]
+        "file_size": 0,
         "created": time.time(),
     }
-    print(f"R2 chunked upload initialized: {upload_id} for {filename} ({total_chunks} chunks)")
-    return jsonify({"upload_id": upload_id})
+    print(f"R2 multipart upload initialized: {session_id} for {filename} ({total_chunks} chunks)")
+    return jsonify({"upload_id": session_id})
 
 
 @app.route("/api/r2/chunk-upload", methods=["POST"])
 @login_required
 def r2_chunk_upload():
-    """Receive a single chunk (Base64 JSON). Store in memory buffer."""
+    """Receive a single chunk, decode Base64, stream directly to R2 as a part. No in-memory accumulation."""
     data = request.get_json(silent=True) or {}
-    upload_id = data.get("upload_id")
+    session_id = data.get("upload_id")
     chunk_index = data.get("chunk_index")
-    chunk_data = data.get("data")  # Base64 string (no header)
+    chunk_data = data.get("data")  # raw Base64 string
 
-    if not upload_id or chunk_index is None or not chunk_data:
+    if not session_id or chunk_index is None or not chunk_data:
         return jsonify({"error": "upload_id, chunk_index, and data required"}), 400
 
-    buf = _chunk_buffers.get(upload_id)
-    if not buf:
+    sess = _multipart_sessions.get(session_id)
+    if not sess:
         return jsonify({"error": "Invalid or expired upload_id"}), 404
 
     try:
@@ -579,10 +592,23 @@ def r2_chunk_upload():
     except Exception:
         return jsonify({"error": "Invalid base64 data"}), 400
 
-    buf["chunks"][int(chunk_index)] = decoded
-    received = len(buf["chunks"])
-    total = buf["total"]
-    print(f"  Chunk {chunk_index + 1}/{total} received for {buf['filename']} ({len(decoded)} bytes)")
+    # S3 part numbers are 1-based
+    part_number = int(chunk_index) + 1
+
+    # Upload part directly to R2 (only ~8MB in memory at a time)
+    etag = upload_part(sess["r2_key"], sess["r2_upload_id"], part_number, decoded)
+    if not etag:
+        return jsonify({"error": f"Failed to upload part {part_number} to R2"}), 500
+
+    sess["parts"].append({"PartNumber": part_number, "ETag": etag})
+    sess["file_size"] += len(decoded)
+
+    # decoded is now garbage-collectable
+    del decoded
+
+    received = len(sess["parts"])
+    total = sess["total"]
+    print(f"  Part {part_number}/{total} streamed to R2 for {sess['filename']} ({len(chunk_data)} b64 chars)")
 
     return jsonify({"received": received, "total": total})
 
@@ -590,60 +616,61 @@ def r2_chunk_upload():
 @app.route("/api/r2/chunk-finalize", methods=["POST"])
 @login_required
 def r2_chunk_finalize():
-    """Reassemble chunks, upload to R2, save metadata to DB."""
+    """Complete the multipart upload on R2 (R2 assembles the parts server-side). Save metadata to DB."""
     data = request.get_json(silent=True) or {}
-    upload_id = data.get("upload_id")
+    session_id = data.get("upload_id")
 
-    if not upload_id:
+    if not session_id:
         return jsonify({"error": "upload_id required"}), 400
 
-    buf = _chunk_buffers.get(upload_id)
-    if not buf:
+    sess = _multipart_sessions.get(session_id)
+    if not sess:
         return jsonify({"error": "Invalid or expired upload_id"}), 404
 
-    total = buf["total"]
-    if len(buf["chunks"]) != total:
+    total = sess["total"]
+    if len(sess["parts"]) != total:
+        # Abort and clean up
+        abort_multipart_upload(sess["r2_key"], sess["r2_upload_id"])
+        del _multipart_sessions[session_id]
         return jsonify({
-            "error": f"Missing chunks: received {len(buf['chunks'])}/{total}"
+            "error": f"Missing parts: received {len(sess['parts'])}/{total}"
         }), 400
 
-    # Reassemble in order
-    file_bytes = b""
-    for i in range(total):
-        chunk = buf["chunks"].get(i)
-        if chunk is None:
-            # Clean up
-            del _chunk_buffers[upload_id]
-            return jsonify({"error": f"Missing chunk {i}"}), 400
-        file_bytes += chunk
+    # Sort parts by PartNumber (required by S3)
+    parts_sorted = sorted(sess["parts"], key=lambda p: p["PartNumber"])
 
-    filename = buf["filename"]
+    # Complete — R2 assembles the file server-side, zero memory usage here
+    success = complete_multipart_upload(sess["r2_key"], sess["r2_upload_id"], parts_sorted)
+    if not success:
+        abort_multipart_upload(sess["r2_key"], sess["r2_upload_id"])
+        del _multipart_sessions[session_id]
+        return jsonify({"error": "Failed to complete multipart upload on R2"}), 500
 
-    # Clean up buffer
-    del _chunk_buffers[upload_id]
+    filename = sess["filename"]
+    r2_key = sess["r2_key"]
+    file_size = sess["file_size"]
+    public_url = f"{R2_PUBLIC_URL}/{r2_key}" if R2_PUBLIC_URL else None
 
-    # Upload to R2
-    result = upload_to_r2(file_bytes, filename)
-    if not result:
-        return jsonify({"error": "Failed to upload to R2 storage"}), 500
+    # Clean up session
+    del _multipart_sessions[session_id]
 
-    # Save metadata to PostgreSQL
+    # Save metadata to PostgreSQL (no file bytes — just a pointer to R2)
     from db import save_r2_file_metadata
     sid = _get_session_id()
     row_id = save_r2_file_metadata(
         filename=filename,
-        r2_key=result["r2_key"],
-        public_url=result.get("public_url"),
-        file_size=result["file_size"],
+        r2_key=r2_key,
+        public_url=public_url,
+        file_size=file_size,
         session_id=sid,
     )
 
     return jsonify({
         "id": row_id,
         "filename": filename,
-        "r2_key": result["r2_key"],
-        "public_url": result.get("public_url"),
-        "file_size": result["file_size"],
+        "r2_key": r2_key,
+        "public_url": public_url,
+        "file_size": file_size,
     })
 
 
