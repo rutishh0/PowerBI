@@ -37,8 +37,12 @@ except ImportError:
 from pdf_export import generate_pdf_report
 from ai_chat import build_system_prompt, call_openrouter
 from db import init_db, save_file_to_db
+from r2_storage import upload_to_r2, download_from_r2, delete_from_r2
 import math
 import datetime as dt
+
+# In-memory buffer for chunked uploads: { upload_id: { chunks: {idx: bytes}, total: int, filename: str } }
+_chunk_buffers = {}
 
 def _sanitize_for_json(obj):
     """Recursively sanitize parsed data for JSON serialization.
@@ -88,14 +92,14 @@ def _sanitize_for_json(obj):
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "rr-soa-dashboard-" + uuid.uuid4().hex[:8])
-app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50MB max upload
+app.config["MAX_CONTENT_LENGTH"] = 200 * 1024 * 1024  # 200MB max upload (for R2 chunked reassembly)
 
 CORS(app)
 
 # ── Feature Flags ──────────────────────────────────────────
 # Set ENABLE_EXTRA_FEATURES to True to re-enable AI chat, file vault,
 # comparison mode, and the secret admin chat button.
-ENABLE_EXTRA_FEATURES = False
+ENABLE_EXTRA_FEATURES = True
 
 FEATURE_FLAGS = {
     "show_ai":          ENABLE_EXTRA_FEATURES,
@@ -526,6 +530,202 @@ def delete_file(file_id):
         return jsonify({"message": "File deleted successfully"})
     else:
         return jsonify({"error": "Failed to delete file"}), 500
+
+
+# ─────────────────────────────────────────────────────────────
+# R2 CLOUD STORAGE ROUTES (V2 Upload)
+# ─────────────────────────────────────────────────────────────
+
+@app.route("/api/r2/chunk-init", methods=["POST"])
+@login_required
+def r2_chunk_init():
+    """Initialize a chunked upload session. Returns an upload_id."""
+    data = request.get_json(silent=True) or {}
+    filename = data.get("filename")
+    total_chunks = data.get("total_chunks")
+
+    if not filename or not total_chunks:
+        return jsonify({"error": "filename and total_chunks required"}), 400
+
+    upload_id = uuid.uuid4().hex
+    _chunk_buffers[upload_id] = {
+        "filename": filename,
+        "total": int(total_chunks),
+        "chunks": {},
+        "created": time.time(),
+    }
+    print(f"R2 chunked upload initialized: {upload_id} for {filename} ({total_chunks} chunks)")
+    return jsonify({"upload_id": upload_id})
+
+
+@app.route("/api/r2/chunk-upload", methods=["POST"])
+@login_required
+def r2_chunk_upload():
+    """Receive a single chunk (Base64 JSON). Store in memory buffer."""
+    data = request.get_json(silent=True) or {}
+    upload_id = data.get("upload_id")
+    chunk_index = data.get("chunk_index")
+    chunk_data = data.get("data")  # Base64 string (no header)
+
+    if not upload_id or chunk_index is None or not chunk_data:
+        return jsonify({"error": "upload_id, chunk_index, and data required"}), 400
+
+    buf = _chunk_buffers.get(upload_id)
+    if not buf:
+        return jsonify({"error": "Invalid or expired upload_id"}), 404
+
+    try:
+        decoded = base64.b64decode(chunk_data)
+    except Exception:
+        return jsonify({"error": "Invalid base64 data"}), 400
+
+    buf["chunks"][int(chunk_index)] = decoded
+    received = len(buf["chunks"])
+    total = buf["total"]
+    print(f"  Chunk {chunk_index + 1}/{total} received for {buf['filename']} ({len(decoded)} bytes)")
+
+    return jsonify({"received": received, "total": total})
+
+
+@app.route("/api/r2/chunk-finalize", methods=["POST"])
+@login_required
+def r2_chunk_finalize():
+    """Reassemble chunks, upload to R2, save metadata to DB."""
+    data = request.get_json(silent=True) or {}
+    upload_id = data.get("upload_id")
+
+    if not upload_id:
+        return jsonify({"error": "upload_id required"}), 400
+
+    buf = _chunk_buffers.get(upload_id)
+    if not buf:
+        return jsonify({"error": "Invalid or expired upload_id"}), 404
+
+    total = buf["total"]
+    if len(buf["chunks"]) != total:
+        return jsonify({
+            "error": f"Missing chunks: received {len(buf['chunks'])}/{total}"
+        }), 400
+
+    # Reassemble in order
+    file_bytes = b""
+    for i in range(total):
+        chunk = buf["chunks"].get(i)
+        if chunk is None:
+            # Clean up
+            del _chunk_buffers[upload_id]
+            return jsonify({"error": f"Missing chunk {i}"}), 400
+        file_bytes += chunk
+
+    filename = buf["filename"]
+
+    # Clean up buffer
+    del _chunk_buffers[upload_id]
+
+    # Upload to R2
+    result = upload_to_r2(file_bytes, filename)
+    if not result:
+        return jsonify({"error": "Failed to upload to R2 storage"}), 500
+
+    # Save metadata to PostgreSQL
+    from db import save_r2_file_metadata
+    sid = _get_session_id()
+    row_id = save_r2_file_metadata(
+        filename=filename,
+        r2_key=result["r2_key"],
+        public_url=result.get("public_url"),
+        file_size=result["file_size"],
+        session_id=sid,
+    )
+
+    return jsonify({
+        "id": row_id,
+        "filename": filename,
+        "r2_key": result["r2_key"],
+        "public_url": result.get("public_url"),
+        "file_size": result["file_size"],
+    })
+
+
+@app.route("/api/r2/files", methods=["GET"])
+@login_required
+def list_r2_files():
+    """List all R2-stored files (metadata from DB)."""
+    from db import get_all_r2_files
+    files = get_all_r2_files()
+    return jsonify(files)
+
+
+@app.route("/api/r2/files/<int:file_id>", methods=["GET"])
+@login_required
+def download_r2_file(file_id):
+    """Download a file from R2 by DB id."""
+    from db import get_r2_file_by_id
+    meta = get_r2_file_by_id(file_id)
+    if not meta:
+        return jsonify({"error": "File not found"}), 404
+
+    file_bytes = download_from_r2(meta["r2_key"])
+    if not file_bytes:
+        return jsonify({"error": "Failed to download from R2"}), 500
+
+    return send_file(
+        io.BytesIO(file_bytes),
+        as_attachment=True,
+        download_name=meta["filename"],
+    )
+
+
+@app.route("/api/r2/files/<int:file_id>", methods=["DELETE"])
+@login_required
+def delete_r2_file(file_id):
+    """Delete a file from R2 and its metadata from DB."""
+    from db import delete_r2_file_by_id
+    r2_key = delete_r2_file_by_id(file_id)
+    if not r2_key:
+        return jsonify({"error": "File not found"}), 404
+
+    # Delete from R2
+    delete_from_r2(r2_key)
+    return jsonify({"message": "File deleted from R2 and database"})
+
+
+@app.route("/api/r2/files/<int:file_id>/parse", methods=["POST"])
+@login_required
+def parse_r2_file(file_id):
+    """Download file from R2, parse it, return JSON + store in memory for dashboard."""
+    from db import get_r2_file_by_id
+    meta = get_r2_file_by_id(file_id)
+    if not meta:
+        return jsonify({"error": "File not found"}), 404
+
+    file_bytes = download_from_r2(meta["r2_key"])
+    if not file_bytes:
+        return jsonify({"error": "Failed to download from R2"}), 500
+
+    fname = meta["filename"]
+    sid = _get_session_id()
+
+    try:
+        buf = io.BytesIO(file_bytes)
+        parsed = parse_file(buf, filename=fname)
+        parsed = _sanitize_for_json(parsed)
+
+        # Store in memory for dashboard use
+        if sid not in _parsed_store:
+            _parsed_store[sid] = {}
+        _parsed_store[sid][fname] = {
+            "type": "excel",
+            "file_type": parsed.get("file_type", "UNKNOWN"),
+            "parsed": parsed,
+            "file_bytes": file_bytes,
+        }
+
+        return jsonify({"files": {fname: parsed}})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Parse failed: {str(e)}"}), 500
 
 
 # ─────────────────────────────────────────────────────────────

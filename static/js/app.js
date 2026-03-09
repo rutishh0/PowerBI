@@ -1628,8 +1628,44 @@ const RRApp = (() => {
     }
 
 
+    // ═══════════════════════════════════════════
+    // PUBLIC: Merge parsed data from external source (e.g. R2 parse)
+    // ═══════════════════════════════════════════
+
+    function mergeUploadResponse(data) {
+        // Same merge logic as _uploadFiles success path
+        Object.assign(_filesData, data.files || {});
+        _renderFileChips();
+
+        // Rebuild _allItems
+        _allItems = [];
+        Object.entries(_filesData).forEach(([fname, fdata]) => {
+            if (fdata.file_type) {
+                if (fdata.sections && Array.isArray(fdata.sections)) {
+                    fdata.sections.forEach(sec => {
+                        (sec.items || []).forEach(item => {
+                            _allItems.push({ ...item, _source: fname, _section: sec.name });
+                        });
+                    });
+                }
+                if (fdata.items && Array.isArray(fdata.items)) {
+                    fdata.items.forEach(item => {
+                        _allItems.push({ ...item, _source: fname });
+                    });
+                }
+            } else if (fdata.all_items) {
+                (fdata.all_items || []).forEach(item => {
+                    _allItems.push({ ...item, _source: fname });
+                });
+            }
+        });
+
+        _showDashboard();
+    }
+
+
     // ─── Public API ───
-    return { init };
+    return { init, mergeUploadResponse };
 })();
 
 

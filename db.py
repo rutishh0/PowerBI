@@ -50,7 +50,7 @@ def return_db_connection(connection):
         db_pool.putconn(connection)
 
 def init_db():
-    """Initialize the database table if it doesn't exist."""
+    """Initialize the database tables if they don't exist."""
     connection = get_db_connection()
     if connection:
         try:
@@ -67,8 +67,23 @@ def init_db():
             );
             """
             cursor.execute(create_table_query)
+
+            # R2 file metadata table (no BYTEA — files live in R2)
+            create_r2_table = """
+            CREATE TABLE IF NOT EXISTS r2_file_uploads (
+                id SERIAL PRIMARY KEY,
+                filename VARCHAR(255) NOT NULL,
+                r2_key VARCHAR(512) NOT NULL,
+                public_url TEXT,
+                file_size BIGINT,
+                upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                session_id VARCHAR(64)
+            );
+            """
+            cursor.execute(create_r2_table)
+
             connection.commit()
-            print("Database initialized successfully.")
+            print("Database initialized successfully (file_uploads + r2_file_uploads).")
         except Error as e:
             print(f"Error initializing database: {e}")
         finally:
@@ -151,3 +166,93 @@ def delete_file_by_id(file_id):
         finally:
             return_db_connection(connection)
     return False
+
+
+# ─────────────────────────────────────────────────────────────
+# R2 FILE METADATA (files stored in Cloudflare R2, metadata here)
+# ─────────────────────────────────────────────────────────────
+
+def save_r2_file_metadata(filename, r2_key, public_url, file_size, session_id=None):
+    """Save R2 file metadata to the database."""
+    connection = get_db_connection()
+    if connection:
+        try:
+            cursor = connection.cursor()
+            query = """
+            INSERT INTO r2_file_uploads (filename, r2_key, public_url, file_size, session_id, upload_date)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING id
+            """
+            cursor.execute(query, (filename, r2_key, public_url, file_size, session_id, datetime.now()))
+            row_id = cursor.fetchone()[0]
+            connection.commit()
+            print(f"R2 metadata for '{filename}' saved (id={row_id}).")
+            return row_id
+        except Error as e:
+            print(f"Error saving R2 metadata: {e}")
+            return None
+        finally:
+            return_db_connection(connection)
+    return None
+
+
+def get_all_r2_files():
+    """Retrieve all R2 file metadata."""
+    connection = get_db_connection()
+    if connection:
+        try:
+            cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            query = "SELECT id, filename, r2_key, public_url, file_size, upload_date FROM r2_file_uploads ORDER BY upload_date DESC"
+            cursor.execute(query)
+            files = cursor.fetchall()
+            for f in files:
+                if isinstance(f['upload_date'], datetime):
+                    f['upload_date'] = f['upload_date'].isoformat()
+            return files
+        except Error as e:
+            print(f"Error fetching R2 files: {e}")
+            return []
+        finally:
+            return_db_connection(connection)
+    return []
+
+
+def get_r2_file_by_id(file_id):
+    """Retrieve R2 file metadata by ID."""
+    connection = get_db_connection()
+    if connection:
+        try:
+            cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            query = "SELECT id, filename, r2_key, public_url, file_size FROM r2_file_uploads WHERE id = %s"
+            cursor.execute(query, (file_id,))
+            return cursor.fetchone()
+        except Error as e:
+            print(f"Error fetching R2 file {file_id}: {e}")
+            return None
+        finally:
+            return_db_connection(connection)
+    return None
+
+
+def delete_r2_file_by_id(file_id):
+    """Delete R2 file metadata by ID. Returns the r2_key so caller can delete from R2."""
+    connection = get_db_connection()
+    if connection:
+        try:
+            cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            # First get the r2_key
+            cursor.execute("SELECT r2_key FROM r2_file_uploads WHERE id = %s", (file_id,))
+            row = cursor.fetchone()
+            if not row:
+                return None
+            r2_key = row['r2_key']
+            # Delete metadata
+            cursor.execute("DELETE FROM r2_file_uploads WHERE id = %s", (file_id,))
+            connection.commit()
+            return r2_key
+        except Error as e:
+            print(f"Error deleting R2 file {file_id}: {e}")
+            return None
+        finally:
+            return_db_connection(connection)
+    return None
