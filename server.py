@@ -100,6 +100,9 @@ app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50MB per request (R2 chun
 
 CORS(app)
 
+# Initialize DB tables on import (needed for gunicorn which skips __main__)
+init_db()
+
 # ── Feature Flags ──────────────────────────────────────────
 # Set ENABLE_EXTRA_FEATURES to True to re-enable AI chat, file vault,
 # comparison mode, and the secret admin chat button.
@@ -380,6 +383,26 @@ def export_pdf():
 
     first_key = selected_files[0] if selected_files else list(stored.keys())[0]
     first_parsed = stored[first_key]["parsed"]
+
+    if file_type == 'GLOBAL_HOPPER' or first_parsed.get("file_type") == 'GLOBAL_HOPPER':
+        try:
+            from pdf_export_hopper import generate_hopper_pdf_report
+            pdf_bytes = generate_hopper_pdf_report(
+                parsed_data=first_parsed,
+                sections_to_include=sections_to_include,
+                filters=filters
+            )
+            filename = f"Global_Hopper_Report.pdf"
+            return send_file(
+                io.BytesIO(pdf_bytes),
+                mimetype="application/pdf",
+                as_attachment=True,
+                download_name=filename,
+            )
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({"error": f"Global Hopper PDF generation failed: {str(e)}"}), 500
 
     if file_type == 'OPPORTUNITY_TRACKER' or first_parsed.get("file_type") == 'OPPORTUNITY_TRACKER':
         try:

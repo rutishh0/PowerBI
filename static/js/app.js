@@ -325,7 +325,7 @@ const RRApp = (() => {
         // Check if any file uses the new universal parser format
         // New parser returns file_type as a top-level key
         return Object.values(_filesData).some(fdata => {
-            return fdata.file_type && ['SOA', 'INVOICE_LIST', 'OPPORTUNITY_TRACKER',
+            return fdata.file_type && ['SOA', 'INVOICE_LIST', 'OPPORTUNITY_TRACKER', 'GLOBAL_HOPPER',
                 'SHOP_VISIT', 'SHOP_VISIT_HISTORY', 'SVRG_MASTER', 'UNKNOWN', 'ERROR'].includes(fdata.file_type);
         });
     }
@@ -430,6 +430,8 @@ const RRApp = (() => {
             const ft = data.file_type;
             if (ft === 'OPPORTUNITY_TRACKER') {
                 _buildOppTrackerSlides(data, fname);
+            } else if (ft === 'GLOBAL_HOPPER') {
+                _buildGlobalHopperSlides(data, fname);
             } else if (ft === 'SOA') {
                 _buildNewSOASlides(data, fname);
             } else if (ft === 'INVOICE_LIST') {
@@ -833,6 +835,129 @@ const RRApp = (() => {
                     </div>
                 </div>`;
                 if (window.lucide) lucide.createIcons();
+            }
+        });
+    }
+
+    // ─── Global Hopper Slide Builders ───
+    function _buildGlobalHopperSlides(data, fname) {
+        const meta = data.metadata || {};
+        const summary = data.summary || {};
+        const opps = data.opportunities || [];
+        const currency = meta.currency || 'GBP';
+
+        // Slide 1: Overview
+        _presSlides.push({
+            name: 'Commercial Overview',
+            render: () => {
+                const s = $('presSlide');
+                const totalCRP = summary.total_crp_term_benefit || 0;
+                const fmtGBP = v => v >= 1000 ? `£${(v/1000).toFixed(1)}bn` : `£${v.toFixed(1)}m`;
+
+                s.innerHTML = `
+                    <div style="padding:40px;">
+                        <div style="text-align:center;margin-bottom:40px;">
+                            <h2 style="color:#fff;font-size:1.8rem;margin:0;">${meta.title || 'Commercial Optimisation Opportunity Report'}</h2>
+                            <p style="color:#9B97C0;font-size:1rem;margin-top:8px;">${fname} · ${opps.length} Opportunities · ${(summary.unique_regions||[]).length} Regions</p>
+                        </div>
+                        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-bottom:30px;">
+                            <div class="pres-kpi-card" style="background:#0A0842;border-radius:12px;padding:24px;text-align:center;border-top:3px solid #00C875;">
+                                <div style="color:#9B97C0;font-size:.75rem;text-transform:uppercase;letter-spacing:1px;">CRP Term Benefit</div>
+                                <div style="color:#00C875;font-size:2rem;font-weight:800;margin-top:8px;">${fmtGBP(totalCRP)}</div>
+                            </div>
+                            <div class="pres-kpi-card" style="background:#0A0842;border-radius:12px;padding:24px;text-align:center;border-top:3px solid #2D8CFF;">
+                                <div style="color:#9B97C0;font-size:.75rem;text-transform:uppercase;letter-spacing:1px;">Profit 2026</div>
+                                <div style="color:#2D8CFF;font-size:2rem;font-weight:800;margin-top:8px;">£${(summary.total_profit_2026||0).toFixed(1)}m</div>
+                            </div>
+                            <div class="pres-kpi-card" style="background:#0A0842;border-radius:12px;padding:24px;text-align:center;border-top:3px solid #FF8B42;">
+                                <div style="color:#9B97C0;font-size:.75rem;text-transform:uppercase;letter-spacing:1px;">Profit 2027</div>
+                                <div style="color:#FF8B42;font-size:2rem;font-weight:800;margin-top:8px;">£${(summary.total_profit_2027||0).toFixed(1)}m</div>
+                            </div>
+                            <div class="pres-kpi-card" style="background:#0A0842;border-radius:12px;padding:24px;text-align:center;border-top:3px solid #FFB547;">
+                                <div style="color:#9B97C0;font-size:.75rem;text-transform:uppercase;letter-spacing:1px;">Opportunities</div>
+                                <div style="color:#FFB547;font-size:2rem;font-weight:800;margin-top:8px;">${opps.length}</div>
+                            </div>
+                        </div>
+                    </div>`;
+            }
+        });
+
+        // Slide 2: Pipeline & Status
+        _presSlides.push({
+            name: 'Pipeline Status',
+            render: () => {
+                const s = $('presSlide');
+                const stages = summary.pipeline_stages || [];
+                let tableRows = stages.map(st =>
+                    `<tr><td style="color:#E8E6F8;padding:10px 16px;">${st.stage}</td>
+                     <td style="color:#00C875;padding:10px 16px;text-align:center;font-weight:700;">${st.count}</td>
+                     <td style="color:#2D8CFF;padding:10px 16px;text-align:right;font-family:'JetBrains Mono';">£${st.value.toFixed(1)}m</td></tr>`
+                ).join('');
+                s.innerHTML = `
+                    <div style="padding:40px;">
+                        <h2 style="color:#fff;font-size:1.4rem;margin-bottom:24px;">Pipeline by Status</h2>
+                        <table style="width:100%;border-collapse:collapse;">
+                            <thead><tr style="border-bottom:2px solid rgba(200,202,224,0.2);">
+                                <th style="color:#9B97C0;text-align:left;padding:12px 16px;font-size:.75rem;text-transform:uppercase;">Stage</th>
+                                <th style="color:#9B97C0;text-align:center;padding:12px 16px;font-size:.75rem;text-transform:uppercase;">Count</th>
+                                <th style="color:#9B97C0;text-align:right;padding:12px 16px;font-size:.75rem;text-transform:uppercase;">CRP (£m)</th>
+                            </tr></thead>
+                            <tbody>${tableRows}</tbody>
+                        </table>
+                    </div>`;
+            }
+        });
+
+        // Slide 3: Top Customers
+        _presSlides.push({
+            name: 'Top Customers',
+            render: () => {
+                const s = $('presSlide');
+                const top = (summary.top_customers || []).slice(0, 10);
+                let rows = top.map((c, i) =>
+                    `<tr><td style="color:#9B97C0;padding:8px 16px;">${i+1}</td>
+                     <td style="color:#E8E6F8;padding:8px 16px;font-weight:600;">${c.customer}</td>
+                     <td style="color:#00C875;padding:8px 16px;text-align:right;font-family:'JetBrains Mono';font-weight:700;">£${c.crp_term_benefit.toFixed(1)}m</td></tr>`
+                ).join('');
+                s.innerHTML = `
+                    <div style="padding:40px;">
+                        <h2 style="color:#fff;font-size:1.4rem;margin-bottom:24px;">Top 10 Customers by CRP Term Benefit</h2>
+                        <table style="width:100%;border-collapse:collapse;">
+                            <thead><tr style="border-bottom:2px solid rgba(200,202,224,0.2);">
+                                <th style="color:#9B97C0;text-align:left;padding:10px 16px;width:40px;">#</th>
+                                <th style="color:#9B97C0;text-align:left;padding:10px 16px;">Customer</th>
+                                <th style="color:#9B97C0;text-align:right;padding:10px 16px;">CRP Term (£m)</th>
+                            </tr></thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </div>`;
+            }
+        });
+
+        // Slide 4: Region Breakdown
+        _presSlides.push({
+            name: 'Region Analysis',
+            render: () => {
+                const s = $('presSlide');
+                const byRegion = summary.by_region_value || {};
+                let rows = Object.entries(byRegion).sort((a,b) => b[1]-a[1]).map(([region, val]) => {
+                    const count = (summary.by_region || {})[region] || 0;
+                    return `<tr><td style="color:#E8E6F8;padding:10px 16px;font-weight:600;">${region}</td>
+                            <td style="color:#9B97C0;padding:10px 16px;text-align:center;">${count}</td>
+                            <td style="color:#00C875;padding:10px 16px;text-align:right;font-family:'JetBrains Mono';">£${val.toFixed(1)}m</td></tr>`;
+                }).join('');
+                s.innerHTML = `
+                    <div style="padding:40px;">
+                        <h2 style="color:#fff;font-size:1.4rem;margin-bottom:24px;">Opportunities by Region</h2>
+                        <table style="width:100%;border-collapse:collapse;">
+                            <thead><tr style="border-bottom:2px solid rgba(200,202,224,0.2);">
+                                <th style="color:#9B97C0;text-align:left;padding:10px 16px;">Region</th>
+                                <th style="color:#9B97C0;text-align:center;padding:10px 16px;">Count</th>
+                                <th style="color:#9B97C0;text-align:right;padding:10px 16px;">CRP Term (£m)</th>
+                            </tr></thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </div>`;
             }
         });
     }

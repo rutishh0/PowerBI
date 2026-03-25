@@ -189,6 +189,13 @@ _TYPE_SIGNALS: Dict[str, List[str]] = {
         "claims summary", "event entry", "hptb", "svrg", "esvrg",
         "enhanced guarantees",
     ],
+    "GLOBAL_HOPPER": [
+        "commercial optimisation opportunity report", "global commercial optimisation hopper",
+        "crp term benefit", "restructure type", "opportunity maturity",
+        "signature ap", "engine value stream", "top level evs",
+        "vp/account manager", "onerous/non onerous", "project plan requirements",
+        "expected year of signature",
+    ],
 }
 
 # Hard boosts keyed on lower-case sheet names
@@ -201,6 +208,8 @@ _SHEET_NAME_BOOSTS: Dict[str, str] = {
     "input": "OPPORTUNITY_TRACKER", "cover": "OPPORTUNITY_TRACKER",
     "menu": "SVRG_MASTER", "claims summary": "SVRG_MASTER", "event entry": "SVRG_MASTER",
     "glossary_2": "SHOP_VISIT",
+    "global log": "GLOBAL_HOPPER", "detail_report": "GLOBAL_HOPPER",
+    "exec_report": "GLOBAL_HOPPER", "data validations": "GLOBAL_HOPPER",
 }
 
 _SHEET_PREFIX_BOOSTS: Dict[str, str] = {
@@ -237,6 +246,12 @@ def detect_file_type(all_sheets: Dict[str, pd.DataFrame]) -> str:
                         scores[ftype] += 1
         except Exception:
             pass
+
+    # Disambiguate: GLOBAL_HOPPER takes priority if "global log" sheet exists
+    # (shared sheets like COVER, COUNT, SUM would otherwise boost OPPORTUNITY_TRACKER)
+    has_global_log = any("global log" in sn.lower() for sn in all_sheets)
+    if has_global_log and scores.get("GLOBAL_HOPPER", 0) > 0:
+        return "GLOBAL_HOPPER"
 
     best = max(scores, key=scores.get)
     return best if scores[best] > 0 else "UNKNOWN"
@@ -2119,6 +2134,310 @@ def _parse_svrg_master(all_sheets: Dict[str, pd.DataFrame], filename: str) -> Di
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Global Hopper Parser
+# ══════════════════════════════════════════════════════════════════════════════
+
+_HOPPER_COL_ALIASES: Dict[str, List[str]] = {
+    "region":               ["region"],
+    "customer":             ["customer"],
+    "engine_value_stream":  ["engine value stream", "evs"],
+    "top_level_evs":        ["top level evs", "top level"],
+    "vp_owner":             ["vp/account manager", "vp owner", "account manager"],
+    "restructure_type":     ["restructure type"],
+    "maturity":             ["opportunity maturity", "maturity"],
+    "onerous_type":         ["onerous/non onerous", "onerous"],
+    "initiative":           ["initative", "initiative"],  # note: typo in actual file
+    "project_plan_req":     ["project plan requirements", "project plan"],
+    "status":               ["status"],
+    "expected_year":        ["expected year of signature", "expected year"],
+    "signature_ap":         ["signature ap"],
+    "crp_term_benefit":     ["crp term benefit"],
+    "profit_2026":          ["profit 2026"],
+    "profit_2027":          ["profit 2027"],
+    "profit_2028":          ["profit 2028"],
+    "profit_2029":          ["profit 2029"],
+    "profit_2030":          ["profit 2030"],
+}
+
+
+def _parse_global_hopper(all_sheets: Dict[str, pd.DataFrame], filename: str) -> Dict:
+    """Parse a Global Commercial Optimisation Hopper workbook."""
+    errors: List[str] = []
+    opportunities: List[Dict] = []
+    detail_report: List[Dict] = []
+    exec_report: List[Dict] = []
+    reference_data: Dict[str, List[str]] = {}
+    cover_title = ""
+
+    # ── COVER ──
+    for sn, df in all_sheets.items():
+        if "cover" in sn.lower():
+            for i in range(min(10, len(df))):
+                row = df.iloc[i]
+                for v in row:
+                    s = _clean(v)
+                    if "commercial optimisation" in s.lower():
+                        cover_title = s
+                        break
+            break
+
+    # ── GLOBAL LOG (core data) ──
+    global_log_df = None
+    global_log_sheet = None
+    for sn, df in all_sheets.items():
+        if "global log" in sn.lower():
+            global_log_df = df
+            global_log_sheet = sn
+            break
+
+    if global_log_df is not None and len(global_log_df) > 2:
+        # Find header row (usually row 5, index 4)
+        hdr_idx = None
+        for i in range(min(15, len(global_log_df))):
+            row = global_log_df.iloc[i]
+            vals = _non_blank_vals(row)
+            if len(vals) >= 5:
+                text_blob = " ".join(v.lower() for v in vals)
+                if "region" in text_blob and ("customer" in text_blob or "engine" in text_blob):
+                    hdr_idx = i
+                    break
+
+        if hdr_idx is None:
+            hdr_idx = 4  # fallback: row 5 (0-indexed = 4)
+
+        col_map = _map_generic_columns(global_log_df.iloc[hdr_idx], _HOPPER_COL_ALIASES)
+
+        for i in range(hdr_idx + 1, len(global_log_df)):
+            row = global_log_df.iloc[i]
+            if not _non_blank_vals(row):
+                continue
+
+            def _g(field):
+                idx = col_map.get(field)
+                if idx is None or idx >= len(row):
+                    return None
+                return row.iloc[idx]
+
+            customer = _clean(_g("customer"))
+            region = _clean(_g("region"))
+            if not customer and not region:
+                continue  # skip empty rows
+
+            # Handle text in numeric columns (e.g., "Confirm with Harry")
+            def _safe_float(field):
+                v = _g(field)
+                f = _to_float(v)
+                return f
+
+            rec = {
+                "region": region or None,
+                "customer": customer or None,
+                "engine_value_stream": _clean(_g("engine_value_stream")) or None,
+                "top_level_evs": _clean(_g("top_level_evs")) or None,
+                "vp_owner": _clean(_g("vp_owner")) or None,
+                "restructure_type": _clean(_g("restructure_type")) or None,
+                "maturity": _clean(_g("maturity")) or None,
+                "onerous_type": _clean(_g("onerous_type")) or None,
+                "initiative": _clean(_g("initiative")) or None,
+                "project_plan_req": _clean(_g("project_plan_req")) or None,
+                "status": _clean(_g("status")) or None,
+                "expected_year": _to_float(_g("expected_year")),
+                "signature_ap": _clean(_g("signature_ap")) or None,
+                "crp_term_benefit": _safe_float("crp_term_benefit"),
+                "profit_2026": _safe_float("profit_2026"),
+                "profit_2027": _safe_float("profit_2027"),
+                "profit_2028": _safe_float("profit_2028"),
+                "profit_2029": _safe_float("profit_2029"),
+                "profit_2030": _safe_float("profit_2030"),
+            }
+
+            # Convert expected_year to int if valid
+            if rec["expected_year"] is not None:
+                try:
+                    rec["expected_year"] = int(rec["expected_year"])
+                except (ValueError, TypeError):
+                    rec["expected_year"] = None
+
+            opportunities.append(rec)
+    else:
+        errors.append("GLOBAL LOG sheet not found or empty.")
+
+    # ── DETAIL_REPORT (pivot table) ──
+    for sn, df in all_sheets.items():
+        if "detail" in sn.lower() and "report" in sn.lower():
+            hdr_idx = None
+            for i in range(min(20, len(df))):
+                row = df.iloc[i]
+                vals = _non_blank_vals(row)
+                text_blob = " ".join(v.lower() for v in vals)
+                if "engine value stream" in text_blob or ("customer" in text_blob and "crp" in text_blob):
+                    hdr_idx = i
+                    break
+            if hdr_idx is None:
+                hdr_idx = 14  # row 15 (0-indexed)
+            headers = [_clean(v) for v in df.iloc[hdr_idx]]
+            for i in range(hdr_idx + 1, len(df)):
+                row = df.iloc[i]
+                if not _non_blank_vals(row):
+                    continue
+                rec = {}
+                for j, h in enumerate(headers):
+                    if j < len(row) and not _is_blank(row.iloc[j]):
+                        v = row.iloc[j]
+                        if isinstance(v, (datetime, date)):
+                            rec[h] = v.strftime("%Y-%m-%d")
+                        elif isinstance(v, float):
+                            rec[h] = None if v != v else v
+                        else:
+                            rec[h] = _clean(v) or None
+                if rec:
+                    detail_report.append(rec)
+            break
+
+    # ── EXEC_REPORT (pivot table) ──
+    for sn, df in all_sheets.items():
+        if "exec" in sn.lower() and "report" in sn.lower():
+            hdr_idx = None
+            for i in range(min(20, len(df))):
+                row = df.iloc[i]
+                vals = _non_blank_vals(row)
+                text_blob = " ".join(v.lower() for v in vals)
+                if "customer" in text_blob and ("crp" in text_blob or "profit" in text_blob or "sum" in text_blob):
+                    hdr_idx = i
+                    break
+            if hdr_idx is None:
+                hdr_idx = 14
+            headers = [_clean(v) for v in df.iloc[hdr_idx]]
+            for i in range(hdr_idx + 1, len(df)):
+                row = df.iloc[i]
+                if not _non_blank_vals(row):
+                    continue
+                rec = {}
+                for j, h in enumerate(headers):
+                    if j < len(row) and not _is_blank(row.iloc[j]):
+                        v = row.iloc[j]
+                        if isinstance(v, float):
+                            rec[h] = None if v != v else v
+                        else:
+                            rec[h] = _clean(v) or None
+                if rec and rec.get(headers[0]):  # Must have customer name
+                    exec_report.append(rec)
+            break
+
+    # ── Data Validations (reference data) ──
+    for sn, df in all_sheets.items():
+        if "data validation" in sn.lower() or "validations" in sn.lower():
+            if len(df) > 1:
+                headers = [_clean(v) for v in df.iloc[0]]
+                for j, h in enumerate(headers):
+                    if h:
+                        vals = []
+                        for i in range(1, len(df)):
+                            if j < len(df.iloc[i]) and not _is_blank(df.iloc[i].iloc[j]):
+                                vals.append(_clean(df.iloc[i].iloc[j]))
+                        if vals:
+                            reference_data[h] = vals
+            break
+
+    # ── Build summary statistics ──
+    summary: Dict[str, Any] = {"total_opportunities": len(opportunities)}
+
+    def _count_by(field):
+        counts: Dict[str, int] = {}
+        for r in opportunities:
+            v = str(r.get(field) or "Unknown")
+            counts[v] = counts.get(v, 0) + 1
+        return counts
+
+    def _sum_by(field, value_field="crp_term_benefit"):
+        sums: Dict[str, float] = {}
+        for r in opportunities:
+            k = str(r.get(field) or "Unknown")
+            v = r.get(value_field) or 0
+            sums[k] = sums.get(k, 0) + v
+        return sums
+
+    summary["by_region"] = _count_by("region")
+    summary["by_region_value"] = _sum_by("region")
+    summary["by_status"] = _count_by("status")
+    summary["by_status_value"] = _sum_by("status")
+    summary["by_restructure_type"] = _count_by("restructure_type")
+    summary["by_restructure_type_value"] = _sum_by("restructure_type")
+    summary["by_maturity"] = _count_by("maturity")
+    summary["by_maturity_value"] = _sum_by("maturity")
+    summary["by_evs"] = _count_by("engine_value_stream")
+    summary["by_evs_value"] = _sum_by("engine_value_stream")
+    summary["by_customer"] = _count_by("customer")
+    summary["by_customer_value"] = _sum_by("customer")
+    summary["by_top_level_evs"] = _count_by("top_level_evs")
+    summary["by_onerous"] = _count_by("onerous_type")
+    summary["by_expected_year"] = _count_by("expected_year")
+    summary["by_vp_owner"] = _count_by("vp_owner")
+
+    # Pipeline stages in order
+    pipeline_order = [
+        "Initial idea", "ICT formed", "Strategy Approved",
+        "Financial Modelling Started", "Financial Modelling Complete",
+        "Financials Approved", "Negotiations Started", "Negotiations Concluded",
+        "Contracting Started", "Contracting Concluded",
+    ]
+    pipeline_stages = []
+    for stage in pipeline_order:
+        count = summary["by_status"].get(stage, 0)
+        value = summary["by_status_value"].get(stage, 0)
+        if count > 0 or stage in summary["by_status"]:
+            pipeline_stages.append({"stage": stage, "count": count, "value": round(value, 2)})
+    summary["pipeline_stages"] = pipeline_stages
+
+    # Financial totals
+    total_crp = sum(r.get("crp_term_benefit") or 0 for r in opportunities)
+    total_2026 = sum(r.get("profit_2026") or 0 for r in opportunities)
+    total_2027 = sum(r.get("profit_2027") or 0 for r in opportunities)
+    total_2028 = sum(r.get("profit_2028") or 0 for r in opportunities)
+    total_2029 = sum(r.get("profit_2029") or 0 for r in opportunities)
+    total_2030 = sum(r.get("profit_2030") or 0 for r in opportunities)
+
+    summary["total_crp_term_benefit"] = round(total_crp, 2)
+    summary["total_profit_2026"] = round(total_2026, 2)
+    summary["total_profit_2027"] = round(total_2027, 2)
+    summary["total_profit_2028"] = round(total_2028, 2)
+    summary["total_profit_2029"] = round(total_2029, 2)
+    summary["total_profit_2030"] = round(total_2030, 2)
+
+    # Top customers by CRP term benefit
+    customer_totals = _sum_by("customer")
+    sorted_customers = sorted(customer_totals.items(), key=lambda x: x[1], reverse=True)
+    summary["top_customers"] = [{"customer": c, "crp_term_benefit": round(v, 2)} for c, v in sorted_customers[:20]]
+
+    # Unique values for filter options
+    summary["unique_regions"] = sorted(set(r.get("region") for r in opportunities if r.get("region")))
+    summary["unique_evs"] = sorted(set(r.get("engine_value_stream") for r in opportunities if r.get("engine_value_stream")))
+    summary["unique_statuses"] = sorted(set(r.get("status") for r in opportunities if r.get("status")))
+    summary["unique_restructure_types"] = sorted(set(r.get("restructure_type") for r in opportunities if r.get("restructure_type")))
+    summary["unique_maturities"] = sorted(set(r.get("maturity") for r in opportunities if r.get("maturity")))
+    summary["unique_customers"] = sorted(set(r.get("customer") for r in opportunities if r.get("customer")))
+
+    return {
+        "file_type": "GLOBAL_HOPPER",
+        "metadata": {
+            "source_file": filename,
+            "title": cover_title or "Commercial Optimisation Opportunity Report",
+            "currency": "GBP",
+            "total_opportunities": len(opportunities),
+            "regions": summary.get("unique_regions", []),
+            "all_sheets": list(all_sheets.keys()),
+            "sheets_parsed": [global_log_sheet] if global_log_sheet else [],
+        },
+        "opportunities": opportunities,
+        "summary": summary,
+        "detail_report": detail_report,
+        "exec_report": exec_report,
+        "reference_data": reference_data,
+        "errors": errors,
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Unknown / Fallback Parser
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -2209,6 +2528,8 @@ def parse_file(
             return _parse_invoice_list(all_sheets, filename)
         elif file_type == "OPPORTUNITY_TRACKER":
             return _parse_opportunity_tracker(all_sheets, filename)
+        elif file_type == "GLOBAL_HOPPER":
+            return _parse_global_hopper(all_sheets, filename)
         elif file_type == "SHOP_VISIT":
             return _parse_shop_visit(all_sheets, filename)
         elif file_type == "SVRG_MASTER":

@@ -106,6 +106,86 @@ def build_system_prompt(parsed_data_dict: dict) -> str:
             prompt_parts.append("")
             continue
 
+        # ─── GLOBAL HOPPER HANDLING ───
+        parsed_inner = data.get("parsed", {})
+        is_hopper = (
+            data.get("file_type") == "GLOBAL_HOPPER"
+            or parsed_inner.get("file_type") == "GLOBAL_HOPPER"
+        )
+        if is_hopper:
+            prompt_parts.append(
+                "You are analyzing a Global Commercial Optimisation Hopper report "
+                "tracking Rolls-Royce contract restructuring opportunities across multiple regions."
+            )
+            prompt_parts.append("")
+
+            # Resolve nested structure — data may be flat or wrapped in "parsed"
+            hopper = parsed_inner if parsed_inner.get("file_type") == "GLOBAL_HOPPER" else data
+            meta_h = hopper.get("metadata", {})
+            summary_h = hopper.get("summary", {})
+            opportunities = hopper.get("opportunities", [])
+
+            # Metadata
+            prompt_parts.append("REPORT METADATA:")
+            prompt_parts.append(f"  - Title: {meta_h.get('title', 'Global Commercial Optimisation Hopper')}")
+            prompt_parts.append(f"  - Currency: GBP")
+            prompt_parts.append(f"  - Total Opportunities: {len(opportunities)}")
+            regions = sorted({opp.get("Region", "Unknown") for opp in opportunities if opp.get("Region")})
+            prompt_parts.append(f"  - Regions: {', '.join(regions) if regions else 'N/A'}")
+            prompt_parts.append("")
+
+            # Summary statistics
+            if summary_h:
+                prompt_parts.append("SUMMARY STATISTICS:")
+                for sk, sv in summary_h.items():
+                    prompt_parts.append(f"  - {sk}: {sv}")
+                prompt_parts.append("")
+            else:
+                # Compute summary from opportunities
+                total_crp = sum(float(opp.get("CRP Term Benefit", 0) or 0) for opp in opportunities)
+                total_profit = sum(float(opp.get("Profit 2026-2030", 0) or 0) for opp in opportunities)
+                stages = {}
+                for opp in opportunities:
+                    stage = opp.get("Status", "Unknown")
+                    stages[stage] = stages.get(stage, 0) + 1
+                prompt_parts.append("SUMMARY STATISTICS (Computed):")
+                prompt_parts.append(f"  - Total CRP Term Benefit: {total_crp:,.2f}")
+                prompt_parts.append(f"  - Total Profit 2026-2030: {total_profit:,.2f}")
+                prompt_parts.append(f"  - Pipeline Stages: {'; '.join(f'{k}: {v}' for k, v in sorted(stages.items()))}")
+                prompt_parts.append("")
+
+            # All opportunity records
+            if opportunities:
+                hopper_fields = [
+                    "Region", "Customer", "EVS", "Restructure Type", "Maturity",
+                    "Status", "CRP Term Benefit", "Profit 2026-2030", "VP Owner", "Initiative",
+                ]
+                prompt_parts.append(f"ALL OPPORTUNITY RECORDS ({len(opportunities)} total):")
+                for i, opp in enumerate(opportunities):
+                    parts_opp = []
+                    for fld in hopper_fields:
+                        val = opp.get(fld)
+                        if val is not None and val != "" and val != "Unknown":
+                            parts_opp.append(f"{fld}={val}")
+                    prompt_parts.append(f"  [{i+1}] {'; '.join(parts_opp)}")
+                prompt_parts.append("")
+
+                # Top customers by CRP value
+                customer_crp = {}
+                for opp in opportunities:
+                    cust = opp.get("Customer", "Unknown")
+                    crp_val = float(opp.get("CRP Term Benefit", 0) or 0)
+                    customer_crp[cust] = customer_crp.get(cust, 0) + crp_val
+                top_customers = sorted(customer_crp.items(), key=lambda x: x[1], reverse=True)[:10]
+                prompt_parts.append("TOP CUSTOMERS BY CRP TERM BENEFIT:")
+                for rank, (cust, crp_val) in enumerate(top_customers, 1):
+                    prompt_parts.append(f"  {rank}. {cust}: {crp_val:,.2f}")
+                prompt_parts.append("")
+
+            prompt_parts.append("─" * 60)
+            prompt_parts.append("")
+            continue
+
         # ─── EXCEL HANDLING (Existing Logic) ───
         # Metadata
         meta = data.get("metadata", {})

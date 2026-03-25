@@ -5083,3 +5083,93 @@ td.viz-gantt-empty .viz-gantt-bar {
     from { opacity: 0; }
     to { opacity: 1; }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   GLOBAL HOPPER — Additional Styles
+   ═══════════════════════════════════════════════════════════ */
+
+/* Collapsible sections */
+.viz-section-header[data-collapsible] {
+    cursor: pointer;
+    user-select: none;
+    transition: opacity var(--transition-fast);
+}
+.viz-section-header[data-collapsible]:hover {
+    opacity: 0.85;
+}
+.viz-section-header[data-collapsible]::after {
+    content: '▶';
+    float: right;
+    font-size: 0.7rem;
+    color: var(--opp-text-muted, #9B97C0);
+    transition: transform var(--transition-base);
+}
+.viz-section-header[data-collapsible].expanded::after {
+    transform: rotate(90deg);
+}
+.viz-collapsible-content {
+    animation: collapseIn 0.25s ease;
+}
+
+/* Filter bar dark-theme override inside opp-tracker-dashboard */
+.opp-tracker-dashboard .viz-global-filter-bar {
+    background: rgba(10, 8, 66, 0.6);
+    border: 1px solid rgba(200, 202, 224, 0.1);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 24px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: end;
+}
+.opp-tracker-dashboard .viz-global-filter-bar .viz-filter-item {
+    flex: 1;
+    min-width: 140px;
+}
+.opp-tracker-dashboard .viz-global-filter-bar label {
+    display: block;
+    color: #9B97C0;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 6px;
+}
+.opp-tracker-dashboard .viz-global-filter-bar select {
+    width: 100%;
+    background: #0E0A50;
+    color: #E8E6F8;
+    border: 1px solid rgba(200, 202, 224, 0.15);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 0.82rem;
+    font-family: inherit;
+    cursor: pointer;
+    transition: border-color var(--transition-fast);
+}
+.opp-tracker-dashboard .viz-global-filter-bar select:hover,
+.opp-tracker-dashboard .viz-global-filter-bar select:focus {
+    border-color: #00C875;
+    outline: none;
+}
+
+/* KPI grid responsive for Global Hopper */
+@media (max-width: 900px) {
+    .opp-tracker-dashboard .viz-kpi-grid-4 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .opp-tracker-dashboard .viz-kpi-grid-5 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* Global Hopper chart cards dark override */
+.opp-tracker-dashboard .viz-chart-card {
+    background: var(--opp-bg-card, #0A0842);
+    border-color: rgba(200, 202, 224, 0.08);
+}
+.opp-tracker-dashboard .viz-chart-card-header {
+    color: var(--opp-text, #E8E6F8);
+    border-bottom-color: rgba(200, 202, 224, 0.1);
+}

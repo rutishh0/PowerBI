@@ -35,6 +35,7 @@ window.RRVisualizer = (() => {
         OPPORTUNITY_TRACKER: { label: 'Opportunity Tracker', icon: 'trending-up', color: '#2E7D32', bg: 'rgba(46,125,50,0.08)' },
         SHOP_VISIT_HISTORY: { label: 'Shop Visit History', icon: 'wrench', color: '#EF6C00', bg: 'rgba(239,108,0,0.08)' },
         SVRG_MASTER: { label: 'SVRG Master', icon: 'shield-check', color: '#5E35B1', bg: 'rgba(94,53,177,0.08)' },
+        GLOBAL_HOPPER: { label: 'Global Hopper', icon: 'globe', color: '#00C875', bg: 'rgba(0,200,117,0.08)' },
         UNKNOWN: { label: 'Data File', icon: 'file-spreadsheet', color: '#9E9E9E', bg: 'rgba(158,158,158,0.08)' },
         ERROR: { label: 'Error', icon: 'alert-triangle', color: '#C62828', bg: 'rgba(198,40,40,0.08)' },
     };
@@ -111,6 +112,7 @@ window.RRVisualizer = (() => {
                         case 'SOA': _renderSOA(el, data, name); break;
                         case 'INVOICE_LIST': _renderInvoiceList(el, data, name); break;
                         case 'OPPORTUNITY_TRACKER': _renderOpportunityTracker(el, data, name); break;
+                        case 'GLOBAL_HOPPER': _renderGlobalHopper(el, data, name); break;
                         case 'SHOP_VISIT_HISTORY': _renderShopVisit(el, data, name); break;
                         case 'SHOP_VISIT': _renderShopVisit(el, data, name); break;
                         case 'SVRG_MASTER': _renderSVRG(el, data, name); break;
@@ -1652,6 +1654,421 @@ window.RRVisualizer = (() => {
                 renderContent(filteredC, filteredE);
             });
         }
+
+        // ═══════════════════════════════════════════════════
+    // GLOBAL HOPPER RENDERER
+    // ═══════════════════════════════════════════════════
+
+    function _renderGlobalHopper(el, data, fname) {
+        const meta = data.metadata || {};
+        const summary = data.summary || {};
+        const opportunities = data.opportunities || [];
+        const detailReport = data.detail_report || [];
+        const execReport = data.exec_report || [];
+        const currency = meta.currency || 'GBP';
+
+        const uid = 'gh_' + Math.random().toString(36).slice(2, 8);
+
+        // Apply dark theme (same method as MEA tracker)
+        el.classList.add('opp-tracker-dashboard');
+        el.style.background = '#03002E';
+        el.style.borderRadius = '0';
+        el.style.padding = '24px 32px';
+        let parent = el.parentElement;
+        while (parent) {
+            if (parent.classList && parent.classList.contains('dashboard-body')) parent.style.background = '#03002E';
+            if (parent.classList && parent.classList.contains('main-content')) parent.style.background = '#03002E';
+            parent = parent.parentElement;
+        }
+
+        // ── Filter bar ──
+        const filterBarId = uid + '_filters';
+        const regions = summary.unique_regions || [];
+        const customers = summary.unique_customers || [];
+        const statuses = summary.unique_statuses || [];
+        const evsList = summary.unique_evs || [];
+        const maturities = summary.unique_maturities || [];
+        const restructureTypes = summary.unique_restructure_types || [];
+
+        let filterHTML = `<div class="viz-global-filter-bar" id="${filterBarId}">`;
+        filterHTML += `<div class="viz-filter-item"><label>Region</label><select data-filter="region"><option value="">All</option>${regions.map(r => `<option value="${_safe(r)}">${_safe(r)}</option>`).join('')}</select></div>`;
+        filterHTML += `<div class="viz-filter-item"><label>Customer</label><select data-filter="customer"><option value="">All</option>${customers.map(c => `<option value="${_safe(c)}">${_safe(c)}</option>`).join('')}</select></div>`;
+        filterHTML += `<div class="viz-filter-item"><label>EVS</label><select data-filter="evs"><option value="">All</option>${evsList.map(e => `<option value="${_safe(e)}">${_safe(e)}</option>`).join('')}</select></div>`;
+        filterHTML += `<div class="viz-filter-item"><label>Status</label><select data-filter="status"><option value="">All</option>${statuses.map(s => `<option value="${_safe(s)}">${_safe(s)}</option>`).join('')}</select></div>`;
+        filterHTML += `<div class="viz-filter-item"><label>Maturity</label><select data-filter="maturity"><option value="">All</option>${maturities.map(m => `<option value="${_safe(m)}">${_safe(m)}</option>`).join('')}</select></div>`;
+        filterHTML += `<div class="viz-filter-item"><label>Restructure Type</label><select data-filter="restructure_type"><option value="">All</option>${restructureTypes.map(t => `<option value="${_safe(t)}">${_safe(t)}</option>`).join('')}</select></div>`;
+        filterHTML += `</div>`;
+
+        // Helper to format GBP
+        function fmtGBP(v) {
+            if (v == null || isNaN(v)) return '—';
+            const abs = Math.abs(v);
+            const s = abs >= 1000 ? `£${(abs/1000).toFixed(1)}bn` : abs >= 1 ? `£${abs.toFixed(1)}m` : `£${(abs*1000).toFixed(0)}k`;
+            return v < 0 ? `-${s}` : s;
+        }
+        function fmtGBPm(v) {
+            if (v == null || isNaN(v)) return '—';
+            return `£${v.toFixed(1)}m`;
+        }
+
+        // Build main HTML
+        let html = '';
+
+        // ── Title banner (matches MEA tracker viz-opp-banner) ──
+        html += `<div class="viz-opp-banner">
+            <div class="viz-opp-banner-inner">
+                <div class="viz-opp-banner-title"><i data-lucide="globe"></i><span>${_safe(meta.title || 'Commercial Optimisation Opportunity Report')}</span></div>
+                <div style="display:flex;align-items:center;gap:16px">
+                    <div class="viz-opp-banner-badge" style="background:#00C875;">GLOBAL HOPPER</div>
+                    <div class="viz-opp-banner-rr">ROLLS‑ROYCE</div>
+                </div>
+            </div>
+        </div>`;
+
+        // ── Filter bar ──
+        html += filterHTML;
+
+        // ── Content wrapper (for filter updates) ──
+        html += `<div id="${uid}_content">`;
+
+        // ── Hero KPIs (matches MEA tracker viz-opp-hero) ──
+        html += `<div class="viz-opp-hero" id="${uid}_kpis">
+            <div class="viz-opp-hero-card"><div class="viz-opp-hero-label">CRP Term Benefit</div><div class="viz-opp-hero-value">${fmtGBP(summary.total_crp_term_benefit)}</div></div>
+            <div class="viz-opp-hero-card"><div class="viz-opp-hero-label">Profit 2026</div><div class="viz-opp-hero-value">${fmtGBPm(summary.total_profit_2026)}</div></div>
+            <div class="viz-opp-hero-card viz-opp-hero-accent"><div class="viz-opp-hero-label">Profit 2027</div><div class="viz-opp-hero-value">${fmtGBPm(summary.total_profit_2027)}</div></div>
+            <div class="viz-opp-hero-card viz-opp-hero-primary"><div class="viz-opp-hero-label">Profit 2028–30</div><div class="viz-opp-hero-value">${fmtGBPm((summary.total_profit_2028||0)+(summary.total_profit_2029||0)+(summary.total_profit_2030||0))}</div></div>
+        </div>`;
+
+        // ── Meta info bar ──
+        const byMaturity = summary.by_maturity || {};
+        const byOnerous = summary.by_onerous || {};
+        html += '<div class="viz-customer-bar">';
+        html += `<div class="viz-info-chip"><b>Currency:</b> ${currency}</div>`;
+        html += `<div class="viz-info-chip"><b>Opportunities:</b> ${opportunities.length}</div>`;
+        html += `<div class="viz-info-chip"><b>Customers:</b> ${customers.length}</div>`;
+        html += `<div class="viz-info-chip"><b>Regions:</b> ${regions.join(', ')}</div>`;
+        html += `<div class="viz-info-chip"><b>EVS Types:</b> ${evsList.length}</div>`;
+        html += '</div>';
+
+        // ── Secondary KPIs ──
+        html += `<div class="viz-kpi-grid viz-kpi-grid-5" id="${uid}_kpis2">`;
+        html += _kpiCard('Mature', `${byMaturity['Mature']||0}`, {icon: 'check-circle', colorClass: 'kpi-success', subtitle: 'opportunities'});
+        html += _kpiCard('Immature', `${byMaturity['Immature']||0}`, {icon: 'clock', subtitle: 'opportunities'});
+        html += _kpiCard('Onerous', `${byOnerous['Onerous Contract']||0}`, {icon: 'alert-triangle', colorClass: 'kpi-danger', subtitle: 'contracts'});
+        html += _kpiCard('Not Onerous', `${byOnerous['Not Onerous']||0}`, {icon: 'shield-check', subtitle: 'contracts'});
+        html += _kpiCard('Regions', `${regions.length}`, {icon: 'globe', subtitle: regions.join(', ')});
+        html += `</div>`;
+
+        // ── Charts row 1: Pipeline + Region ──
+        const pipelineChartId = uid + '_pipeline';
+        const regionChartId = uid + '_region';
+        html += `<div class="viz-chart-grid viz-chart-grid-2">
+            <div class="viz-chart-card"><div class="viz-chart-header">Pipeline by Status</div><div id="${pipelineChartId}" class="viz-chart-body"></div></div>
+            <div class="viz-chart-card"><div class="viz-chart-header">CRP by Region</div><div id="${regionChartId}" class="viz-chart-body"></div></div>
+        </div>`;
+
+        // ── Charts row 2: Top customers + EVS ──
+        const custChartId = uid + '_customers';
+        const evsChartId = uid + '_evs';
+        html += `<div class="viz-chart-grid viz-chart-grid-2">
+            <div class="viz-chart-card"><div class="viz-chart-header">Top 15 Customers by CRP Term Benefit</div><div id="${custChartId}" class="viz-chart-body"></div></div>
+            <div class="viz-chart-card"><div class="viz-chart-header">Engine Value Stream Distribution</div><div id="${evsChartId}" class="viz-chart-body"></div></div>
+        </div>`;
+
+        // ── Charts row 3: Year-over-year + Restructure type ──
+        const yoyChartId = uid + '_yoy';
+        const restTypeChartId = uid + '_resttype';
+        html += `<div class="viz-chart-grid viz-chart-grid-2">
+            <div class="viz-chart-card"><div class="viz-chart-header">Annual Profit Forecast (${currency})</div><div id="${yoyChartId}" class="viz-chart-body"></div></div>
+            <div class="viz-chart-card"><div class="viz-chart-header">Restructure Type Split</div><div id="${restTypeChartId}" class="viz-chart-body"></div></div>
+        </div>`;
+
+        // ── Opportunities table ──
+        const oppHeaders = ['Region', 'Customer', 'EVS', 'Restructure Type', 'Maturity', 'Status', 'CRP Term (£m)', '2026 (£m)', '2027 (£m)', 'VP/Owner'];
+        const oppRows = opportunities.map(r => [
+            _safe(r.region||''), _safe(r.customer||''), _safe(r.engine_value_stream||''),
+            _safe(r.restructure_type||''), _safe(r.maturity||''), _safe(r.status||''),
+            r.crp_term_benefit != null ? r.crp_term_benefit.toFixed(1) : '—',
+            r.profit_2026 != null ? r.profit_2026.toFixed(1) : '—',
+            r.profit_2027 != null ? r.profit_2027.toFixed(1) : '—',
+            _safe(r.vp_owner||'')
+        ]);
+
+        html += _sectionHeader('Opportunities Register', 'list', {badge: `${opportunities.length} records`, collapsible: true});
+        html += `<div class="viz-collapsible-content">`;
+        html += _dataTable(oppHeaders, oppRows, {maxHeight: '500px', moneyColumns: [6,7,8]});
+        html += `</div>`;
+
+        // ── Executive Report table ──
+        if (execReport.length > 0) {
+            const execHeaders = Object.keys(execReport[0]);
+            const execRows = execReport.map(r => execHeaders.map(h => {
+                const v = r[h];
+                return v != null ? (typeof v === 'number' ? v.toFixed(1) : _safe(String(v))) : '—';
+            }));
+            html += _sectionHeader('Executive Report', 'briefcase', {badge: `${execReport.length} customers`, collapsible: true});
+            html += `<div class="viz-collapsible-content">`;
+            html += _dataTable(execHeaders, execRows, {maxHeight: '400px'});
+            html += `</div>`;
+        }
+
+        // ── Detail Report table ──
+        if (detailReport.length > 0) {
+            const detHeaders = Object.keys(detailReport[0]);
+            const detRows = detailReport.map(r => detHeaders.map(h => {
+                const v = r[h];
+                return v != null ? (typeof v === 'number' ? v.toFixed(1) : _safe(String(v))) : '—';
+            }));
+            html += _sectionHeader('Detail Report', 'file-text', {badge: `${detailReport.length} rows`, collapsible: true});
+            html += `<div class="viz-collapsible-content">`;
+            html += _dataTable(detHeaders, detRows, {maxHeight: '400px'});
+            html += `</div>`;
+        }
+
+        html += `</div>`; // close content wrapper
+
+        el.innerHTML = html;
+
+        // Wire collapsible sections - start collapsed
+        el.querySelectorAll('.viz-collapsible-content').forEach(content => {
+            content.style.display = 'none';
+        });
+        el.querySelectorAll('.viz-section-header').forEach(hdr => {
+            const content = hdr.nextElementSibling;
+            if (content && content.classList.contains('viz-collapsible-content')) {
+                hdr.style.cursor = 'pointer';
+                hdr.addEventListener('click', () => {
+                    const isHidden = content.style.display === 'none';
+                    content.style.display = isHidden ? 'block' : 'none';
+                    hdr.classList.toggle('expanded', isHidden);
+                });
+            }
+        });
+
+        // ── Render charts ──
+        setTimeout(() => {
+            _renderGlobalHopperCharts(uid, opportunities, summary, currency);
+        }, 100);
+
+        // ── Wire filters ──
+        const filterBar = document.getElementById(filterBarId);
+        if (filterBar) {
+            filterBar.querySelectorAll('select').forEach(sel => {
+                sel.addEventListener('change', () => {
+                    const filters = {};
+                    filterBar.querySelectorAll('select').forEach(s => {
+                        if (s.value) filters[s.dataset.filter] = s.value;
+                    });
+                    _applyGlobalHopperFilters(uid, opportunities, summary, currency, filters, el);
+                });
+            });
+        }
+    }
+
+    function _applyGlobalHopperFilters(uid, allOpps, originalSummary, currency, filters, el) {
+        let filtered = allOpps;
+
+        if (filters.region) filtered = filtered.filter(r => r.region === filters.region);
+        if (filters.customer) filtered = filtered.filter(r => r.customer === filters.customer);
+        if (filters.evs) filtered = filtered.filter(r => r.engine_value_stream === filters.evs);
+        if (filters.status) filtered = filtered.filter(r => r.status === filters.status);
+        if (filters.maturity) filtered = filtered.filter(r => r.maturity === filters.maturity);
+        if (filters.restructure_type) filtered = filtered.filter(r => r.restructure_type === filters.restructure_type);
+
+        // Recompute summary for filtered data
+        const totalCRP = filtered.reduce((s, r) => s + (r.crp_term_benefit || 0), 0);
+        const total2026 = filtered.reduce((s, r) => s + (r.profit_2026 || 0), 0);
+        const total2027 = filtered.reduce((s, r) => s + (r.profit_2027 || 0), 0);
+        const total2028 = filtered.reduce((s, r) => s + (r.profit_2028 || 0), 0);
+        const total2029 = filtered.reduce((s, r) => s + (r.profit_2029 || 0), 0);
+        const total2030 = filtered.reduce((s, r) => s + (r.profit_2030 || 0), 0);
+
+        function fmtGBP(v) {
+            if (v == null || isNaN(v)) return '—';
+            const abs = Math.abs(v);
+            const s = abs >= 1000 ? `£${(abs/1000).toFixed(1)}bn` : abs >= 1 ? `£${abs.toFixed(1)}m` : `£${(abs*1000).toFixed(0)}k`;
+            return v < 0 ? `-${s}` : s;
+        }
+        function fmtGBPm(v) { return v == null || isNaN(v) ? '—' : `£${v.toFixed(1)}m`; }
+
+        // Update KPIs (hero cards)
+        const kpis = document.getElementById(uid + '_kpis');
+        if (kpis) {
+            kpis.innerHTML = `
+                <div class="viz-opp-hero-card"><div class="viz-opp-hero-label">CRP Term Benefit</div><div class="viz-opp-hero-value">${fmtGBP(totalCRP)}</div></div>
+                <div class="viz-opp-hero-card"><div class="viz-opp-hero-label">Profit 2026</div><div class="viz-opp-hero-value">${fmtGBPm(total2026)}</div></div>
+                <div class="viz-opp-hero-card viz-opp-hero-accent"><div class="viz-opp-hero-label">Profit 2027</div><div class="viz-opp-hero-value">${fmtGBPm(total2027)}</div></div>
+                <div class="viz-opp-hero-card viz-opp-hero-primary"><div class="viz-opp-hero-label">Profit 2028–30</div><div class="viz-opp-hero-value">${fmtGBPm(total2028+total2029+total2030)}</div></div>`;
+            // remove old generic kpi lines below
+        }
+
+        // Rebuild summary for charts
+        const filteredSummary = {
+            by_status_value: {}, by_region_value: {}, by_customer_value: {},
+            by_evs_value: {}, by_restructure_type_value: {},
+            total_profit_2026: total2026, total_profit_2027: total2027,
+            total_profit_2028: total2028, total_profit_2029: total2029,
+            total_profit_2030: total2030, total_crp_term_benefit: totalCRP,
+            pipeline_stages: [],
+        };
+
+        filtered.forEach(r => {
+            const s = r.status || 'Unknown';
+            filteredSummary.by_status_value[s] = (filteredSummary.by_status_value[s] || 0) + (r.crp_term_benefit || 0);
+            const reg = r.region || 'Unknown';
+            filteredSummary.by_region_value[reg] = (filteredSummary.by_region_value[reg] || 0) + (r.crp_term_benefit || 0);
+            const c = r.customer || 'Unknown';
+            filteredSummary.by_customer_value[c] = (filteredSummary.by_customer_value[c] || 0) + (r.crp_term_benefit || 0);
+            const e = r.engine_value_stream || 'Unknown';
+            filteredSummary.by_evs_value[e] = (filteredSummary.by_evs_value[e] || 0) + (r.crp_term_benefit || 0);
+            const rt = r.restructure_type || 'Unknown';
+            filteredSummary.by_restructure_type_value[rt] = (filteredSummary.by_restructure_type_value[rt] || 0) + (r.crp_term_benefit || 0);
+        });
+
+        // Re-render charts
+        _renderGlobalHopperCharts(uid, filtered, filteredSummary, currency);
+    }
+
+    function _renderGlobalHopperCharts(uid, records, summary, currency) {
+        const darkText = '#C8CAE0';
+        const gridColor = 'rgba(200,202,224,0.1)';
+        const chartColors = ['#00C875', '#2D8CFF', '#FF8B42', '#FFB547', '#FF4560', '#9B59B6', '#00D2FF', '#E91E63', '#4CAF50', '#FF9800'];
+
+        function destroyChart(id) {
+            const existing = ApexCharts.getChartByID(id);
+            if (existing) existing.destroy();
+        }
+
+        // ── Pipeline by Status (horizontal bar) ──
+        const pipelineId = uid + '_pipeline';
+        destroyChart(pipelineId);
+        const statusVal = summary.by_status_value || {};
+        const pipelineOrder = [
+            'Initial idea', 'ICT formed', 'Strategy Approved',
+            'Financial Modelling Started', 'Financial Modelling Complete',
+            'Financials Approved', 'Negotiations Started', 'Negotiations Concluded',
+            'Contracting Started', 'Contracting Concluded'
+        ];
+        const pipelineCats = pipelineOrder.filter(s => statusVal[s] !== undefined);
+        const pipelineVals = pipelineCats.map(s => Math.round((statusVal[s] || 0) * 10) / 10);
+        if (document.getElementById(pipelineId)) {
+            new ApexCharts(document.getElementById(pipelineId), {
+                chart: { id: pipelineId, type: 'bar', height: 350, background: 'transparent', toolbar: { show: false } },
+                series: [{ name: `CRP Term (${currency}m)`, data: pipelineVals }],
+                xaxis: { categories: pipelineCats, labels: { style: { colors: darkText, fontSize: '11px' }, maxWidth: 160, trim: true } },
+                yaxis: { labels: { style: { colors: darkText, fontSize: '11px' } } },
+                plotOptions: { bar: { horizontal: true, borderRadius: 4, barHeight: '60%' } },
+                colors: ['#00C875'],
+                dataLabels: { enabled: true, formatter: v => `£${v}m`, style: { colors: ['#fff'], fontSize: '11px' } },
+                grid: { borderColor: gridColor },
+                tooltip: { theme: 'dark' },
+            }).render();
+        }
+
+        // ── Region Donut ──
+        const regionId = uid + '_region';
+        destroyChart(regionId);
+        const regionVal = summary.by_region_value || {};
+        const regionLabels = Object.keys(regionVal);
+        const regionData = regionLabels.map(k => Math.round((regionVal[k] || 0) * 10) / 10);
+        if (document.getElementById(regionId) && regionLabels.length) {
+            new ApexCharts(document.getElementById(regionId), {
+                chart: { id: regionId, type: 'donut', height: 350, background: 'transparent' },
+                series: regionData,
+                labels: regionLabels,
+                colors: chartColors.slice(0, regionLabels.length),
+                legend: { position: 'bottom', labels: { colors: darkText } },
+                dataLabels: { enabled: true, formatter: (val, opts) => `${opts.w.globals.labels[opts.seriesIndex]}: £${regionData[opts.seriesIndex]}m` },
+                plotOptions: { pie: { donut: { size: '55%', labels: { show: true, total: { show: true, label: 'Total CRP', color: darkText, formatter: () => `£${Math.round(regionData.reduce((a,b)=>a+b,0))}m` } } } } },
+                tooltip: { theme: 'dark' },
+            }).render();
+        }
+
+        // ── Top 15 Customers (horizontal bar) ──
+        const custId = uid + '_customers';
+        destroyChart(custId);
+        const custVal = summary.by_customer_value || {};
+        const custSorted = Object.entries(custVal).sort((a,b) => b[1]-a[1]).slice(0, 15);
+        const custLabels = custSorted.map(c => c[0]);
+        const custData = custSorted.map(c => Math.round(c[1] * 10) / 10);
+        if (document.getElementById(custId) && custLabels.length) {
+            new ApexCharts(document.getElementById(custId), {
+                chart: { id: custId, type: 'bar', height: 400, background: 'transparent', toolbar: { show: false } },
+                series: [{ name: `CRP Term (${currency}m)`, data: custData }],
+                xaxis: { categories: custLabels, labels: { style: { colors: darkText, fontSize: '10px' }, maxWidth: 120 } },
+                yaxis: { labels: { style: { colors: darkText, fontSize: '10px' } } },
+                plotOptions: { bar: { horizontal: true, borderRadius: 3, barHeight: '65%', distributed: true } },
+                colors: chartColors,
+                dataLabels: { enabled: true, formatter: v => `£${v}m`, style: { colors: ['#fff'], fontSize: '10px' } },
+                grid: { borderColor: gridColor },
+                legend: { show: false },
+                tooltip: { theme: 'dark' },
+            }).render();
+        }
+
+        // ── EVS Distribution (bar chart) ──
+        const evsId = uid + '_evs';
+        destroyChart(evsId);
+        const evsVal = summary.by_evs_value || {};
+        const evsLabels = Object.keys(evsVal).sort((a,b) => evsVal[b] - evsVal[a]);
+        const evsData = evsLabels.map(k => Math.round((evsVal[k] || 0) * 10) / 10);
+        if (document.getElementById(evsId) && evsLabels.length) {
+            new ApexCharts(document.getElementById(evsId), {
+                chart: { id: evsId, type: 'bar', height: 400, background: 'transparent', toolbar: { show: false } },
+                series: [{ name: `CRP Term (${currency}m)`, data: evsData }],
+                xaxis: { categories: evsLabels, labels: { style: { colors: darkText, fontSize: '10px' }, rotate: -45 } },
+                yaxis: { labels: { style: { colors: darkText }, formatter: v => `£${v}m` } },
+                plotOptions: { bar: { borderRadius: 4, columnWidth: '60%', distributed: true } },
+                colors: chartColors,
+                dataLabels: { enabled: true, formatter: v => `£${v}m`, style: { colors: ['#fff'], fontSize: '10px' } },
+                grid: { borderColor: gridColor },
+                legend: { show: false },
+                tooltip: { theme: 'dark' },
+            }).render();
+        }
+
+        // ── Year-over-year Profit Forecast (grouped bar) ──
+        const yoyId = uid + '_yoy';
+        destroyChart(yoyId);
+        const years = ['2026', '2027', '2028', '2029', '2030'];
+        const yoyData = [
+            summary.total_profit_2026 || 0, summary.total_profit_2027 || 0,
+            summary.total_profit_2028 || 0, summary.total_profit_2029 || 0,
+            summary.total_profit_2030 || 0,
+        ].map(v => Math.round(v * 10) / 10);
+        if (document.getElementById(yoyId)) {
+            new ApexCharts(document.getElementById(yoyId), {
+                chart: { id: yoyId, type: 'bar', height: 350, background: 'transparent', toolbar: { show: false } },
+                series: [{ name: `Profit (${currency}m)`, data: yoyData }],
+                xaxis: { categories: years, labels: { style: { colors: darkText, fontSize: '12px' } } },
+                yaxis: { labels: { style: { colors: darkText }, formatter: v => `£${v}m` } },
+                plotOptions: { bar: { borderRadius: 6, columnWidth: '55%' } },
+                colors: ['#2D8CFF'],
+                dataLabels: { enabled: true, formatter: v => `£${v}m`, style: { colors: ['#fff'] } },
+                grid: { borderColor: gridColor },
+                tooltip: { theme: 'dark' },
+            }).render();
+        }
+
+        // ── Restructure Type Donut ──
+        const restId = uid + '_resttype';
+        destroyChart(restId);
+        const restVal = summary.by_restructure_type_value || {};
+        const restLabels = Object.keys(restVal);
+        const restData = restLabels.map(k => Math.round((restVal[k] || 0) * 10) / 10);
+        if (document.getElementById(restId) && restLabels.length) {
+            new ApexCharts(document.getElementById(restId), {
+                chart: { id: restId, type: 'donut', height: 350, background: 'transparent' },
+                series: restData,
+                labels: restLabels,
+                colors: ['#00C875', '#2D8CFF', '#FF8B42', '#FFB547'],
+                legend: { position: 'bottom', labels: { colors: darkText } },
+                dataLabels: { enabled: true, formatter: (val) => `${val.toFixed(0)}%` },
+                plotOptions: { pie: { donut: { size: '55%', labels: { show: true, total: { show: true, label: 'Total', color: darkText, formatter: () => `£${Math.round(restData.reduce((a,b)=>a+b,0))}m` } } } } },
+                tooltip: { theme: 'dark' },
+            }).render();
+        }
+    }
 
         // ═══════════════════════════════════════════════════
         // UNKNOWN / FALLBACK RENDERER
