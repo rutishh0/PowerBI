@@ -2291,6 +2291,9 @@ const RRApp = (() => {
         const container = $('uploadedFiles');
         if (!container) return;
 
+        const esc = (window.RRUtil && RRUtil.escapeHtml) ? RRUtil.escapeHtml : (s) => String(s == null ? '' : s);
+        const escAttr = (window.RRUtil && RRUtil.escapeAttr) ? RRUtil.escapeAttr : (s) => String(s == null ? '' : s).replace(/"/g, '&quot;');
+
         let html = '';
         Object.entries(_filesData).forEach(([fname, fdata]) => {
             const ft = fdata.file_type || 'UNKNOWN';
@@ -2298,10 +2301,65 @@ const RRApp = (() => {
             html += `
                 <div class="file-chip">
                     <span class="file-chip-type-dot" style="background:${meta.color}"></span>
-                    <span class="file-chip-name" title="${fname} (${meta.label})">${fname}</span>
+                    <span class="file-chip-name" title="${esc(fname)} (${esc(meta.label)})">${esc(fname)}</span>
+                    <span class="file-chip-remove" title="Remove file" data-fname="${escAttr(fname)}" role="button" tabindex="0" aria-label="Remove ${escAttr(fname)}">&times;</span>
                 </div>`;
         });
         container.innerHTML = html;
+
+        container.querySelectorAll('.file-chip-remove').forEach(el => {
+            el.addEventListener('click', (e) => {
+                e.stopPropagation();
+                _removeFile(el.getAttribute('data-fname'));
+            });
+            el.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    _removeFile(el.getAttribute('data-fname'));
+                }
+            });
+        });
+    }
+
+    async function _removeFile(fname) {
+        if (!fname || !(fname in _filesData)) return;
+
+        try {
+            await fetch(`/api/parsed/${encodeURIComponent(fname)}`, { method: 'DELETE' });
+        } catch (err) {
+            console.warn('[RRApp] Server-side parsed-file delete failed; removing client-side only:', err);
+        }
+
+        delete _filesData[fname];
+
+        _allItems = [];
+        Object.entries(_filesData).forEach(([fn, fdata]) => {
+            if (fdata.file_type) {
+                if (fdata.sections && Array.isArray(fdata.sections)) {
+                    fdata.sections.forEach(sec => {
+                        (sec.items || []).forEach(item => {
+                            _allItems.push({ ...item, _source: fn, _section: sec.name });
+                        });
+                    });
+                }
+                if (fdata.items && Array.isArray(fdata.items)) {
+                    fdata.items.forEach(item => {
+                        _allItems.push({ ...item, _source: fn });
+                    });
+                }
+            } else if (fdata.all_items) {
+                (fdata.all_items || []).forEach(item => {
+                    _allItems.push({ ...item, _source: fn });
+                });
+            }
+        });
+
+        _renderFileChips();
+        _showDashboard();
+
+        if (window.RRComponents && RRComponents.showToast) {
+            RRComponents.showToast(`Removed ${fname}`, 'info');
+        }
     }
 
 
@@ -2423,7 +2481,8 @@ const RRApp = (() => {
         // New parser returns file_type as a top-level key
         return Object.values(_filesData).some(fdata => {
             return fdata.file_type && ['SOA', 'INVOICE_LIST', 'OPPORTUNITY_TRACKER', 'GLOBAL_HOPPER',
-                'SHOP_VISIT', 'SHOP_VISIT_HISTORY', 'SVRG_MASTER', 'UNKNOWN', 'ERROR'].includes(fdata.file_type);
+                'SHOP_VISIT', 'SHOP_VISIT_HISTORY', 'SVRG_MASTER', 'COMMERCIAL_PLAN',
+                'EMPLOYEE_WHEREABOUTS', 'UNKNOWN', 'ERROR'].includes(fdata.file_type);
         });
     }
 
@@ -3610,6 +3669,17 @@ const RRApp = (() => {
             { id: 'pdfIncFH', key: 'flight_hours', label: 'Flight Hours', checked: false },
             { id: 'pdfIncClaims', key: 'claims', label: 'Claims Summary', checked: true },
             { id: 'pdfIncEvents', key: 'events', label: 'Event Entries', checked: true },
+        ],
+        COMMERCIAL_PLAN: [
+            { id: 'pdfIncOverview', key: 'overview', label: 'Overview KPIs', checked: true },
+            { id: 'pdfIncActionLog', key: 'action_log', label: 'Action Log', checked: true },
+            { id: 'pdfIncPipeline', key: 'pipeline', label: 'SPE Pipeline', checked: true },
+            { id: 'pdfIncYearly', key: 'yearly_summary', label: 'Yearly Summary', checked: true },
+        ],
+        EMPLOYEE_WHEREABOUTS: [
+            { id: 'pdfIncOverview', key: 'overview', label: 'Overview & KPIs', checked: true },
+            { id: 'pdfIncCountry', key: 'country_breakdown', label: 'Country Breakdown', checked: true },
+            { id: 'pdfIncEmployeeList', key: 'employee_list', label: 'Employee List', checked: true },
         ],
         UNKNOWN: [
             { id: 'pdfIncKPIs', key: 'kpis', label: 'Summary', checked: true },

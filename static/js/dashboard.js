@@ -507,6 +507,8 @@
                 SHOP_VISIT_HISTORY: { label: 'Shop Visit History', icon: 'wrench', color: '#EF6C00', bg: 'rgba(239,108,0,0.08)' },
                 SVRG_MASTER: { label: 'SVRG Master', icon: 'shield-check', color: '#5E35B1', bg: 'rgba(94,53,177,0.08)' },
                 GLOBAL_HOPPER: { label: 'Global Hopper', icon: 'globe', color: '#00C875', bg: 'rgba(0,200,117,0.08)' },
+                COMMERCIAL_PLAN: { label: 'Plan', icon: 'calendar-clock', color: '#7C3AED', bg: 'rgba(124,58,237,0.08)' },
+                EMPLOYEE_WHEREABOUTS: { label: 'Whereabouts', icon: 'map-pin', color: '#0EA5E9', bg: 'rgba(14,165,233,0.08)' },
                 UNKNOWN: { label: 'Data File', icon: 'file-spreadsheet', color: '#9E9E9E', bg: 'rgba(158,158,158,0.08)' },
                 ERROR: { label: 'Error', icon: 'alert-triangle', color: '#C62828', bg: 'rgba(198,40,40,0.08)' },
             };
@@ -553,6 +555,140 @@
                         }
                     });
                 } catch (e) { /* noop */ }
+            }
+
+            // ═══════════════════════════════════════════════════
+            // DOWNLOAD TOOLBAR (PNG / PDF export per visualization)
+            // ═══════════════════════════════════════════════════
+            /**
+             * Mounts a "Download as PNG / Download as PDF" toolbar at the top of a
+             * rendered visualization container. Uses html2canvas + jsPDF (loaded
+             * via CDN in index.html). Safe no-op if libs aren't loaded.
+             * @param {HTMLElement} container
+             * @param {Object} [opts] - { filename, title }
+             */
+            function _wireDownloadToolbar(container, opts) {
+                if (!container) return;
+                opts = opts || {};
+                const filename = (opts.filename || 'visualization').replace(/[^\w.\-]+/g, '_');
+
+                // Remove any previously-mounted toolbar (idempotent across re-renders)
+                const existing = container.querySelector(':scope > .viz-download-toolbar');
+                if (existing) existing.remove();
+
+                const toolbar = document.createElement('div');
+                toolbar.className = 'viz-download-toolbar';
+                toolbar.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;padding:8px 16px;margin-bottom:4px;';
+                toolbar.innerHTML =
+                    '<button type="button" class="viz-dl-png-btn" ' +
+                    'style="padding:6px 12px;background:#fff;border:1px solid #D1D5DB;border-radius:6px;' +
+                    'font-size:0.875rem;cursor:pointer;display:inline-flex;align-items:center;gap:6px;' +
+                    'color:#111827;font-weight:500;">' +
+                    '<span>⬇</span><span>Download PNG</span></button>' +
+                    '<button type="button" class="viz-dl-pdf-btn" ' +
+                    'style="padding:6px 12px;background:#10069F;color:#fff;border:1px solid #10069F;' +
+                    'border-radius:6px;font-size:0.875rem;cursor:pointer;display:inline-flex;' +
+                    'align-items:center;gap:6px;font-weight:500;">' +
+                    '<span>⬇</span><span>Download PDF</span></button>';
+
+                container.insertBefore(toolbar, container.firstChild);
+
+                const pngBtn = toolbar.querySelector('.viz-dl-png-btn');
+                const pdfBtn = toolbar.querySelector('.viz-dl-pdf-btn');
+
+                async function _captureCanvas() {
+                    if (typeof window.html2canvas !== 'function') {
+                        alert('Screenshot library (html2canvas) not loaded. Please refresh and try again.');
+                        return null;
+                    }
+                    // Hide toolbar during capture so it isn't baked into the output
+                    toolbar.style.visibility = 'hidden';
+                    try {
+                        const bg = getComputedStyle(container).backgroundColor;
+                        const canvas = await window.html2canvas(container, {
+                            backgroundColor: (bg && bg !== 'rgba(0, 0, 0, 0)') ? bg : '#ffffff',
+                            scale: 2,
+                            logging: false,
+                            useCORS: true,
+                            allowTaint: false,
+                        });
+                        return canvas;
+                    } finally {
+                        toolbar.style.visibility = '';
+                    }
+                }
+
+                pngBtn.addEventListener('click', async () => {
+                    pngBtn.disabled = true;
+                    const origHtml = pngBtn.innerHTML;
+                    pngBtn.innerHTML = '<span>⏳</span><span>Capturing...</span>';
+                    try {
+                        const canvas = await _captureCanvas();
+                        if (!canvas) return;
+                        const link = document.createElement('a');
+                        link.download = filename + '.png';
+                        link.href = canvas.toDataURL('image/png');
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                    } catch (err) {
+                        console.error('[viz-download] PNG export failed:', err);
+                        alert('PNG export failed: ' + (err && err.message ? err.message : err));
+                    } finally {
+                        pngBtn.disabled = false;
+                        pngBtn.innerHTML = origHtml;
+                    }
+                });
+
+                pdfBtn.addEventListener('click', async () => {
+                    if (!window.jspdf || !window.jspdf.jsPDF) {
+                        alert('PDF library (jsPDF) not loaded. Please refresh and try again.');
+                        return;
+                    }
+                    pdfBtn.disabled = true;
+                    const origHtml = pdfBtn.innerHTML;
+                    pdfBtn.innerHTML = '<span>⏳</span><span>Building...</span>';
+                    try {
+                        const canvas = await _captureCanvas();
+                        if (!canvas) return;
+                        const imgData = canvas.toDataURL('image/png');
+                        const jsPDF = window.jspdf.jsPDF;
+                        const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+                        const pageW = pdf.internal.pageSize.getWidth();
+                        const pageH = pdf.internal.pageSize.getHeight();
+                        const imgW = pageW - 40;   // 20pt margin each side
+                        const imgH = canvas.height * (imgW / canvas.width);
+
+                        if (imgH <= pageH - 40) {
+                            pdf.addImage(imgData, 'PNG', 20, 20, imgW, imgH);
+                        } else {
+                            // Multi-page: vertically slice the canvas
+                            const usableH = pageH - 40;
+                            const pages = Math.ceil(imgH / usableH);
+                            const srcSliceH = Math.floor(canvas.height / pages);
+                            for (let p = 0; p < pages; p++) {
+                                if (p > 0) pdf.addPage();
+                                const srcY = p * srcSliceH;
+                                const sliceH = (p === pages - 1) ? (canvas.height - srcY) : srcSliceH;
+                                const sliceCanvas = document.createElement('canvas');
+                                sliceCanvas.width = canvas.width;
+                                sliceCanvas.height = sliceH;
+                                const ctx = sliceCanvas.getContext('2d');
+                                ctx.drawImage(canvas, 0, srcY, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+                                const sliceData = sliceCanvas.toDataURL('image/png');
+                                const sliceHpt = (imgW / canvas.width) * sliceH;
+                                pdf.addImage(sliceData, 'PNG', 20, 20, imgW, sliceHpt);
+                            }
+                        }
+                        pdf.save(filename + '.pdf');
+                    } catch (err) {
+                        console.error('[viz-download] PDF export failed:', err);
+                        alert('PDF export failed: ' + (err && err.message ? err.message : err));
+                    } finally {
+                        pdfBtn.disabled = false;
+                        pdfBtn.innerHTML = origHtml;
+                    }
+                });
             }
 
             /**
@@ -655,6 +791,18 @@
                 _currentFileType = typeKeys.find(t => t !== 'UNKNOWN' && t !== 'ERROR') || typeKeys[0] || null;
                 try { if (window.RRApp) window.RRApp._currentFileType = _currentFileType; } catch (e) { /* noop */ }
 
+                // Attach PNG / PDF download toolbar to the entire dashboard view.
+                // Called once per renderVisualizer() so filter re-renders of child
+                // sections don't duplicate it. Safe no-op if libs aren't loaded.
+                try {
+                    const _dlFirstName = fileEntries[0] ? fileEntries[0][0] : 'visualization';
+                    const _dlTypePrefix = _currentFileType ? (_currentFileType + '_') : '';
+                    const _dlFilename = _dlTypePrefix + String(_dlFirstName).replace(/\.[^.]+$/, '');
+                    _wireDownloadToolbar(container, { filename: _dlFilename });
+                } catch (e) {
+                    console.warn('[RRVisualizer] Download toolbar init failed:', e);
+                }
+
                 // Now render each section
                 typeKeys.forEach(ft => {
                     const files = fileTypes[ft];
@@ -670,6 +818,8 @@
                                 case 'SHOP_VISIT_HISTORY': _renderShopVisit(el, data, name); break;
                                 case 'SHOP_VISIT': _renderShopVisit(el, data, name); break;
                                 case 'SVRG_MASTER': _renderSVRG(el, data, name); break;
+                                case 'COMMERCIAL_PLAN': _renderCommercialPlan(el, data, name, opts); break;
+                                case 'EMPLOYEE_WHEREABOUTS': _renderEmployeeWhereabouts(el, data, name, opts); break;
                                 case 'ERROR': _renderError(el, data, name); break;
                                 default: _renderUnknown(el, data, name); break;
                             }
@@ -2941,14 +3091,31 @@
                     parent = parent.parentElement;
                 }
 
-                // ── Filter bar ──
+                // Unique values for filter dropdowns — derive from master records
+                // so they reflect what's actually in the data (not parser-reported uniques).
+                const regions = summary.unique_regions && summary.unique_regions.length
+                    ? summary.unique_regions
+                    : [...new Set(opportunities.map(r => r.region).filter(Boolean))].sort();
+                const customers = summary.unique_customers && summary.unique_customers.length
+                    ? summary.unique_customers
+                    : [...new Set(opportunities.map(r => r.customer).filter(Boolean))].sort();
+                const statuses = summary.unique_statuses && summary.unique_statuses.length
+                    ? summary.unique_statuses
+                    : [...new Set(opportunities.map(r => r.status).filter(Boolean))].sort();
+                const evsList = summary.unique_evs && summary.unique_evs.length
+                    ? summary.unique_evs
+                    : [...new Set(opportunities.map(r => r.engine_value_stream).filter(Boolean))].sort();
+                const maturities = summary.unique_maturities && summary.unique_maturities.length
+                    ? summary.unique_maturities
+                    : [...new Set(opportunities.map(r => r.maturity).filter(Boolean))].sort();
+                const restructureTypes = summary.unique_restructure_types && summary.unique_restructure_types.length
+                    ? summary.unique_restructure_types
+                    : [...new Set(opportunities.map(r => r.restructure_type).filter(Boolean))].sort();
+
+                // ── Filter bar (OUTSIDE content wrapper so it survives re-renders) ──
                 const filterBarId = uid + '_filters';
-                const regions = summary.unique_regions || [];
-                const customers = summary.unique_customers || [];
-                const statuses = summary.unique_statuses || [];
-                const evsList = summary.unique_evs || [];
-                const maturities = summary.unique_maturities || [];
-                const restructureTypes = summary.unique_restructure_types || [];
+                const contentId = uid + '_content';
+                const resetBtnId = uid + '_reset';
 
                 let filterHTML = `<div class="viz-global-filter-bar" id="${filterBarId}" style="display:flex;flex-wrap:wrap;gap:12px;align-items:end;padding:14px 16px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;margin-bottom:16px">`;
                 filterHTML += `<div class="viz-filter-item"><label style="display:block;font-size:11px;color:#C8C6DD;margin-bottom:4px">Region</label><select data-filter="region" style="min-width:140px;padding:6px 10px;background:#0A0842;color:#E8E6F8;border:1px solid rgba(255,255,255,0.12);border-radius:6px"><option value="">All</option>${regions.map(r => `<option value="${escA(r)}">${escH(r)}</option>`).join('')}</select></div>`;
@@ -2957,26 +3124,14 @@
                 filterHTML += `<div class="viz-filter-item"><label style="display:block;font-size:11px;color:#C8C6DD;margin-bottom:4px">Status</label><select data-filter="status" style="min-width:140px;padding:6px 10px;background:#0A0842;color:#E8E6F8;border:1px solid rgba(255,255,255,0.12);border-radius:6px"><option value="">All</option>${statuses.map(s => `<option value="${escA(s)}">${escH(s)}</option>`).join('')}</select></div>`;
                 filterHTML += `<div class="viz-filter-item"><label style="display:block;font-size:11px;color:#C8C6DD;margin-bottom:4px">Maturity</label><select data-filter="maturity" style="min-width:140px;padding:6px 10px;background:#0A0842;color:#E8E6F8;border:1px solid rgba(255,255,255,0.12);border-radius:6px"><option value="">All</option>${maturities.map(m => `<option value="${escA(m)}">${escH(m)}</option>`).join('')}</select></div>`;
                 filterHTML += `<div class="viz-filter-item"><label style="display:block;font-size:11px;color:#C8C6DD;margin-bottom:4px">Restructure Type</label><select data-filter="restructure_type" style="min-width:140px;padding:6px 10px;background:#0A0842;color:#E8E6F8;border:1px solid rgba(255,255,255,0.12);border-radius:6px"><option value="">All</option>${restructureTypes.map(t => `<option value="${escA(t)}">${escH(t)}</option>`).join('')}</select></div>`;
-                filterHTML += `<button type="button" id="${uid}_reset" style="padding:8px 14px;background:transparent;border:1px solid rgba(0,200,117,0.5);color:#00C875;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600"><i data-lucide="rotate-ccw" style="width:12px;height:12px;vertical-align:-2px;margin-right:4px"></i> Reset</button>`;
+                filterHTML += `<button type="button" id="${resetBtnId}" style="padding:8px 14px;background:transparent;border:1px solid rgba(0,200,117,0.5);color:#00C875;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600"><i data-lucide="rotate-ccw" style="width:12px;height:12px;vertical-align:-2px;margin-right:4px"></i> Reset</button>`;
                 filterHTML += `</div>`;
 
-                // Helper to format GBP
-                function fmtGBP(v) {
-                    if (v == null || isNaN(v)) return '—';
-                    const abs = Math.abs(v);
-                    const s = abs >= 1000 ? `£${(abs / 1000).toFixed(1)}bn` : abs >= 1 ? `£${abs.toFixed(1)}m` : `£${(abs * 1000).toFixed(0)}k`;
-                    return v < 0 ? `-${s}` : s;
-                }
-                function fmtGBPm(v) {
-                    if (v == null || isNaN(v)) return '—';
-                    return `£${v.toFixed(1)}m`;
-                }
-
-                // Build main HTML
-                let html = '';
-
-                // ── Title banner (matches MEA tracker viz-opp-banner) ──
-                html += `<div class="viz-opp-banner">
+                // ── Title banner + filter bar + content wrapper ──
+                // NOTE: content wrapper contains EVERYTHING that changes on filter —
+                //       KPIs, info chips, secondary KPIs, all charts, all tables.
+                //       This guarantees that a filter change fully refreshes the view.
+                const bannerHTML = `<div class="viz-opp-banner">
             <div class="viz-opp-banner-inner">
                 <div class="viz-opp-banner-title"><i data-lucide="globe"></i><span>${_safe(meta.title || 'Commercial Optimisation Opportunity Report')}</span></div>
                 <div style="display:flex;align-items:center;gap:16px">
@@ -2986,246 +3141,344 @@
             </div>
         </div>`;
 
-                // ── Filter bar ──
-                html += filterHTML;
+                el.innerHTML = `${bannerHTML}${filterHTML}<div id="${contentId}"></div>`;
 
-                // ── Content wrapper (for filter updates) ──
-                html += `<div id="${uid}_content">`;
-
-                // ── Hero KPIs (matches MEA tracker viz-opp-hero) ──
-                html += `<div class="viz-opp-hero" id="${uid}_kpis">
-            <div class="viz-opp-hero-card"><div class="viz-opp-hero-label">CRP Term Benefit</div><div class="viz-opp-hero-value">${fmtGBP(summary.total_crp_term_benefit)}</div></div>
-            <div class="viz-opp-hero-card"><div class="viz-opp-hero-label">Profit 2026</div><div class="viz-opp-hero-value">${fmtGBPm(summary.total_profit_2026)}</div></div>
-            <div class="viz-opp-hero-card viz-opp-hero-accent"><div class="viz-opp-hero-label">Profit 2027</div><div class="viz-opp-hero-value">${fmtGBPm(summary.total_profit_2027)}</div></div>
-            <div class="viz-opp-hero-card viz-opp-hero-primary"><div class="viz-opp-hero-label">Profit 2028–30</div><div class="viz-opp-hero-value">${fmtGBPm((summary.total_profit_2028 || 0) + (summary.total_profit_2029 || 0) + (summary.total_profit_2030 || 0))}</div></div>
-        </div>`;
-
-                // ── Meta info bar ──
-                const byMaturity = summary.by_maturity || {};
-                const byOnerous = summary.by_onerous || {};
-                html += '<div class="viz-customer-bar">';
-                html += `<div class="viz-info-chip"><b>Currency:</b> ${currency}</div>`;
-                html += `<div class="viz-info-chip"><b>Opportunities:</b> ${opportunities.length}</div>`;
-                html += `<div class="viz-info-chip"><b>Customers:</b> ${customers.length}</div>`;
-                html += `<div class="viz-info-chip"><b>Regions:</b> ${regions.join(', ')}</div>`;
-                html += `<div class="viz-info-chip"><b>EVS Types:</b> ${evsList.length}</div>`;
-                html += '</div>';
-
-                // ── Secondary KPIs ──
-                html += `<div class="viz-kpi-grid viz-kpi-grid-5" id="${uid}_kpis2">`;
-                html += _kpiCard('Mature', `${byMaturity['Mature'] || 0}`, { icon: 'check-circle', colorClass: 'kpi-success', subtitle: 'opportunities' });
-                html += _kpiCard('Immature', `${byMaturity['Immature'] || 0}`, { icon: 'clock', subtitle: 'opportunities' });
-                html += _kpiCard('Onerous', `${byOnerous['Onerous Contract'] || 0}`, { icon: 'alert-triangle', colorClass: 'kpi-danger', subtitle: 'contracts' });
-                html += _kpiCard('Not Onerous', `${byOnerous['Not Onerous'] || 0}`, { icon: 'shield-check', subtitle: 'contracts' });
-                html += _kpiCard('Regions', `${regions.length}`, { icon: 'globe', subtitle: regions.join(', ') });
-                html += `</div>`;
-
-                // ── Charts row 1: Pipeline + Region ──
-                const pipelineChartId = uid + '_pipeline';
-                const regionChartId = uid + '_region';
-                html += `<div class="viz-chart-grid viz-chart-grid-2">
-            <div class="viz-chart-card"><div class="viz-chart-header">Pipeline by Status</div><div id="${pipelineChartId}" class="viz-chart-body"></div></div>
-            <div class="viz-chart-card"><div class="viz-chart-header">CRP by Region</div><div id="${regionChartId}" class="viz-chart-body"></div></div>
-        </div>`;
-
-                // ── Charts row 2: Top customers + EVS ──
-                const custChartId = uid + '_customers';
-                const evsChartId = uid + '_evs';
-                html += `<div class="viz-chart-grid viz-chart-grid-2">
-            <div class="viz-chart-card"><div class="viz-chart-header">Top 15 Customers by CRP Term Benefit</div><div id="${custChartId}" class="viz-chart-body"></div></div>
-            <div class="viz-chart-card"><div class="viz-chart-header">Engine Value Stream Distribution</div><div id="${evsChartId}" class="viz-chart-body"></div></div>
-        </div>`;
-
-                // ── Charts row 3: Year-over-year + Restructure type ──
-                const yoyChartId = uid + '_yoy';
-                const restTypeChartId = uid + '_resttype';
-                html += `<div class="viz-chart-grid viz-chart-grid-2">
-            <div class="viz-chart-card"><div class="viz-chart-header">Annual Profit Forecast (${escH(currency)})</div><div id="${yoyChartId}" class="viz-chart-body"></div></div>
-            <div class="viz-chart-card"><div class="viz-chart-header">Restructure Type Split</div><div id="${restTypeChartId}" class="viz-chart-body"></div></div>
-        </div>`;
-
-                // ── Charts row 4: Region × Restructure stacked bar + Owner leaderboard ──
-                const stackedId = uid + '_stacked';
-                const leaderId = uid + '_leader';
-                html += `<div class="viz-chart-grid viz-chart-grid-2">
-            <div class="viz-chart-card"><div class="viz-chart-header">CRP Term Benefit by Region × Restructure Type</div><div id="${stackedId}" class="viz-chart-body"></div></div>
-            <div class="viz-chart-card"><div class="viz-chart-header">Top 10 VP/Account Manager Owners by Benefit</div><div id="${leaderId}" class="viz-chart-body"></div></div>
-        </div>`;
-
-                // ── Charts row 5: Profit Treemap (full width) ──
-                const treemapId = uid + '_treemap';
-                html += `<div class="viz-chart-grid viz-chart-grid-1" style="grid-template-columns:1fr">
-            <div class="viz-chart-card"><div class="viz-chart-header">Profit 2026-2030 by Engine Value Stream (Treemap)</div><div id="${treemapId}" class="viz-chart-body"></div></div>
-        </div>`;
-
-                // ── Opportunities table ──
-                const oppHeaders = ['Region', 'Customer', 'EVS', 'Restructure Type', 'Maturity', 'Status', 'CRP Term (£m)', '2026 (£m)', '2027 (£m)', 'VP/Owner'];
-                const oppRows = opportunities.map(r => [
-                    _safe(r.region || ''), _safe(r.customer || ''), _safe(r.engine_value_stream || ''),
-                    _safe(r.restructure_type || ''), _safe(r.maturity || ''), _safe(r.status || ''),
-                    r.crp_term_benefit != null ? r.crp_term_benefit.toFixed(1) : '—',
-                    r.profit_2026 != null ? r.profit_2026.toFixed(1) : '—',
-                    r.profit_2027 != null ? r.profit_2027.toFixed(1) : '—',
-                    _safe(r.vp_owner || '')
-                ]);
-
-                html += _sectionHeader('Opportunities Register', 'list', { badge: `${opportunities.length} records`, collapsible: true });
-                html += `<div class="viz-collapsible-content">`;
-                html += _dataTable(oppHeaders, oppRows, { maxHeight: '500px', moneyColumns: [6, 7, 8] });
-                html += `</div>`;
-
-                // ── Executive Report table ──
-                if (execReport.length > 0) {
-                    const execHeaders = Object.keys(execReport[0]);
-                    const execRows = execReport.map(r => execHeaders.map(h => {
-                        const v = r[h];
-                        return v != null ? (typeof v === 'number' ? v.toFixed(1) : _safe(String(v))) : '—';
-                    }));
-                    html += _sectionHeader('Executive Report', 'briefcase', { badge: `${execReport.length} customers`, collapsible: true });
-                    html += `<div class="viz-collapsible-content">`;
-                    html += _dataTable(execHeaders, execRows, { maxHeight: '400px' });
-                    html += `</div>`;
-                }
-
-                // ── Detail Report table ──
-                if (detailReport.length > 0) {
-                    const detHeaders = Object.keys(detailReport[0]);
-                    const detRows = detailReport.map(r => detHeaders.map(h => {
-                        const v = r[h];
-                        return v != null ? (typeof v === 'number' ? v.toFixed(1) : _safe(String(v))) : '—';
-                    }));
-                    html += _sectionHeader('Detail Report', 'file-text', { badge: `${detailReport.length} rows`, collapsible: true });
-                    html += `<div class="viz-collapsible-content">`;
-                    html += _dataTable(detHeaders, detRows, { maxHeight: '400px' });
-                    html += `</div>`;
-                }
-
-                html += `</div>`; // close content wrapper
-
-                el.innerHTML = html;
-
-                // Wire collapsible sections - start collapsed
-                el.querySelectorAll('.viz-collapsible-content').forEach(content => {
-                    content.style.display = 'none';
-                });
-                el.querySelectorAll('.viz-section-header').forEach(hdr => {
-                    const content = hdr.nextElementSibling;
-                    if (content && content.classList.contains('viz-collapsible-content')) {
-                        hdr.style.cursor = 'pointer';
-                        hdr.addEventListener('click', () => {
-                            const isHidden = content.style.display === 'none';
-                            content.style.display = isHidden ? 'block' : 'none';
-                            hdr.classList.toggle('expanded', isHidden);
-                        });
-                    }
-                });
-
-                // Register empty filter state initially
-                _registerFilterState('GLOBAL_HOPPER', {});
-
-                // Make the 3 tables sortable (audit found this was silently broken)
-                _makeTablesSortable(el);
-
-                // ── Render charts ──
-                setTimeout(() => {
-                    _renderGlobalHopperCharts(uid, opportunities, summary, currency);
-                }, 100);
-
-                // ── Wire filters + reset ──
-                const filterBar = document.getElementById(filterBarId);
-                const applyCurrent = () => {
-                    const filters = {};
-                    if (filterBar) {
-                        filterBar.querySelectorAll('select').forEach(s => {
-                            if (s.value) filters[s.dataset.filter] = s.value;
-                        });
-                    }
-                    _registerFilterState('GLOBAL_HOPPER', filters);
-                    _applyGlobalHopperFilters(uid, opportunities, summary, currency, filters, el);
-                };
-                if (filterBar) {
-                    filterBar.querySelectorAll('select').forEach(sel => {
-                        sel.addEventListener('change', applyCurrent);
-                    });
-                }
-                const resetBtn = document.getElementById(uid + '_reset');
-                if (resetBtn) {
-                    resetBtn.addEventListener('click', () => {
-                        if (filterBar) filterBar.querySelectorAll('select').forEach(s => { s.value = ''; });
-                        _registerFilterState('GLOBAL_HOPPER', {});
-                        _applyGlobalHopperFilters(uid, opportunities, summary, currency, {}, el);
-                    });
-                }
-            }
-
-            function _applyGlobalHopperFilters(uid, allOpps, originalSummary, currency, filters, el) {
-                let filtered = allOpps;
-
-                if (filters.region) filtered = filtered.filter(r => r.region === filters.region);
-                if (filters.customer) filtered = filtered.filter(r => r.customer === filters.customer);
-                if (filters.evs) filtered = filtered.filter(r => r.engine_value_stream === filters.evs);
-                if (filters.status) filtered = filtered.filter(r => r.status === filters.status);
-                if (filters.maturity) filtered = filtered.filter(r => r.maturity === filters.maturity);
-                if (filters.restructure_type) filtered = filtered.filter(r => r.restructure_type === filters.restructure_type);
-
-                // Recompute summary for filtered data
-                const totalCRP = filtered.reduce((s, r) => s + (r.crp_term_benefit || 0), 0);
-                const total2026 = filtered.reduce((s, r) => s + (r.profit_2026 || 0), 0);
-                const total2027 = filtered.reduce((s, r) => s + (r.profit_2027 || 0), 0);
-                const total2028 = filtered.reduce((s, r) => s + (r.profit_2028 || 0), 0);
-                const total2029 = filtered.reduce((s, r) => s + (r.profit_2029 || 0), 0);
-                const total2030 = filtered.reduce((s, r) => s + (r.profit_2030 || 0), 0);
-
-                function fmtGBP(v) {
+                // Helpers for GBP formatting (shared by renderContent)
+                const fmtGBP = (v) => {
                     if (v == null || isNaN(v)) return '—';
                     const abs = Math.abs(v);
                     const s = abs >= 1000 ? `£${(abs / 1000).toFixed(1)}bn` : abs >= 1 ? `£${abs.toFixed(1)}m` : `£${(abs * 1000).toFixed(0)}k`;
                     return v < 0 ? `-${s}` : s;
-                }
-                function fmtGBPm(v) { return v == null || isNaN(v) ? '—' : `£${v.toFixed(1)}m`; }
+                };
+                const fmtGBPm = (v) => {
+                    if (v == null || isNaN(v)) return '—';
+                    return `£${v.toFixed(1)}m`;
+                };
 
-                // Update KPIs (hero cards)
-                const kpis = document.getElementById(uid + '_kpis');
-                if (kpis) {
-                    kpis.innerHTML = `
+                // ── Read current filter state from the filter bar DOM ──
+                const getFilters = () => {
+                    const bar = document.getElementById(filterBarId);
+                    const out = {};
+                    if (!bar) return out;
+                    bar.querySelectorAll('select[data-filter]').forEach(s => {
+                        const v = (s.value || '').trim();
+                        if (v) out[s.dataset.filter] = v;
+                    });
+                    return out;
+                };
+
+                // ── Apply filter object to a records array ──
+                const applyFilters = (records, f) => {
+                    return records.filter(r => {
+                        if (f.region && r.region !== f.region) return false;
+                        if (f.customer && r.customer !== f.customer) return false;
+                        if (f.evs && r.engine_value_stream !== f.evs) return false;
+                        if (f.status && r.status !== f.status) return false;
+                        if (f.maturity && r.maturity !== f.maturity) return false;
+                        if (f.restructure_type && r.restructure_type !== f.restructure_type) return false;
+                        return true;
+                    });
+                };
+
+                // ── Single source of truth: render (or re-render) the ENTIRE content
+                //    for a filter state. Destroys prior charts first so ApexCharts
+                //    instances don't leak.
+                const renderContent = (filters) => {
+                    const contentEl = document.getElementById(contentId);
+                    if (!contentEl) return;
+
+                    // P0: destroy any charts from the previous render pass so ApexCharts
+                    // does not leak instances and can reuse chart-ids.
+                    if (window.RRCharts && typeof window.RRCharts.destroyAll === 'function') {
+                        try { window.RRCharts.destroyAll(); } catch (e) { /* noop */ }
+                    }
+
+                    const filteredOpps = applyFilters(opportunities, filters);
+
+                    // Empty-state on filter-to-zero
+                    if (filteredOpps.length === 0) {
+                        _renderEmptyState(contentEl, {
+                            onReset: resetAll,
+                            message: 'No opportunities match the current filters.',
+                            hint: 'Reset filters to see all records.',
+                        });
+                        return;
+                    }
+
+                    // Filter tables too: opportunities table uses filteredOpps directly.
+                    // Exec + Detail report tables cannot be filtered by opportunity predicates
+                    // (different schema); we keep them visible but gate them off when ALL
+                    // active filters are "customer" (the only shared key) so rows match.
+                    const filteredExec = _filterExecReport(execReport, filters);
+                    const filteredDetail = _filterDetailReport(detailReport, filters);
+
+                    // Recompute summary for filtered data
+                    const totalCRP = filteredOpps.reduce((s, r) => s + (r.crp_term_benefit || 0), 0);
+                    const total2026 = filteredOpps.reduce((s, r) => s + (r.profit_2026 || 0), 0);
+                    const total2027 = filteredOpps.reduce((s, r) => s + (r.profit_2027 || 0), 0);
+                    const total2028 = filteredOpps.reduce((s, r) => s + (r.profit_2028 || 0), 0);
+                    const total2029 = filteredOpps.reduce((s, r) => s + (r.profit_2029 || 0), 0);
+                    const total2030 = filteredOpps.reduce((s, r) => s + (r.profit_2030 || 0), 0);
+
+                    // Recompute aggregates by category for charts
+                    const filteredSummary = {
+                        by_status_value: {}, by_region_value: {}, by_customer_value: {},
+                        by_evs_value: {}, by_restructure_type_value: {},
+                        total_profit_2026: total2026, total_profit_2027: total2027,
+                        total_profit_2028: total2028, total_profit_2029: total2029,
+                        total_profit_2030: total2030, total_crp_term_benefit: totalCRP,
+                        pipeline_stages: [],
+                    };
+                    filteredOpps.forEach(r => {
+                        const s = r.status || 'Unknown';
+                        filteredSummary.by_status_value[s] = (filteredSummary.by_status_value[s] || 0) + (r.crp_term_benefit || 0);
+                        const reg = r.region || 'Unknown';
+                        filteredSummary.by_region_value[reg] = (filteredSummary.by_region_value[reg] || 0) + (r.crp_term_benefit || 0);
+                        const c = r.customer || 'Unknown';
+                        filteredSummary.by_customer_value[c] = (filteredSummary.by_customer_value[c] || 0) + (r.crp_term_benefit || 0);
+                        const e = r.engine_value_stream || 'Unknown';
+                        filteredSummary.by_evs_value[e] = (filteredSummary.by_evs_value[e] || 0) + (r.crp_term_benefit || 0);
+                        const rt = r.restructure_type || 'Unknown';
+                        filteredSummary.by_restructure_type_value[rt] = (filteredSummary.by_restructure_type_value[rt] || 0) + (r.crp_term_benefit || 0);
+                    });
+
+                    // Recompute maturity/onerous counts from filtered records
+                    const byMaturityFiltered = {};
+                    const byOnerousFiltered = {};
+                    filteredOpps.forEach(r => {
+                        if (r.maturity) byMaturityFiltered[r.maturity] = (byMaturityFiltered[r.maturity] || 0) + 1;
+                        if (r.restructure_type === 'Onerous Contract') {
+                            byOnerousFiltered['Onerous Contract'] = (byOnerousFiltered['Onerous Contract'] || 0) + 1;
+                        } else if (r.restructure_type === 'Not Onerous') {
+                            byOnerousFiltered['Not Onerous'] = (byOnerousFiltered['Not Onerous'] || 0) + 1;
+                        }
+                    });
+                    // Fall back to parser-provided counts when not filtered
+                    const byMaturity = Object.keys(filters).length === 0 ? (summary.by_maturity || {}) : byMaturityFiltered;
+                    const byOnerous = Object.keys(filters).length === 0 ? (summary.by_onerous || {}) : byOnerousFiltered;
+
+                    // Filter-set summary for info chips
+                    const filteredCustomers = [...new Set(filteredOpps.map(r => r.customer).filter(Boolean))];
+                    const filteredRegions = [...new Set(filteredOpps.map(r => r.region).filter(Boolean))];
+                    const filteredEvs = [...new Set(filteredOpps.map(r => r.engine_value_stream).filter(Boolean))];
+
+                    // Chart ids (regenerate each render so ApexCharts doesn't collide)
+                    const chartIdSuffix = Math.random().toString(36).slice(2, 6);
+                    const pipelineChartId = `${uid}_pipeline_${chartIdSuffix}`;
+                    const regionChartId = `${uid}_region_${chartIdSuffix}`;
+                    const custChartId = `${uid}_customers_${chartIdSuffix}`;
+                    const evsChartId = `${uid}_evs_${chartIdSuffix}`;
+                    const yoyChartId = `${uid}_yoy_${chartIdSuffix}`;
+                    const restTypeChartId = `${uid}_resttype_${chartIdSuffix}`;
+                    const stackedId = `${uid}_stacked_${chartIdSuffix}`;
+                    const leaderId = `${uid}_leader_${chartIdSuffix}`;
+                    const treemapId = `${uid}_treemap_${chartIdSuffix}`;
+
+                    let html = '';
+
+                    // ── Hero KPIs ──
+                    html += `<div class="viz-opp-hero">
                 <div class="viz-opp-hero-card"><div class="viz-opp-hero-label">CRP Term Benefit</div><div class="viz-opp-hero-value">${fmtGBP(totalCRP)}</div></div>
                 <div class="viz-opp-hero-card"><div class="viz-opp-hero-label">Profit 2026</div><div class="viz-opp-hero-value">${fmtGBPm(total2026)}</div></div>
                 <div class="viz-opp-hero-card viz-opp-hero-accent"><div class="viz-opp-hero-label">Profit 2027</div><div class="viz-opp-hero-value">${fmtGBPm(total2027)}</div></div>
-                <div class="viz-opp-hero-card viz-opp-hero-primary"><div class="viz-opp-hero-label">Profit 2028–30</div><div class="viz-opp-hero-value">${fmtGBPm(total2028 + total2029 + total2030)}</div></div>`;
-                    // remove old generic kpi lines below
-                }
+                <div class="viz-opp-hero-card viz-opp-hero-primary"><div class="viz-opp-hero-label">Profit 2028–30</div><div class="viz-opp-hero-value">${fmtGBPm(total2028 + total2029 + total2030)}</div></div>
+            </div>`;
 
-                // Rebuild summary for charts
-                const filteredSummary = {
-                    by_status_value: {}, by_region_value: {}, by_customer_value: {},
-                    by_evs_value: {}, by_restructure_type_value: {},
-                    total_profit_2026: total2026, total_profit_2027: total2027,
-                    total_profit_2028: total2028, total_profit_2029: total2029,
-                    total_profit_2030: total2030, total_crp_term_benefit: totalCRP,
-                    pipeline_stages: [],
+                    // ── Meta info bar ──
+                    html += '<div class="viz-customer-bar">';
+                    html += `<div class="viz-info-chip"><b>Currency:</b> ${escH(currency)}</div>`;
+                    html += `<div class="viz-info-chip"><b>Opportunities:</b> ${filteredOpps.length}${filteredOpps.length !== opportunities.length ? ` <span style="opacity:0.7">of ${opportunities.length}</span>` : ''}</div>`;
+                    html += `<div class="viz-info-chip"><b>Customers:</b> ${filteredCustomers.length}</div>`;
+                    html += `<div class="viz-info-chip"><b>Regions:</b> ${escH(filteredRegions.join(', ') || '—')}</div>`;
+                    html += `<div class="viz-info-chip"><b>EVS Types:</b> ${filteredEvs.length}</div>`;
+                    if (Object.keys(filters).length > 0) {
+                        html += `<div class="viz-info-chip" style="background:rgba(0,200,117,0.15);border:1px solid rgba(0,200,117,0.35)"><b>Filters:</b> ${escH(Object.entries(filters).map(([k, v]) => `${k}=${v}`).join(' · '))}</div>`;
+                    }
+                    html += '</div>';
+
+                    // ── Secondary KPIs ──
+                    html += `<div class="viz-kpi-grid viz-kpi-grid-5">`;
+                    html += _kpiCard('Mature', `${byMaturity['Mature'] || 0}`, { icon: 'check-circle', colorClass: 'kpi-success', subtitle: 'opportunities' });
+                    html += _kpiCard('Immature', `${byMaturity['Immature'] || 0}`, { icon: 'clock', subtitle: 'opportunities' });
+                    html += _kpiCard('Onerous', `${byOnerous['Onerous Contract'] || 0}`, { icon: 'alert-triangle', colorClass: 'kpi-danger', subtitle: 'contracts' });
+                    html += _kpiCard('Not Onerous', `${byOnerous['Not Onerous'] || 0}`, { icon: 'shield-check', subtitle: 'contracts' });
+                    html += _kpiCard('Regions', `${filteredRegions.length}`, { icon: 'globe', subtitle: filteredRegions.join(', ') || '—' });
+                    html += `</div>`;
+
+                    // ── Charts row 1: Pipeline + Region ──
+                    html += `<div class="viz-chart-grid viz-chart-grid-2">
+                <div class="viz-chart-card"><div class="viz-chart-header">Pipeline by Status</div><div id="${pipelineChartId}" class="viz-chart-body"></div></div>
+                <div class="viz-chart-card"><div class="viz-chart-header">CRP by Region</div><div id="${regionChartId}" class="viz-chart-body"></div></div>
+            </div>`;
+
+                    // ── Charts row 2: Top customers + EVS ──
+                    html += `<div class="viz-chart-grid viz-chart-grid-2">
+                <div class="viz-chart-card"><div class="viz-chart-header">Top 15 Customers by CRP Term Benefit</div><div id="${custChartId}" class="viz-chart-body"></div></div>
+                <div class="viz-chart-card"><div class="viz-chart-header">Engine Value Stream Distribution</div><div id="${evsChartId}" class="viz-chart-body"></div></div>
+            </div>`;
+
+                    // ── Charts row 3: Year-over-year + Restructure type ──
+                    html += `<div class="viz-chart-grid viz-chart-grid-2">
+                <div class="viz-chart-card"><div class="viz-chart-header">Annual Profit Forecast (${escH(currency)})</div><div id="${yoyChartId}" class="viz-chart-body"></div></div>
+                <div class="viz-chart-card"><div class="viz-chart-header">Restructure Type Split</div><div id="${restTypeChartId}" class="viz-chart-body"></div></div>
+            </div>`;
+
+                    // ── Charts row 4: Region × Restructure stacked bar + Owner leaderboard ──
+                    html += `<div class="viz-chart-grid viz-chart-grid-2">
+                <div class="viz-chart-card"><div class="viz-chart-header">CRP Term Benefit by Region × Restructure Type</div><div id="${stackedId}" class="viz-chart-body"></div></div>
+                <div class="viz-chart-card"><div class="viz-chart-header">Top 10 VP/Account Manager Owners by Benefit</div><div id="${leaderId}" class="viz-chart-body"></div></div>
+            </div>`;
+
+                    // ── Charts row 5: Profit Treemap (full width) ──
+                    html += `<div class="viz-chart-grid viz-chart-grid-1" style="grid-template-columns:1fr">
+                <div class="viz-chart-card"><div class="viz-chart-header">Profit 2026-2030 by Engine Value Stream (Treemap)</div><div id="${treemapId}" class="viz-chart-body"></div></div>
+            </div>`;
+
+                    // ── Opportunities table ──
+                    const oppHeaders = ['Region', 'Customer', 'EVS', 'Restructure Type', 'Maturity', 'Status', 'CRP Term (£m)', '2026 (£m)', '2027 (£m)', 'VP/Owner'];
+                    const oppRows = filteredOpps.map(r => [
+                        _safe(r.region || ''), _safe(r.customer || ''), _safe(r.engine_value_stream || ''),
+                        _safe(r.restructure_type || ''), _safe(r.maturity || ''), _safe(r.status || ''),
+                        r.crp_term_benefit != null ? r.crp_term_benefit.toFixed(1) : '—',
+                        r.profit_2026 != null ? r.profit_2026.toFixed(1) : '—',
+                        r.profit_2027 != null ? r.profit_2027.toFixed(1) : '—',
+                        _safe(r.vp_owner || '')
+                    ]);
+                    html += _sectionHeader('Opportunities Register', 'list', { badge: `${filteredOpps.length} records`, collapsible: true });
+                    html += `<div class="viz-collapsible-content">`;
+                    html += _dataTable(oppHeaders, oppRows, { maxRows: 500, moneyColumns: [6, 7, 8] });
+                    html += `</div>`;
+
+                    // ── Executive Report table ──
+                    if (filteredExec.length > 0) {
+                        const execHeaders = Object.keys(filteredExec[0]);
+                        const execRows = filteredExec.map(r => execHeaders.map(h => {
+                            const v = r[h];
+                            return v != null ? (typeof v === 'number' ? v.toFixed(1) : _safe(String(v))) : '—';
+                        }));
+                        html += _sectionHeader('Executive Report', 'briefcase', { badge: `${filteredExec.length} customers`, collapsible: true });
+                        html += `<div class="viz-collapsible-content">`;
+                        html += _dataTable(execHeaders, execRows, { maxRows: 400 });
+                        html += `</div>`;
+                    }
+
+                    // ── Detail Report table ──
+                    if (filteredDetail.length > 0) {
+                        const detHeaders = Object.keys(filteredDetail[0]);
+                        const detRows = filteredDetail.map(r => detHeaders.map(h => {
+                            const v = r[h];
+                            return v != null ? (typeof v === 'number' ? v.toFixed(1) : _safe(String(v))) : '—';
+                        }));
+                        html += _sectionHeader('Detail Report', 'file-text', { badge: `${filteredDetail.length} rows`, collapsible: true });
+                        html += `<div class="viz-collapsible-content">`;
+                        html += _dataTable(detHeaders, detRows, { maxRows: 400 });
+                        html += `</div>`;
+                    }
+
+                    contentEl.innerHTML = html;
+
+                    // Wire collapsible sections - start collapsed
+                    contentEl.querySelectorAll('.viz-collapsible-content').forEach(c => {
+                        c.style.display = 'none';
+                    });
+                    contentEl.querySelectorAll('.viz-section-header').forEach(hdr => {
+                        const c = hdr.nextElementSibling;
+                        if (c && c.classList.contains('viz-collapsible-content')) {
+                            hdr.style.cursor = 'pointer';
+                            hdr.addEventListener('click', () => {
+                                const isHidden = c.style.display === 'none';
+                                c.style.display = isHidden ? 'block' : 'none';
+                                hdr.classList.toggle('expanded', isHidden);
+                            });
+                        }
+                    });
+
+                    _makeTablesSortable(contentEl);
+                    if (window.lucide) window.lucide.createIcons();
+
+                    // Render charts with current chart-ids (in setTimeout so DOM is laid out first)
+                    setTimeout(() => {
+                        _renderGlobalHopperCharts({
+                            pipelineChartId, regionChartId, custChartId, evsChartId,
+                            yoyChartId, restTypeChartId, stackedId, leaderId, treemapId,
+                        }, filteredOpps, filteredSummary, currency);
+                    }, 50);
                 };
 
-                filtered.forEach(r => {
-                    const s = r.status || 'Unknown';
-                    filteredSummary.by_status_value[s] = (filteredSummary.by_status_value[s] || 0) + (r.crp_term_benefit || 0);
-                    const reg = r.region || 'Unknown';
-                    filteredSummary.by_region_value[reg] = (filteredSummary.by_region_value[reg] || 0) + (r.crp_term_benefit || 0);
-                    const c = r.customer || 'Unknown';
-                    filteredSummary.by_customer_value[c] = (filteredSummary.by_customer_value[c] || 0) + (r.crp_term_benefit || 0);
-                    const e = r.engine_value_stream || 'Unknown';
-                    filteredSummary.by_evs_value[e] = (filteredSummary.by_evs_value[e] || 0) + (r.crp_term_benefit || 0);
-                    const rt = r.restructure_type || 'Unknown';
-                    filteredSummary.by_restructure_type_value[rt] = (filteredSummary.by_restructure_type_value[rt] || 0) + (r.crp_term_benefit || 0);
-                });
+                // ── Reset all filters ──
+                const resetAll = () => {
+                    const bar = document.getElementById(filterBarId);
+                    if (bar) bar.querySelectorAll('select').forEach(s => { s.value = ''; });
+                    _registerFilterState('GLOBAL_HOPPER', {});
+                    renderContent({});
+                };
 
-                // Re-render charts
-                _renderGlobalHopperCharts(uid, filtered, filteredSummary, currency);
+                // ── Wire filter change handlers ONCE (filter bar never gets replaced) ──
+                const bar = document.getElementById(filterBarId);
+                if (bar) {
+                    bar.querySelectorAll('select[data-filter]').forEach(sel => {
+                        sel.addEventListener('change', () => {
+                            const f = getFilters();
+                            _registerFilterState('GLOBAL_HOPPER', f);
+                            renderContent(f);
+                        });
+                    });
+                }
+                const resetBtn = document.getElementById(resetBtnId);
+                if (resetBtn) resetBtn.addEventListener('click', resetAll);
+
+                // ── Initial render ──
+                _registerFilterState('GLOBAL_HOPPER', {});
+                renderContent({});
             }
 
-            function _renderGlobalHopperCharts(uid, records, summary, currency) {
+            // Filter the executive-report rows by the currently-active filters.
+            // Exec report has a 'customer' field and (sometimes) 'region'/'status';
+            // other filters (maturity/evs/restructure_type) don't apply to this table.
+            function _filterExecReport(execReport, filters) {
+                if (!execReport || !execReport.length) return [];
+                return execReport.filter(r => {
+                    if (filters.customer && r.customer && r.customer !== filters.customer) return false;
+                    if (filters.region && r.region && r.region !== filters.region) return false;
+                    if (filters.status && r.status && r.status !== filters.status) return false;
+                    return true;
+                });
+            }
+
+            // Filter the detail-report rows by the currently-active filters.
+            function _filterDetailReport(detailReport, filters) {
+                if (!detailReport || !detailReport.length) return [];
+                return detailReport.filter(r => {
+                    if (filters.customer && r.customer && r.customer !== filters.customer) return false;
+                    if (filters.region && r.region && r.region !== filters.region) return false;
+                    if (filters.status && r.status && r.status !== filters.status) return false;
+                    if (filters.evs && r.engine_value_stream && r.engine_value_stream !== filters.evs) return false;
+                    if (filters.maturity && r.maturity && r.maturity !== filters.maturity) return false;
+                    if (filters.restructure_type && r.restructure_type && r.restructure_type !== filters.restructure_type) return false;
+                    return true;
+                });
+            }
+
+            function _renderGlobalHopperCharts(ids, records, summary, currency) {
                 const darkText = '#C8CAE0';
                 const gridColor = 'rgba(200,202,224,0.1)';
                 const chartColors = ['#00C875', '#2D8CFF', '#FF8B42', '#FFB547', '#FF4560', '#9B59B6', '#00D2FF', '#E91E63', '#4CAF50', '#FF9800'];
+
+                // Backward compat: old signature passed a `uid` string — convert to ids object.
+                if (typeof ids === 'string') {
+                    const u = ids;
+                    ids = {
+                        pipelineChartId: u + '_pipeline',
+                        regionChartId: u + '_region',
+                        custChartId: u + '_customers',
+                        evsChartId: u + '_evs',
+                        yoyChartId: u + '_yoy',
+                        restTypeChartId: u + '_resttype',
+                        stackedId: u + '_stacked',
+                        leaderId: u + '_leader',
+                        treemapId: u + '_treemap',
+                    };
+                }
 
                 function destroyChart(id) {
                     // Destroy via both registry and ApexCharts own lookup
@@ -3252,7 +3505,7 @@
                 }
 
                 // ── Pipeline by Status (horizontal bar) ──
-                const pipelineId = uid + '_pipeline';
+                const pipelineId = ids.pipelineChartId;
                 destroyChart(pipelineId);
                 const statusVal = summary.by_status_value || {};
                 const pipelineOrder = [
@@ -3264,7 +3517,7 @@
                 const pipelineCats = pipelineOrder.filter(s => statusVal[s] !== undefined);
                 const pipelineVals = pipelineCats.map(s => Math.round((statusVal[s] || 0) * 10) / 10);
                 if (document.getElementById(pipelineId)) {
-                    new ApexCharts(document.getElementById(pipelineId), {
+                    const c = new ApexCharts(document.getElementById(pipelineId), {
                         chart: { id: pipelineId, type: 'bar', height: 350, background: 'transparent', toolbar: { show: false } },
                         series: [{ name: `CRP Term (${currency}m)`, data: pipelineVals }],
                         xaxis: { categories: pipelineCats, labels: { style: { colors: darkText, fontSize: '11px' }, maxWidth: 160, trim: true } },
@@ -3274,17 +3527,19 @@
                         dataLabels: { enabled: true, formatter: v => `£${v}m`, style: { colors: ['#fff'], fontSize: '11px' } },
                         grid: { borderColor: gridColor },
                         tooltip: { theme: 'dark' },
-                    }).render();
+                    });
+                    c.render();
+                    if (window.RRCharts && window.RRCharts.register) window.RRCharts.register(pipelineId, c);
                 }
 
                 // ── Region Donut ──
-                const regionId = uid + '_region';
+                const regionId = ids.regionChartId;
                 destroyChart(regionId);
                 const regionVal = summary.by_region_value || {};
                 const regionLabels = Object.keys(regionVal);
                 const regionData = regionLabels.map(k => Math.round((regionVal[k] || 0) * 10) / 10);
                 if (document.getElementById(regionId) && regionLabels.length) {
-                    new ApexCharts(document.getElementById(regionId), {
+                    const c = new ApexCharts(document.getElementById(regionId), {
                         chart: { id: regionId, type: 'donut', height: 350, background: 'transparent' },
                         series: regionData,
                         labels: regionLabels,
@@ -3293,18 +3548,20 @@
                         dataLabels: { enabled: true, formatter: (val, opts) => `${opts.w.globals.labels[opts.seriesIndex]}: £${regionData[opts.seriesIndex]}m` },
                         plotOptions: { pie: { donut: { size: '55%', labels: { show: true, total: { show: true, label: 'Total CRP', color: darkText, formatter: () => `£${Math.round(regionData.reduce((a, b) => a + b, 0))}m` } } } } },
                         tooltip: { theme: 'dark' },
-                    }).render();
+                    });
+                    c.render();
+                    if (window.RRCharts && window.RRCharts.register) window.RRCharts.register(regionId, c);
                 }
 
                 // ── Top 15 Customers (horizontal bar) ──
-                const custId = uid + '_customers';
+                const custId = ids.custChartId;
                 destroyChart(custId);
                 const custVal = summary.by_customer_value || {};
                 const custSorted = Object.entries(custVal).sort((a, b) => b[1] - a[1]).slice(0, 15);
                 const custLabels = custSorted.map(c => c[0]);
                 const custData = custSorted.map(c => Math.round(c[1] * 10) / 10);
                 if (document.getElementById(custId) && custLabels.length) {
-                    new ApexCharts(document.getElementById(custId), {
+                    const c = new ApexCharts(document.getElementById(custId), {
                         chart: { id: custId, type: 'bar', height: 400, background: 'transparent', toolbar: { show: false } },
                         series: [{ name: `CRP Term (${currency}m)`, data: custData }],
                         xaxis: { categories: custLabels, labels: { style: { colors: darkText, fontSize: '10px' }, maxWidth: 120 } },
@@ -3315,17 +3572,19 @@
                         grid: { borderColor: gridColor },
                         legend: { show: false },
                         tooltip: { theme: 'dark' },
-                    }).render();
+                    });
+                    c.render();
+                    if (window.RRCharts && window.RRCharts.register) window.RRCharts.register(custId, c);
                 }
 
                 // ── EVS Distribution (bar chart) ──
-                const evsId = uid + '_evs';
+                const evsId = ids.evsChartId;
                 destroyChart(evsId);
                 const evsVal = summary.by_evs_value || {};
                 const evsLabels = Object.keys(evsVal).sort((a, b) => evsVal[b] - evsVal[a]);
                 const evsData = evsLabels.map(k => Math.round((evsVal[k] || 0) * 10) / 10);
                 if (document.getElementById(evsId) && evsLabels.length) {
-                    new ApexCharts(document.getElementById(evsId), {
+                    const c = new ApexCharts(document.getElementById(evsId), {
                         chart: { id: evsId, type: 'bar', height: 400, background: 'transparent', toolbar: { show: false } },
                         series: [{ name: `CRP Term (${currency}m)`, data: evsData }],
                         xaxis: { categories: evsLabels, labels: { style: { colors: darkText, fontSize: '10px' }, rotate: -45 } },
@@ -3336,11 +3595,13 @@
                         grid: { borderColor: gridColor },
                         legend: { show: false },
                         tooltip: { theme: 'dark' },
-                    }).render();
+                    });
+                    c.render();
+                    if (window.RRCharts && window.RRCharts.register) window.RRCharts.register(evsId, c);
                 }
 
                 // ── Year-over-year Profit Forecast (grouped bar) ──
-                const yoyId = uid + '_yoy';
+                const yoyId = ids.yoyChartId;
                 destroyChart(yoyId);
                 const years = ['2026', '2027', '2028', '2029', '2030'];
                 const yoyData = [
@@ -3349,7 +3610,7 @@
                     summary.total_profit_2030 || 0,
                 ].map(v => Math.round(v * 10) / 10);
                 if (document.getElementById(yoyId)) {
-                    new ApexCharts(document.getElementById(yoyId), {
+                    const c = new ApexCharts(document.getElementById(yoyId), {
                         chart: { id: yoyId, type: 'bar', height: 350, background: 'transparent', toolbar: { show: false } },
                         series: [{ name: `Profit (${currency}m)`, data: yoyData }],
                         xaxis: { categories: years, labels: { style: { colors: darkText, fontSize: '12px' } } },
@@ -3359,11 +3620,13 @@
                         dataLabels: { enabled: true, formatter: v => `£${v}m`, style: { colors: ['#fff'] } },
                         grid: { borderColor: gridColor },
                         tooltip: { theme: 'dark' },
-                    }).render();
+                    });
+                    c.render();
+                    if (window.RRCharts && window.RRCharts.register) window.RRCharts.register(yoyId, c);
                 }
 
                 // ── Restructure Type Donut ──
-                const restId = uid + '_resttype';
+                const restId = ids.restTypeChartId;
                 destroyChart(restId);
                 const restVal = summary.by_restructure_type_value || {};
                 const restLabels = Object.keys(restVal);
@@ -3382,7 +3645,7 @@
                 }
 
                 // ── Region × Restructure Type Stacked Bar ──
-                const stackedId = uid + '_stacked';
+                const stackedId = ids.stackedId;
                 const regionList = Object.keys(summary.by_region_value || {}).length > 0 ? Object.keys(summary.by_region_value) : [...new Set((records || []).map(r => r.region).filter(Boolean))];
                 const restTypesList = [...new Set((records || []).map(r => r.restructure_type).filter(Boolean))];
                 if (document.getElementById(stackedId) && regionList.length && restTypesList.length) {
@@ -3408,7 +3671,7 @@
                 }
 
                 // ── Owner Leaderboard — top 10 ──
-                const leaderId = uid + '_leader';
+                const leaderId = ids.leaderId;
                 const byOwner = {};
                 (records || []).forEach(r => {
                     let owner = (r.vp_owner || r.owner || '').trim();
@@ -3434,7 +3697,7 @@
                 }
 
                 // ── Profit 2026-2030 Treemap by EVS ──
-                const treemapId = uid + '_treemap';
+                const treemapId = ids.treemapId;
                 const evsProfit = {};
                 (records || []).forEach(r => {
                     const evs = r.engine_value_stream || r.evs || 'Unknown';
@@ -3459,6 +3722,1219 @@
                         tooltip: { theme: 'dark', y: { formatter: v => `£${v.toFixed(1)}m` } },
                     });
                 }
+            }
+
+            // ═══════════════════════════════════════════════════
+            // COMMERCIAL_PLAN RENDERER — 1YP/5YP/Annual dashboard
+            // ═══════════════════════════════════════════════════
+
+            function _renderCommercialPlan(el, data, fname, opts) {
+                opts = opts || {};
+                const esc = (window.RRUtil && window.RRUtil.escapeHtml) || (v => v == null ? '' : String(v));
+                const escA = (window.RRUtil && window.RRUtil.escapeAttr) || esc;
+
+                const meta = data.metadata || {};
+                const oneYP = data.one_year_plan || { items: [], week_columns: [], category_columns: [] };
+                const fiveYP = data.five_year_spe_sales || { items: [], totals: {} };
+                const annual = data.annual_summary || { by_year: {} };
+
+                const planYear = meta.plan_year || (data.metadata && data.metadata.plan_year) || '—';
+                const sheetsParsed = Array.isArray(meta.sheets_parsed) ? meta.sheets_parsed : [];
+                const srcFile = meta.source_file || fname || '';
+
+                const oneItems = Array.isArray(oneYP.items) ? oneYP.items : [];
+                const weekCols = Array.isArray(oneYP.week_columns) ? oneYP.week_columns : [];
+                const catCols = Array.isArray(oneYP.category_columns) ? oneYP.category_columns : [];
+                const fiveItems = Array.isArray(fiveYP.items) ? fiveYP.items : [];
+                const totals = fiveYP.totals || {};
+                const byYear = annual.by_year || {};
+
+                // ─── Derived data ───
+                const totalOneActions = oneItems.length;
+                const totalFiveOpps = totals.total_opportunities != null ? totals.total_opportunities : fiveItems.length;
+                const fiveYearEngines = (() => {
+                    let s = 0;
+                    Object.values(byYear).forEach(y => { s += (y && typeof y.grand_total === 'number') ? y.grand_total : 0; });
+                    return s;
+                })();
+                const uniqueCustomers = (() => {
+                    const s = new Set();
+                    oneItems.forEach(r => { if (r.customer) s.add(String(r.customer).trim()); });
+                    fiveItems.forEach(r => { if (r.customer) s.add(String(r.customer).trim()); });
+                    return s.size;
+                })();
+                const uniqueOwners = (() => {
+                    const s = new Set();
+                    oneItems.forEach(r => { if (r.owner) s.add(String(r.owner).trim()); });
+                    return s.size;
+                })();
+
+                const CP_COLORS = ['#7C3AED', '#2563EB', '#0891B2', '#059669', '#D97706', '#DC2626', '#9333EA', '#BE185D'];
+                const LEVEL_COLORS = { 'L1': '#93C5FD', 'L2': '#60A5FA', 'L3': '#3B82F6', 'L4': '#1E40AF' };
+
+                const uid = `cp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+                // ─── Header + KPI + Tab strip HTML ───
+                let html = '';
+                html += `<div class="viz-cp-hero" style="background:linear-gradient(135deg,#7C3AED 0%,#4C1D95 100%);color:#fff;padding:22px 28px;border-radius:14px;margin-bottom:18px;box-shadow:0 6px 24px rgba(124,58,237,0.25)">
+                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+                        <div>
+                            <div style="font-size:12px;letter-spacing:0.12em;text-transform:uppercase;opacity:0.75;margin-bottom:4px">Commercial Plan</div>
+                            <div style="font-size:22px;font-weight:700;display:flex;align-items:center;gap:10px">
+                                <i data-lucide="calendar-clock" style="width:22px;height:22px"></i>
+                                Commercial Plan — ${esc(planYear)}
+                            </div>
+                            <div style="font-size:12px;opacity:0.8;margin-top:6px">
+                                <b>${esc(srcFile)}</b>${sheetsParsed.length ? ' · Sheets: ' + esc(sheetsParsed.join(', ')) : ''}
+                            </div>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:10px">
+                            <div style="padding:6px 12px;border-radius:999px;background:rgba(255,255,255,0.12);font-size:11px;font-weight:600;letter-spacing:0.08em">PLAN</div>
+                            <div style="font-family:'Roobert',sans-serif;font-weight:700;font-size:13px;letter-spacing:0.1em;opacity:0.85">ROLLS-ROYCE</div>
+                        </div>
+                    </div>
+                </div>`;
+
+                // KPI Row
+                html += `<div class="viz-kpi-grid viz-kpi-grid-5" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:18px">`;
+                html += _kpiCard('1YP Actions', _fmtNumber(totalOneActions), { icon: 'list-checks', subtitle: weekCols.length + ' weeks tracked' });
+                html += _kpiCard('5YP Opportunities', _fmtNumber(totalFiveOpps), { icon: 'target', subtitle: 'SPE Sales pipeline' });
+                html += _kpiCard('5-Year Engines', _fmtNumber(fiveYearEngines), { icon: 'plane', colorClass: 'kpi-success' });
+                html += _kpiCard('Customers', _fmtNumber(uniqueCustomers), { icon: 'users' });
+                html += _kpiCard('Owners', _fmtNumber(uniqueOwners), { icon: 'user-check' });
+                html += _kpiCard('Plan Year', esc(planYear), { icon: 'calendar' });
+                html += `</div>`;
+
+                // Tab strip
+                const tabs = [
+                    { key: 'overview', label: 'Overview', icon: 'layout-dashboard' },
+                    { key: 'action_log', label: 'Action Log (1YP)', icon: 'clipboard-list', count: oneItems.length },
+                    { key: 'pipeline', label: 'Pipeline (5YP)', icon: 'trending-up', count: fiveItems.length },
+                    { key: 'yearly', label: 'Yearly Breakdown', icon: 'bar-chart-3', count: Object.keys(byYear).length },
+                ];
+                const tabsId = `${uid}-tabs`;
+                const panelRoot = `${uid}-panels`;
+                html += `<div class="cp-tabs" id="${tabsId}" style="display:flex;gap:4px;border-bottom:2px solid rgba(124,58,237,0.15);margin:8px 0 16px;flex-wrap:wrap">`;
+                tabs.forEach((t, i) => {
+                    const active = i === 0;
+                    html += `<button type="button" class="cp-tab-btn${active ? ' active' : ''}" data-tab="${t.key}" style="display:inline-flex;align-items:center;gap:6px;padding:10px 18px;border:0;background:${active ? 'rgba(124,58,237,0.1)' : 'transparent'};color:${active ? '#7C3AED' : '#6B6B8A'};border-bottom:2px solid ${active ? '#7C3AED' : 'transparent'};margin-bottom:-2px;font-size:13px;font-weight:600;cursor:pointer;border-radius:8px 8px 0 0">
+                        <i data-lucide="${t.icon}" style="width:14px;height:14px"></i> ${esc(t.label)}${t.count != null ? `<span style="opacity:0.7;font-size:11px">(${t.count})</span>` : ''}
+                    </button>`;
+                });
+                html += `</div>`;
+
+                html += `<div id="${panelRoot}"></div>`;
+
+                el.innerHTML = html;
+
+                // ─── Executive-mode: hide filters + tables CSS already injected; just add local tweaks ───
+                if (opts.viewMode === 'executive') {
+                    try { el.classList.add('viz-executive-mode'); } catch (e) { /* noop */ }
+                }
+
+                // ─── Panel renderers ───
+                let panelCache = {};
+                const renderPanel = (key) => {
+                    const root = document.getElementById(panelRoot);
+                    if (!root) return;
+                    // Destroy charts from the previously-shown panel so ApexCharts does not leak
+                    if (window.RRCharts && typeof window.RRCharts.destroyAll === 'function') {
+                        try { window.RRCharts.destroyAll(); } catch (e) { /* noop */ }
+                    }
+                    root.innerHTML = '';
+                    if (key === 'overview') _cpRenderOverview(root, { byYear, oneItems, fiveItems, esc, CP_COLORS });
+                    else if (key === 'action_log') _cpRenderActionLog(root, { oneItems, weekCols, catCols, esc, escA, uid, opts, LEVEL_COLORS });
+                    else if (key === 'pipeline') _cpRenderPipeline(root, { fiveItems, totals, esc, escA, uid, opts, CP_COLORS });
+                    else if (key === 'yearly') _cpRenderYearly(root, { byYear, esc, uid, CP_COLORS });
+                    if (window.lucide) window.lucide.createIcons();
+                    _makeTablesSortable(root);
+                };
+
+                // Initial render = overview
+                renderPanel('overview');
+
+                // Wire tab clicks
+                const tabsEl = document.getElementById(tabsId);
+                if (tabsEl) {
+                    tabsEl.querySelectorAll('.cp-tab-btn').forEach(btn => {
+                        btn.addEventListener('click', () => {
+                            tabsEl.querySelectorAll('.cp-tab-btn').forEach(b => {
+                                b.classList.remove('active');
+                                b.style.background = 'transparent';
+                                b.style.color = '#6B6B8A';
+                                b.style.borderBottomColor = 'transparent';
+                            });
+                            btn.classList.add('active');
+                            btn.style.background = 'rgba(124,58,237,0.1)';
+                            btn.style.color = '#7C3AED';
+                            btn.style.borderBottomColor = '#7C3AED';
+                            renderPanel(btn.dataset.tab);
+                        });
+                    });
+                }
+
+                // Register initial empty filter state for PDF-export pipeline
+                _registerFilterState('COMMERCIAL_PLAN', {});
+
+                if (window.lucide) window.lucide.createIcons();
+            }
+
+            // ── Tab 1: Overview ──
+            function _cpRenderOverview(root, ctx) {
+                const { byYear, oneItems, fiveItems, esc, CP_COLORS } = ctx;
+                const years = Object.keys(byYear).sort();
+                const forecastTotals = years.map(y => (byYear[y] && byYear[y].grand_total) || 0);
+
+                // Engine-family mix: year × engine-type counts
+                const famYearMap = {};
+                const famSet = new Set();
+                years.forEach(y => {
+                    const cust = (byYear[y] && byYear[y].customers) || [];
+                    cust.forEach(c => {
+                        (c.engines || []).forEach(e => {
+                            const t = e.type || 'Unknown';
+                            famSet.add(t);
+                            famYearMap[t] = famYearMap[t] || {};
+                            famYearMap[t][y] = (famYearMap[t][y] || 0) + (e.count || 0);
+                        });
+                    });
+                });
+                const famList = [...famSet].sort();
+                const famSeries = famList.map(t => ({ name: t, data: years.map(y => famYearMap[t][y] || 0) }));
+
+                // Top customers by total engines (5-year sum)
+                const custTotals = {};
+                years.forEach(y => {
+                    const cust = (byYear[y] && byYear[y].customers) || [];
+                    cust.forEach(c => { custTotals[c.name] = (custTotals[c.name] || 0) + (c.total || 0); });
+                });
+                const topCust = Object.entries(custTotals).sort((a, b) => b[1] - a[1]).slice(0, 10);
+
+                // 1YP actions by owner
+                const byOwner = {};
+                oneItems.forEach(r => {
+                    const o = (r.owner || 'Unassigned').toString().trim() || 'Unassigned';
+                    byOwner[o] = (byOwner[o] || 0) + 1;
+                });
+                const ownerEntries = Object.entries(byOwner).sort((a, b) => b[1] - a[1]).slice(0, 12);
+
+                const ids = {
+                    forecast: `cp-forecast-${Date.now()}`,
+                    family: `cp-family-${Date.now()}-a`,
+                    cust: `cp-cust-${Date.now()}-b`,
+                    owner: `cp-owner-${Date.now()}-c`,
+                };
+
+                if (years.length === 0 && oneItems.length === 0 && fiveItems.length === 0) {
+                    _renderEmptyState(root, { message: 'No commercial-plan data parsed.', showReset: false });
+                    return;
+                }
+
+                let html = '';
+                html += `<div class="viz-chart-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px">
+                    <div class="viz-chart-card"><div class="viz-chart-header">Annual Engine Forecast</div><div id="${ids.forecast}" class="viz-chart-body" style="min-height:320px"></div></div>
+                    <div class="viz-chart-card"><div class="viz-chart-header">Engine Family Mix</div><div id="${ids.family}" class="viz-chart-body" style="min-height:320px"></div></div>
+                </div>`;
+                html += `<div class="viz-chart-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px;margin-top:16px">
+                    <div class="viz-chart-card"><div class="viz-chart-header">Top 10 Customers by Engines</div><div id="${ids.cust}" class="viz-chart-body" style="min-height:380px"></div></div>
+                    <div class="viz-chart-card"><div class="viz-chart-header">1YP Actions by Owner</div><div id="${ids.owner}" class="viz-chart-body" style="min-height:380px"></div></div>
+                </div>`;
+                root.innerHTML = html;
+
+                setTimeout(() => {
+                    if (years.length > 0) {
+                        _renderChart(ids.forecast, {
+                            chart: { type: 'bar', height: 320, toolbar: { show: false } },
+                            series: [{ name: 'Engines', data: forecastTotals }],
+                            xaxis: { categories: years },
+                            colors: ['#7C3AED'],
+                            plotOptions: { bar: { borderRadius: 6, columnWidth: '45%', distributed: false } },
+                            dataLabels: { enabled: true, formatter: v => v || '' },
+                            grid: { borderColor: 'rgba(0,0,0,0.06)' },
+                            tooltip: { y: { formatter: v => `${v} engines` } },
+                        });
+                    }
+                    if (famSeries.length > 0) {
+                        _renderChart(ids.family, {
+                            chart: { type: 'bar', stacked: true, height: 320, toolbar: { show: false } },
+                            series: famSeries,
+                            xaxis: { categories: years },
+                            plotOptions: { bar: { borderRadius: 4, columnWidth: '55%' } },
+                            colors: CP_COLORS,
+                            dataLabels: { enabled: false },
+                            legend: { position: 'bottom', fontSize: '11px' },
+                            tooltip: { y: { formatter: v => `${v}` } },
+                        });
+                    }
+                    if (topCust.length > 0) {
+                        _renderChart(ids.cust, {
+                            chart: { type: 'bar', height: 380, toolbar: { show: false } },
+                            series: [{ name: 'Engines', data: topCust.map(r => r[1]) }],
+                            xaxis: { categories: topCust.map(r => r[0]) },
+                            plotOptions: { bar: { horizontal: true, borderRadius: 4, barHeight: '65%' } },
+                            colors: ['#2563EB'],
+                            dataLabels: { enabled: true, formatter: v => v || '', style: { colors: ['#fff'], fontSize: '11px' } },
+                            grid: { borderColor: 'rgba(0,0,0,0.06)' },
+                        });
+                    }
+                    if (ownerEntries.length > 0) {
+                        _renderChart(ids.owner, {
+                            chart: { type: 'bar', height: 380, toolbar: { show: false } },
+                            series: [{ name: 'Actions', data: ownerEntries.map(r => r[1]) }],
+                            xaxis: { categories: ownerEntries.map(r => r[0]) },
+                            plotOptions: { bar: { horizontal: true, borderRadius: 4, barHeight: '65%' } },
+                            colors: ['#059669'],
+                            dataLabels: { enabled: true, formatter: v => v || '', style: { colors: ['#fff'], fontSize: '11px' } },
+                            grid: { borderColor: 'rgba(0,0,0,0.06)' },
+                        });
+                    }
+                }, 60);
+            }
+
+            // ── Tab 2: Action Log (1YP) ──
+            function _cpRenderActionLog(root, ctx) {
+                const { oneItems, weekCols, catCols, esc, escA, uid, opts, LEVEL_COLORS } = ctx;
+
+                if (!oneItems.length) {
+                    _renderEmptyState(root, { message: 'No 1YP action-log items found.', showReset: false });
+                    return;
+                }
+
+                // Derive filter values
+                const customers = [...new Set(oneItems.map(r => r.customer).filter(Boolean))].sort();
+                const owners = [...new Set(oneItems.map(r => r.owner).filter(Boolean))].sort();
+                const statuses = [...new Set(oneItems.map(r => r.status_summary).filter(Boolean))].sort();
+                const categories = Array.isArray(catCols) ? catCols.slice() : [];
+
+                const barId = `${uid}-al-fb`;
+                const heatId = `${uid}-al-heat`;
+                const tableWrapId = `${uid}-al-twrap`;
+                const csvId = `${uid}-al-csv`;
+                const isExec = opts && opts.viewMode === 'executive';
+
+                let html = '';
+                if (!isExec) {
+                    html += `<div class="opp-global-filter-bar" id="${barId}" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:12px 14px;background:#F8F7FF;border:1px solid rgba(124,58,237,0.18);border-radius:10px;margin-bottom:12px">
+                        <div style="display:flex;align-items:center;gap:6px;color:#7C3AED;font-weight:600;font-size:12px"><i data-lucide="sliders-horizontal" style="width:14px;height:14px"></i> Filters</div>
+                        <select data-f="customer" class="opp-gfb-select" style="padding:5px 10px;border-radius:6px;border:1px solid rgba(0,0,0,0.1);font-size:12px"><option value="">All customers</option>${customers.map(c => `<option value="${escA(c)}">${esc(c)}</option>`).join('')}</select>
+                        <select data-f="owner" class="opp-gfb-select" style="padding:5px 10px;border-radius:6px;border:1px solid rgba(0,0,0,0.1);font-size:12px"><option value="">All owners</option>${owners.map(o => `<option value="${escA(o)}">${esc(o)}</option>`).join('')}</select>
+                        <select data-f="category" class="opp-gfb-select" style="padding:5px 10px;border-radius:6px;border:1px solid rgba(0,0,0,0.1);font-size:12px"><option value="">All categories</option>${categories.map(c => `<option value="${escA(c)}">${esc(c)}</option>`).join('')}</select>
+                        <select data-f="status" class="opp-gfb-select" style="padding:5px 10px;border-radius:6px;border:1px solid rgba(0,0,0,0.1);font-size:12px"><option value="">All status</option>${statuses.map(s => `<option value="${escA(s)}">${esc(s)}</option>`).join('')}</select>
+                        <input type="text" data-f="q" placeholder="Search text…" style="padding:5px 10px;border-radius:6px;border:1px solid rgba(0,0,0,0.1);font-size:12px;min-width:160px"/>
+                        <button type="button" data-reset style="margin-left:auto;padding:5px 12px;border:1px solid #7C3AED;background:#fff;color:#7C3AED;border-radius:6px;font-size:12px;cursor:pointer;display:inline-flex;align-items:center;gap:4px"><i data-lucide="rotate-ccw" style="width:12px;height:12px"></i>Reset</button>
+                    </div>`;
+                }
+
+                html += `<div class="viz-chart-card" style="margin-bottom:14px"><div class="viz-chart-header">Weekly Activity Heatmap (Customer × Week)</div><div id="${heatId}" class="viz-chart-body" style="min-height:420px"></div></div>`;
+                html += `<div style="display:flex;justify-content:space-between;align-items:center;margin:6px 0 6px"><div style="font-weight:600;font-size:13px;color:#1a1a3a">Action Log</div>${_csvButton(csvId, 'Download CSV')}</div>`;
+                html += `<div id="${tableWrapId}"></div>`;
+
+                root.innerHTML = html;
+
+                const getFilters = () => {
+                    if (isExec) return {};
+                    const bar = document.getElementById(barId);
+                    if (!bar) return {};
+                    const out = {};
+                    bar.querySelectorAll('[data-f]').forEach(el => {
+                        const k = el.dataset.f;
+                        const v = (el.value || '').trim();
+                        if (v) out[k] = v;
+                    });
+                    return out;
+                };
+
+                const applyFilters = (items, f) => {
+                    return items.filter(r => {
+                        if (f.customer && (r.customer || '') !== f.customer) return false;
+                        if (f.owner && (r.owner || '') !== f.owner) return false;
+                        if (f.status && (r.status_summary || '') !== f.status) return false;
+                        if (f.category) {
+                            const cs = r.category_status || {};
+                            if (!cs[f.category]) return false;
+                        }
+                        if (f.q) {
+                            const q = f.q.toLowerCase();
+                            const hay = [r.customer, r.issue, r.description, r.latest_update, r.owner, r.blue_chip]
+                                .map(v => (v || '').toString().toLowerCase()).join(' ');
+                            if (hay.indexOf(q) === -1) return false;
+                        }
+                        return true;
+                    });
+                };
+
+                const headers = ['Customer', 'Blue Chip', 'Issue', 'Description', 'Owner', 'Latest Update', 'Categories', 'Active Weeks'];
+
+                const toCSVRows = (filtered) => filtered.map(r => {
+                    const cats = Object.entries(r.category_status || {}).filter(([, v]) => v).map(([k, v]) => `${k}:${v}`).join('; ');
+                    const wkActive = Object.values(r.weekly_status || {}).filter(v => v).length;
+                    return [r.customer || '', r.blue_chip || '', r.issue || '', r.description || '', r.owner || '', r.latest_update || '', cats, wkActive];
+                });
+
+                const renderTable = (filtered) => {
+                    const wrap = document.getElementById(tableWrapId);
+                    if (!wrap) return;
+                    if (!filtered.length) {
+                        _renderEmptyState(wrap, { onReset: resetAll, message: 'No actions match the current filters.' });
+                        return;
+                    }
+                    let th = `<div class="viz-table-wrap"><table class="viz-data-table">`;
+                    th += '<thead><tr>' + headers.map(h => `<th class="viz-sortable-th">${esc(h)} <span class="viz-sort-icon"></span></th>`).join('') + '</tr></thead><tbody>';
+                    filtered.slice(0, 300).forEach((r, idx) => {
+                        const cs = r.category_status || {};
+                        const chips = Object.entries(cs).filter(([, v]) => v).map(([k, v]) =>
+                            `<span style="display:inline-block;padding:2px 8px;margin:1px 2px;font-size:10px;font-weight:600;background:${LEVEL_COLORS[v] || '#94A3B8'};color:#fff;border-radius:999px">${esc(k)}: ${esc(v)}</span>`
+                        ).join('') || '<span style="color:#9ca3af;font-size:11px">—</span>';
+                        const ws = r.weekly_status || {};
+                        const weeksActive = Object.values(ws).filter(v => v).length;
+                        const rowId = `${uid}-al-row-${idx}`;
+                        th += `<tr>
+                            <td data-raw="${escA(r.customer || '')}">${esc(r.customer || '—')}</td>
+                            <td data-raw="${escA(r.blue_chip || '')}">${r.blue_chip ? `<span style="color:#2563EB;font-weight:600">${esc(r.blue_chip)}</span>` : '—'}</td>
+                            <td data-raw="${escA(r.issue || '')}">${esc(r.issue || '')}</td>
+                            <td data-raw="${escA(r.description || '')}">${esc(_truncate(r.description || '', 80))}</td>
+                            <td data-raw="${escA(r.owner || '')}">${esc(r.owner || '—')}</td>
+                            <td data-raw="${escA(r.latest_update || '')}">${esc(_truncate(r.latest_update || '', 80))}</td>
+                            <td data-raw="${escA(Object.keys(cs).filter(k => cs[k]).join(','))}">${chips}</td>
+                            <td data-raw="${weeksActive}"><button type="button" data-row="${rowId}" style="padding:2px 8px;border:1px solid rgba(124,58,237,0.3);background:#fff;color:#7C3AED;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600">${weeksActive} wk</button></td>
+                        </tr>`;
+                        // Hidden detail row
+                        const timelineHtml = Object.entries(ws).filter(([, v]) => v).map(([wk, v]) =>
+                            `<span style="display:inline-block;padding:2px 6px;margin:2px;font-size:10px;background:${LEVEL_COLORS[v] || '#94A3B8'};color:#fff;border-radius:4px">${esc(wk)}: ${esc(v)}</span>`
+                        ).join('') || '<span style="color:#9ca3af">No weekly activity logged.</span>';
+                        th += `<tr id="${rowId}" style="display:none;background:#F8F7FF"><td colspan="${headers.length}" style="padding:10px 14px;font-size:12px;color:#4a4a6a"><b>Weekly timeline:</b> ${timelineHtml}</td></tr>`;
+                    });
+                    th += '</tbody></table>';
+                    if (filtered.length > 300) th += `<div class="viz-table-overflow">Showing 300 of ${filtered.length} rows</div>`;
+                    th += '</div>';
+                    wrap.innerHTML = th;
+                    // Wire row-expand buttons
+                    wrap.querySelectorAll('button[data-row]').forEach(btn => {
+                        btn.addEventListener('click', () => {
+                            const tr = document.getElementById(btn.dataset.row);
+                            if (tr) tr.style.display = tr.style.display === 'none' ? '' : 'none';
+                        });
+                    });
+                    _makeTablesSortable(wrap);
+                };
+
+                const renderHeatmap = (filtered) => {
+                    const heat = document.getElementById(heatId);
+                    if (!heat) return;
+                    if (!filtered.length || !weekCols.length) {
+                        heat.innerHTML = `<div style="padding:24px;text-align:center;color:#6b6b8a;font-size:13px">No weekly activity to plot.</div>`;
+                        return;
+                    }
+                    const byCustomer = {};
+                    filtered.forEach(r => {
+                        const c = r.customer || '—';
+                        if (!byCustomer[c]) byCustomer[c] = {};
+                        Object.entries(r.weekly_status || {}).forEach(([wk, v]) => {
+                            if (v) byCustomer[c][wk] = Math.max(byCustomer[c][wk] || 0, _cpLevelRank(v));
+                        });
+                    });
+                    const custs = Object.keys(byCustomer).slice(0, 20);
+                    const series = custs.map(c => ({
+                        name: c,
+                        data: weekCols.map(wk => ({ x: wk, y: byCustomer[c][wk] || 0 })),
+                    }));
+                    heat.innerHTML = '';
+                    _renderChart(heatId, {
+                        chart: { type: 'heatmap', height: 420, toolbar: { show: false } },
+                        series,
+                        colors: ['#7C3AED'],
+                        dataLabels: { enabled: false },
+                        plotOptions: {
+                            heatmap: {
+                                radius: 3,
+                                useFillColorAsStroke: false,
+                                colorScale: {
+                                    ranges: [
+                                        { from: 0, to: 0, name: '—', color: '#F3F4F6' },
+                                        { from: 1, to: 1, name: 'L1', color: '#93C5FD' },
+                                        { from: 2, to: 2, name: 'L2', color: '#60A5FA' },
+                                        { from: 3, to: 3, name: 'L3', color: '#3B82F6' },
+                                        { from: 4, to: 9, name: 'L4+', color: '#1E40AF' },
+                                    ]
+                                }
+                            }
+                        },
+                        xaxis: { labels: { rotate: -45, style: { fontSize: '9px' } } },
+                        legend: { show: true, position: 'bottom' },
+                        tooltip: { y: { formatter: v => _cpRankLabel(v) } },
+                    });
+                };
+
+                const rerender = () => {
+                    const filters = getFilters();
+                    _registerFilterState('COMMERCIAL_PLAN', filters);
+                    const filtered = applyFilters(oneItems, filters);
+                    renderHeatmap(filtered);
+                    renderTable(filtered);
+                    _wireCSVButton(csvId, 'commercial_plan_action_log.csv', headers, () => toCSVRows(filtered));
+                };
+
+                const resetAll = () => {
+                    const bar = document.getElementById(barId);
+                    if (bar) {
+                        bar.querySelectorAll('select').forEach(s => { s.value = ''; });
+                        bar.querySelectorAll('input').forEach(i => { i.value = ''; });
+                    }
+                    rerender();
+                };
+
+                // Wire filter change handlers
+                if (!isExec) {
+                    const bar = document.getElementById(barId);
+                    if (bar) {
+                        bar.querySelectorAll('select').forEach(s => s.addEventListener('change', rerender));
+                        bar.querySelectorAll('input').forEach(i => i.addEventListener('input', rerender));
+                        const resetBtn = bar.querySelector('[data-reset]');
+                        if (resetBtn) resetBtn.addEventListener('click', resetAll);
+                    }
+                }
+
+                setTimeout(rerender, 60);
+            }
+
+            function _cpLevelRank(v) {
+                if (!v) return 0;
+                const s = String(v).toUpperCase();
+                if (s === 'L1') return 1; if (s === 'L2') return 2; if (s === 'L3') return 3; if (s === 'L4') return 4;
+                // Generic truthy
+                return 1;
+            }
+            function _cpRankLabel(v) {
+                if (v === 0) return '—'; if (v === 1) return 'L1'; if (v === 2) return 'L2';
+                if (v === 3) return 'L3'; if (v >= 4) return 'L4+';
+                return String(v);
+            }
+
+            // ── Tab 3: Pipeline (5YP SPE Sales) ──
+            function _cpRenderPipeline(root, ctx) {
+                const { fiveItems, totals, esc, escA, uid, opts, CP_COLORS } = ctx;
+
+                if (!fiveItems.length) {
+                    _renderEmptyState(root, { message: 'No 5YP SPE Sales items found.', showReset: false });
+                    return;
+                }
+
+                const years = [...new Set(fiveItems.map(r => r.year).filter(v => v != null))].sort();
+                const engines = [...new Set(fiveItems.map(r => r.engine_type).filter(Boolean))].sort();
+                const custs = [...new Set(fiveItems.map(r => r.customer).filter(Boolean))].sort();
+                const quarters = [...new Set(fiveItems.map(r => r.quarter).filter(Boolean))].sort();
+
+                const barId = `${uid}-pp-fb`;
+                const yqId = `${uid}-pp-yq`;
+                const cyId = `${uid}-pp-cy`;
+                const amtId = `${uid}-pp-amt`;
+                const tblId = `${uid}-pp-tbl`;
+                const csvId = `${uid}-pp-csv`;
+                const isExec = opts && opts.viewMode === 'executive';
+
+                let html = '';
+                if (!isExec) {
+                    html += `<div class="opp-global-filter-bar" id="${barId}" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:12px 14px;background:#F8F7FF;border:1px solid rgba(124,58,237,0.18);border-radius:10px;margin-bottom:12px">
+                        <div style="display:flex;align-items:center;gap:6px;color:#7C3AED;font-weight:600;font-size:12px"><i data-lucide="sliders-horizontal" style="width:14px;height:14px"></i> Filters</div>
+                        <select data-f="year" class="opp-gfb-select" style="padding:5px 10px;border-radius:6px;border:1px solid rgba(0,0,0,0.1);font-size:12px"><option value="">All years</option>${years.map(y => `<option value="${escA(y)}">${esc(y)}</option>`).join('')}</select>
+                        <select data-f="engine_type" class="opp-gfb-select" style="padding:5px 10px;border-radius:6px;border:1px solid rgba(0,0,0,0.1);font-size:12px"><option value="">All engines</option>${engines.map(e => `<option value="${escA(e)}">${esc(e)}</option>`).join('')}</select>
+                        <select data-f="customer" class="opp-gfb-select" style="padding:5px 10px;border-radius:6px;border:1px solid rgba(0,0,0,0.1);font-size:12px"><option value="">All customers</option>${custs.map(c => `<option value="${escA(c)}">${esc(c)}</option>`).join('')}</select>
+                        <select data-f="quarter" class="opp-gfb-select" style="padding:5px 10px;border-radius:6px;border:1px solid rgba(0,0,0,0.1);font-size:12px"><option value="">All quarters</option>${quarters.map(q => `<option value="${escA(q)}">${esc(q)}</option>`).join('')}</select>
+                        <button type="button" data-reset style="margin-left:auto;padding:5px 12px;border:1px solid #7C3AED;background:#fff;color:#7C3AED;border-radius:6px;font-size:12px;cursor:pointer;display:inline-flex;align-items:center;gap:4px"><i data-lucide="rotate-ccw" style="width:12px;height:12px"></i>Reset</button>
+                    </div>`;
+                }
+
+                html += `<div class="viz-chart-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px">
+                    <div class="viz-chart-card"><div class="viz-chart-header">Year × Quarter (engines)</div><div id="${yqId}" class="viz-chart-body" style="min-height:320px"></div></div>
+                    <div class="viz-chart-card"><div class="viz-chart-header">Customer × Year Heatmap</div><div id="${cyId}" class="viz-chart-body" style="min-height:320px"></div></div>
+                </div>`;
+                html += `<div class="viz-chart-card" style="margin-top:16px"><div class="viz-chart-header">Amount by Year</div><div id="${amtId}" class="viz-chart-body" style="min-height:260px"></div></div>`;
+                html += `<div style="display:flex;justify-content:space-between;align-items:center;margin:14px 0 6px"><div style="font-weight:600;font-size:13px;color:#1a1a3a">Pipeline Records</div>${_csvButton(csvId, 'Download CSV')}</div>`;
+                html += `<div id="${tblId}"></div>`;
+                root.innerHTML = html;
+
+                const getFilters = () => {
+                    if (isExec) return {};
+                    const bar = document.getElementById(barId);
+                    if (!bar) return {};
+                    const out = {};
+                    bar.querySelectorAll('[data-f]').forEach(el => { const v = (el.value || '').trim(); if (v) out[el.dataset.f] = v; });
+                    return out;
+                };
+
+                const applyFilters = (items, f) => {
+                    return items.filter(r => {
+                        if (f.year && String(r.year) !== String(f.year)) return false;
+                        if (f.engine_type && (r.engine_type || '') !== f.engine_type) return false;
+                        if (f.customer && (r.customer || '') !== f.customer) return false;
+                        if (f.quarter && (r.quarter || '') !== f.quarter) return false;
+                        return true;
+                    });
+                };
+
+                const headers = ['Customer', 'Engine Type', 'Year', 'Quarter', 'Amount', 'Comments'];
+                const toRows = (filtered) => filtered.map(r => [r.customer || '', r.engine_type || '', r.year != null ? r.year : '', r.quarter || '', r.amount != null ? r.amount : '', r.comments || '']);
+
+                const renderTable = (filtered) => {
+                    const wrap = document.getElementById(tblId);
+                    if (!wrap) return;
+                    if (!filtered.length) {
+                        _renderEmptyState(wrap, { onReset: resetAll, message: 'No pipeline records match the current filters.' });
+                        return;
+                    }
+                    let th = `<div class="viz-table-wrap"><table class="viz-data-table"><thead><tr>` +
+                        headers.map(h => `<th class="viz-sortable-th">${esc(h)} <span class="viz-sort-icon"></span></th>`).join('') +
+                        `</tr></thead><tbody>`;
+                    filtered.slice(0, 400).forEach(r => {
+                        const amt = r.amount;
+                        const amtCell = amt != null && !isNaN(amt) ? `$${Number(amt).toFixed(1)}m` : '—';
+                        th += `<tr>
+                            <td data-raw="${escA(r.customer || '')}">${esc(r.customer || '—')}</td>
+                            <td data-raw="${escA(r.engine_type || '')}">${esc(r.engine_type || '—')}</td>
+                            <td data-raw="${escA(r.year != null ? r.year : '')}">${esc(r.year != null ? r.year : '—')}</td>
+                            <td data-raw="${escA(r.quarter || '')}">${esc(r.quarter || '—')}</td>
+                            <td class="${amt < 0 ? 'neg' : 'pos'}" data-raw="${amt != null ? amt : ''}">${amtCell}</td>
+                            <td data-raw="${escA(r.comments || '')}">${esc(_truncate(r.comments || '', 60))}</td>
+                        </tr>`;
+                    });
+                    th += '</tbody></table>';
+                    if (filtered.length > 400) th += `<div class="viz-table-overflow">Showing 400 of ${filtered.length} rows</div>`;
+                    th += '</div>';
+                    wrap.innerHTML = th;
+                    _makeTablesSortable(wrap);
+                };
+
+                const renderCharts = (filtered) => {
+                    // Year × Quarter grouped bar
+                    const yqSet = {}; const qSet = new Set();
+                    filtered.forEach(r => {
+                        if (r.year == null || !r.quarter) return;
+                        qSet.add(r.quarter);
+                        yqSet[r.year] = yqSet[r.year] || {};
+                        yqSet[r.year][r.quarter] = (yqSet[r.year][r.quarter] || 0) + 1;
+                    });
+                    const yList = Object.keys(yqSet).sort();
+                    const qList = [...qSet].sort();
+                    const yqSeries = qList.map(q => ({ name: q, data: yList.map(y => yqSet[y][q] || 0) }));
+
+                    if (yList.length > 0 && document.getElementById(yqId)) {
+                        _renderChart(yqId, {
+                            chart: { type: 'bar', height: 320, toolbar: { show: false } },
+                            series: yqSeries,
+                            xaxis: { categories: yList },
+                            plotOptions: { bar: { borderRadius: 4, columnWidth: '65%' } },
+                            colors: CP_COLORS,
+                            dataLabels: { enabled: false },
+                            legend: { position: 'bottom' },
+                            grid: { borderColor: 'rgba(0,0,0,0.06)' },
+                        });
+                    }
+
+                    // Customer × Year heatmap
+                    const cyMap = {};
+                    filtered.forEach(r => {
+                        if (!r.customer || r.year == null) return;
+                        cyMap[r.customer] = cyMap[r.customer] || {};
+                        cyMap[r.customer][r.year] = (cyMap[r.customer][r.year] || 0) + 1;
+                    });
+                    const cList = Object.keys(cyMap).slice(0, 15);
+                    const cySeries = cList.map(c => ({
+                        name: c, data: yList.map(y => ({ x: String(y), y: cyMap[c][y] || 0 }))
+                    }));
+                    if (cList.length > 0 && yList.length > 0 && document.getElementById(cyId)) {
+                        _renderChart(cyId, {
+                            chart: { type: 'heatmap', height: 320, toolbar: { show: false } },
+                            series: cySeries,
+                            colors: ['#7C3AED'],
+                            dataLabels: { enabled: true },
+                            plotOptions: { heatmap: { radius: 3, colorScale: { ranges: [
+                                { from: 0, to: 0, name: '—', color: '#F3F4F6' },
+                                { from: 1, to: 2, name: 'Low', color: '#C4B5FD' },
+                                { from: 3, to: 5, name: 'Med', color: '#8B5CF6' },
+                                { from: 6, to: 99, name: 'High', color: '#4C1D95' },
+                            ] } } },
+                        });
+                    }
+
+                    // Amount by year
+                    const yAmt = {};
+                    filtered.forEach(r => {
+                        if (r.year == null || r.amount == null || isNaN(r.amount)) return;
+                        yAmt[r.year] = (yAmt[r.year] || 0) + Number(r.amount);
+                    });
+                    const amtYears = Object.keys(yAmt).sort();
+                    if (amtYears.length > 0 && document.getElementById(amtId)) {
+                        _renderChart(amtId, {
+                            chart: { type: 'line', height: 260, toolbar: { show: false } },
+                            series: [{ name: 'Amount ($m)', data: amtYears.map(y => Math.round(yAmt[y] * 100) / 100) }],
+                            xaxis: { categories: amtYears },
+                            stroke: { width: 3, curve: 'smooth' },
+                            colors: ['#7C3AED'],
+                            markers: { size: 5 },
+                            dataLabels: { enabled: true, formatter: v => `$${v}m` },
+                            grid: { borderColor: 'rgba(0,0,0,0.06)' },
+                            tooltip: { y: { formatter: v => `$${v}m` } },
+                        });
+                    }
+                };
+
+                const rerender = () => {
+                    const f = getFilters();
+                    _registerFilterState('COMMERCIAL_PLAN', f);
+                    const filtered = applyFilters(fiveItems, f);
+                    renderCharts(filtered);
+                    renderTable(filtered);
+                    _wireCSVButton(csvId, 'commercial_plan_5yp_pipeline.csv', headers, () => toRows(filtered));
+                };
+
+                const resetAll = () => {
+                    const bar = document.getElementById(barId);
+                    if (bar) { bar.querySelectorAll('select').forEach(s => { s.value = ''; }); }
+                    rerender();
+                };
+
+                if (!isExec) {
+                    const bar = document.getElementById(barId);
+                    if (bar) {
+                        bar.querySelectorAll('select').forEach(s => s.addEventListener('change', rerender));
+                        const resetBtn = bar.querySelector('[data-reset]');
+                        if (resetBtn) resetBtn.addEventListener('click', resetAll);
+                    }
+                }
+
+                setTimeout(rerender, 60);
+            }
+
+            // ── Tab 4: Yearly Breakdown ──
+            function _cpRenderYearly(root, ctx) {
+                const { byYear, esc, uid, CP_COLORS } = ctx;
+                const years = Object.keys(byYear).sort();
+
+                if (!years.length) {
+                    _renderEmptyState(root, { message: 'No yearly breakdown data available.', showReset: false });
+                    return;
+                }
+
+                let html = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-bottom:18px">`;
+                const chartIds = [];
+                years.forEach((y, idx) => {
+                    const info = byYear[y] || {};
+                    const chartId = `${uid}-yc-${idx}`;
+                    chartIds.push({ id: chartId, year: y, info });
+                    const total = info.grand_total || 0;
+                    const custList = (info.customers || []).slice(0, 5);
+                    html += `<div class="viz-chart-card" style="padding:14px 16px">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                            <div style="font-size:13px;font-weight:700;color:#7C3AED">${esc(y)}</div>
+                            <div style="font-size:20px;font-weight:700;color:#1a1a3a">${_fmtNumber(total)}</div>
+                        </div>
+                        <div style="font-size:11px;color:#6b6b8a;margin-bottom:8px">${(info.customers || []).length} customer(s)</div>
+                        <div id="${chartId}" style="min-height:180px"></div>
+                        <div style="margin-top:8px;font-size:11px;color:#4a4a6a">
+                            ${custList.map(c => `<div style="display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px dashed rgba(0,0,0,0.05)"><span>${esc(c.name || '—')}</span><b>${c.total || 0}</b></div>`).join('')}
+                        </div>
+                    </div>`;
+                });
+                html += `</div>`;
+
+                // Wide pivot table replicating SPE SALES PER YEAR structure
+                // Columns: Customer | Engine Type | per-year counts
+                const enginesSet = new Set();
+                const custRowsMap = {};
+                years.forEach(y => {
+                    (byYear[y].customers || []).forEach(c => {
+                        (c.engines || []).forEach(e => {
+                            enginesSet.add(e.type || 'Unknown');
+                            const key = `${c.name}||${e.type}`;
+                            custRowsMap[key] = custRowsMap[key] || { customer: c.name || '—', engine: e.type || 'Unknown', totals: {} };
+                            custRowsMap[key].totals[y] = (custRowsMap[key].totals[y] || 0) + (e.count || 0);
+                        });
+                    });
+                });
+                const rowList = Object.values(custRowsMap).sort((a, b) => {
+                    const sa = years.reduce((s, y) => s + (a.totals[y] || 0), 0);
+                    const sb = years.reduce((s, y) => s + (b.totals[y] || 0), 0);
+                    return sb - sa;
+                });
+
+                if (rowList.length > 0) {
+                    const headers = ['Customer', 'Engine Type'].concat(years).concat(['Total']);
+                    let tbl = `<div style="font-weight:600;font-size:13px;color:#1a1a3a;margin:8px 0 6px">SPE Sales per Year (Pivot)</div>`;
+                    tbl += `<div class="viz-table-wrap"><table class="viz-data-table"><thead><tr>` +
+                        headers.map(h => `<th class="viz-sortable-th">${esc(h)} <span class="viz-sort-icon"></span></th>`).join('') +
+                        `</tr></thead><tbody>`;
+                    rowList.forEach(r => {
+                        const rowTotal = years.reduce((s, y) => s + (r.totals[y] || 0), 0);
+                        tbl += `<tr>
+                            <td data-raw="${(window.RRUtil ? window.RRUtil.escapeAttr(r.customer) : esc(r.customer))}">${esc(r.customer)}</td>
+                            <td data-raw="${(window.RRUtil ? window.RRUtil.escapeAttr(r.engine) : esc(r.engine))}">${esc(r.engine)}</td>` +
+                            years.map(y => `<td data-raw="${r.totals[y] || 0}">${r.totals[y] || 0}</td>`).join('') +
+                            `<td data-raw="${rowTotal}"><b>${rowTotal}</b></td>
+                        </tr>`;
+                    });
+                    tbl += '</tbody></table></div>';
+                    html += tbl;
+                }
+
+                root.innerHTML = html;
+
+                // Render mini charts per card
+                setTimeout(() => {
+                    chartIds.forEach((c, i) => {
+                        const engines = (c.info.customers || []).reduce((acc, cust) => {
+                            (cust.engines || []).forEach(e => { acc[e.type || 'Unknown'] = (acc[e.type || 'Unknown'] || 0) + (e.count || 0); });
+                            return acc;
+                        }, {});
+                        const labels = Object.keys(engines);
+                        const data = labels.map(l => engines[l]);
+                        if (!labels.length) return;
+                        _renderChart(c.id, {
+                            chart: { type: 'bar', height: 180, toolbar: { show: false }, sparkline: { enabled: false } },
+                            series: [{ name: 'Engines', data }],
+                            xaxis: { categories: labels, labels: { style: { fontSize: '9px' }, rotate: -45 } },
+                            yaxis: { labels: { style: { fontSize: '10px' } } },
+                            plotOptions: { bar: { borderRadius: 3, columnWidth: '55%' } },
+                            colors: [CP_COLORS[i % CP_COLORS.length]],
+                            dataLabels: { enabled: true, style: { fontSize: '9px', colors: ['#fff'] } },
+                            grid: { borderColor: 'rgba(0,0,0,0.06)' },
+                        });
+                    });
+                }, 60);
+            }
+
+            // ═══════════════════════════════════════════════════
+            // EMPLOYEE_WHEREABOUTS RENDERER — Middle-East presence tracker
+            // ═══════════════════════════════════════════════════
+
+            function _renderEmployeeWhereabouts(el, data, fname, opts) {
+                opts = opts || {};
+                const esc = (window.RRUtil && window.RRUtil.escapeHtml) || (v => v == null ? '' : String(v));
+                const escA = (window.RRUtil && window.RRUtil.escapeAttr) || esc;
+                const isExec = opts.viewMode === 'executive';
+
+                const meta = data.metadata || {};
+                const employees = Array.isArray(data.employees) ? data.employees : [];
+                const whereabouts = data.whereabouts || {};
+                const legend = data.legend || {};
+                const aggregates = data.aggregates || {};
+                const months = Array.isArray(meta.months) ? meta.months : [];
+                const sheetsParsed = Array.isArray(meta.sheets_parsed) ? meta.sheets_parsed : Object.keys(whereabouts);
+
+                const STATUS_COLORS = {
+                    'O': '#10B981',       // Office — green
+                    'H': '#3B82F6',       // Home / WFH — blue
+                    'L': '#F59E0B',       // Leave — amber
+                    'B': '#8B5CF6',       // Business trip — purple
+                    'S': '#EF4444',       // Sick — red
+                    '_blank': '#E5E7EB',  // Weekend / not logged — grey
+                };
+                const EW_PALETTE = ['#0EA5E9', '#0284C7', '#0369A1', '#38BDF8', '#7DD3FC', '#BAE6FD', '#6366F1', '#8B5CF6', '#EC4899', '#F43F5E'];
+
+                const uid = `ew-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+                // ─── KPI derivation ───
+                const totalEmployees = meta.total_employees != null ? meta.total_employees : employees.length;
+                const uniqueCountries = Array.isArray(meta.unique_countries) ? meta.unique_countries : [];
+                const uniqueSectors = Array.isArray(meta.unique_sectors) ? meta.unique_sectors : [];
+
+                // Average office days per employee per month (across all months)
+                let totalOfficeDays = 0;
+                let totalEmpMonths = 0;
+                Object.values(whereabouts).forEach(monthRows => {
+                    (monthRows || []).forEach(row => {
+                        const sc = row.status_counts || {};
+                        totalOfficeDays += (sc.O || 0);
+                        totalEmpMonths += 1;
+                    });
+                });
+                const avgOfficePerEmpMonth = totalEmpMonths > 0 ? (totalOfficeDays / totalEmpMonths) : 0;
+
+                // Peak office day across all months
+                let peakDay = null;
+                let peakCount = 0;
+                const dailyByMonth = aggregates.daily_office_count_by_month || {};
+                Object.entries(dailyByMonth).forEach(([, daily]) => {
+                    Object.entries(daily || {}).forEach(([date, count]) => {
+                        if ((count || 0) > peakCount) { peakCount = count; peakDay = date; }
+                    });
+                });
+
+                // ─── Hero + Filter + KPI HTML ───
+                let html = '';
+                html += `<div class="viz-ew-hero" style="background:linear-gradient(135deg,#0EA5E9 0%,#0369A1 100%);color:#fff;padding:22px 28px;border-radius:14px;margin-bottom:18px;box-shadow:0 6px 24px rgba(14,165,233,0.25)">
+                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+                        <div>
+                            <div style="font-size:12px;letter-spacing:0.12em;text-transform:uppercase;opacity:0.8;margin-bottom:4px">Middle East Regional</div>
+                            <div style="font-size:22px;font-weight:700;display:flex;align-items:center;gap:10px">
+                                <i data-lucide="map-pin" style="width:22px;height:22px"></i>
+                                Employee Whereabouts
+                            </div>
+                            <div style="font-size:12px;opacity:0.85;margin-top:6px">
+                                <b>${esc(meta.source_file || fname || '')}</b>${sheetsParsed.length ? ' · Months: ' + esc(sheetsParsed.join(', ')) : ''}
+                            </div>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:10px">
+                            <div style="padding:6px 12px;border-radius:999px;background:rgba(255,255,255,0.14);font-size:11px;font-weight:600;letter-spacing:0.08em">WHEREABOUTS</div>
+                            <div style="font-family:'Roobert',sans-serif;font-weight:700;font-size:13px;letter-spacing:0.1em;opacity:0.88">ROLLS-ROYCE</div>
+                        </div>
+                    </div>
+                </div>`;
+
+                // ─── 6-tile KPI row ───
+                html += `<div class="viz-kpi-grid viz-kpi-grid-5" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:18px">`;
+                html += _kpiCard('Total Employees', _fmtNumber(totalEmployees), { icon: 'users', colorClass: 'kpi-success' });
+                html += _kpiCard('Countries', _fmtNumber(uniqueCountries.length), { icon: 'globe', subtitle: uniqueCountries.slice(0, 3).join(', ') + (uniqueCountries.length > 3 ? '…' : '') });
+                html += _kpiCard('Sectors', _fmtNumber(uniqueSectors.length), { icon: 'briefcase', subtitle: uniqueSectors.join(', ') });
+                html += _kpiCard('Months Tracked', _fmtNumber(sheetsParsed.length), { icon: 'calendar' });
+                html += _kpiCard('Avg Office / Emp-Month', avgOfficePerEmpMonth.toFixed(1) + ' days', { icon: 'building', colorClass: 'kpi-warning' });
+                html += _kpiCard('Peak Office Day', peakDay ? `${peakCount}` : '—', { icon: 'trending-up', subtitle: peakDay || 'No data' });
+                html += `</div>`;
+
+                // ─── Month tabs ───
+                const tabsId = `${uid}-tabs`;
+                const panelId = `${uid}-panel`;
+                if (sheetsParsed.length > 0 && !isExec) {
+                    html += `<div class="ew-tabs" id="${tabsId}" style="display:flex;gap:4px;border-bottom:2px solid rgba(14,165,233,0.18);margin:8px 0 16px;flex-wrap:wrap">`;
+                    sheetsParsed.forEach((sheet, i) => {
+                        const active = i === 0;
+                        html += `<button type="button" class="ew-tab-btn${active ? ' active' : ''}" data-month="${escA(sheet)}" style="display:inline-flex;align-items:center;gap:6px;padding:10px 18px;border:0;background:${active ? 'rgba(14,165,233,0.1)' : 'transparent'};color:${active ? '#0369A1' : '#6B6B8A'};border-bottom:2px solid ${active ? '#0EA5E9' : 'transparent'};margin-bottom:-2px;font-size:13px;font-weight:600;cursor:pointer;border-radius:8px 8px 0 0">
+                            <i data-lucide="calendar" style="width:14px;height:14px"></i> ${esc(sheet)}
+                        </button>`;
+                    });
+                    html += `</div>`;
+                }
+                html += `<div id="${panelId}"></div>`;
+
+                // ─── Employees table (shared across months, filterable) ───
+                const empFilterBarId = `${uid}-emp-fb`;
+                const empTableId = `${uid}-emp-tbl`;
+                const empCsvId = `${uid}-emp-csv`;
+                if (!isExec) {
+                    const allCountries = [...new Set(employees.map(e => e.country).filter(Boolean))].sort();
+                    const allSectors = [...new Set(employees.map(e => e.business_sector).filter(Boolean))].sort();
+                    html += `<div style="display:flex;justify-content:space-between;align-items:center;margin:28px 0 8px;gap:8px;flex-wrap:wrap">
+                        <div style="font-size:15px;font-weight:700;color:#0369A1;display:flex;align-items:center;gap:6px"><i data-lucide="users" style="width:16px;height:16px"></i>Employee Roster (${employees.length})</div>
+                        ${_csvButton(empCsvId, 'Download CSV')}
+                    </div>`;
+                    html += `<div class="opp-global-filter-bar" id="${empFilterBarId}" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 12px;background:#F0F9FF;border:1px solid rgba(14,165,233,0.22);border-radius:10px;margin-bottom:10px">
+                        <div style="display:flex;align-items:center;gap:6px;color:#0369A1;font-weight:600;font-size:12px"><i data-lucide="sliders-horizontal" style="width:14px;height:14px"></i> Filters</div>
+                        <select data-ef="country" class="ew-gfb-select" style="padding:5px 10px;border-radius:6px;border:1px solid rgba(0,0,0,0.12);font-size:12px"><option value="">All countries</option>${allCountries.map(c => `<option value="${escA(c)}">${esc(c)}</option>`).join('')}</select>
+                        <select data-ef="sector" class="ew-gfb-select" style="padding:5px 10px;border-radius:6px;border:1px solid rgba(0,0,0,0.12);font-size:12px"><option value="">All sectors</option>${allSectors.map(s => `<option value="${escA(s)}">${esc(s)}</option>`).join('')}</select>
+                        <input type="text" data-ef="q" class="ew-gfb-input" placeholder="Search name / employee #" style="flex:1;min-width:180px;padding:5px 10px;border-radius:6px;border:1px solid rgba(0,0,0,0.12);font-size:12px" />
+                        <button type="button" data-ew-reset style="margin-left:auto;padding:5px 12px;border:1px solid #0EA5E9;background:#fff;color:#0369A1;border-radius:6px;font-size:12px;cursor:pointer;display:inline-flex;align-items:center;gap:4px"><i data-lucide="rotate-ccw" style="width:12px;height:12px"></i>Reset</button>
+                    </div>`;
+                    html += `<div id="${empTableId}"></div>`;
+                }
+
+                // ─── Legend panel ───
+                html += `<div style="margin:24px 0 12px;padding:12px 16px;background:#F0F9FF;border:1px solid rgba(14,165,233,0.22);border-radius:10px">
+                    <div style="font-size:13px;font-weight:700;color:#0369A1;margin-bottom:8px;display:flex;align-items:center;gap:6px"><i data-lucide="key" style="width:14px;height:14px"></i>Status Legend</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:10px;font-size:12px">`;
+                Object.entries(legend).forEach(([code, label]) => {
+                    const color = STATUS_COLORS[code] || '#94A3B8';
+                    html += `<div style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:#fff;border-radius:999px;border:1px solid rgba(0,0,0,0.06)"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${color}"></span><b>${esc(code)}</b> · ${esc(label)}</div>`;
+                });
+                html += `<div style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:#fff;border-radius:999px;border:1px solid rgba(0,0,0,0.06)"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${STATUS_COLORS._blank}"></span><b>—</b> · Weekend / not logged</div>`;
+                html += `</div></div>`;
+
+                el.innerHTML = html;
+                if (opts.viewMode === 'executive') {
+                    try { el.classList.add('viz-executive-mode'); } catch (e) { /* noop */ }
+                }
+
+                // ─── Empty-state guards ───
+                if (totalEmployees === 0 && sheetsParsed.length === 0) {
+                    _renderEmptyState(el.querySelector(`#${panelId}`) || el, { message: 'No whereabouts data parsed.', showReset: false });
+                    if (window.lucide) window.lucide.createIcons();
+                    return;
+                }
+
+                // ─── Month-panel renderer ───
+                const renderMonthPanel = (sheetName) => {
+                    const root = document.getElementById(panelId);
+                    if (!root) return;
+                    if (window.RRCharts && typeof window.RRCharts.destroyAll === 'function') {
+                        try { window.RRCharts.destroyAll(); } catch (e) { /* noop */ }
+                    }
+                    root.innerHTML = '';
+
+                    if (!sheetName) {
+                        _renderEmptyState(root, { message: 'No month selected.', showReset: false });
+                        return;
+                    }
+
+                    const rows = whereabouts[sheetName] || [];
+                    if (rows.length === 0) {
+                        _renderEmptyState(root, { message: `No data for ${sheetName}.`, showReset: false });
+                        return;
+                    }
+
+                    const dailyCounts = (aggregates.daily_office_count_by_month || {})[sheetName] || {};
+                    const statusTotals = (aggregates.status_totals_by_month || {})[sheetName] || {};
+
+                    const dailyId = `${uid}-daily-${sheetName.replace(/\W+/g, '')}`;
+                    const donutId = `${uid}-donut-${sheetName.replace(/\W+/g, '')}`;
+                    const countryId = `${uid}-country-${sheetName.replace(/\W+/g, '')}`;
+                    const heatId = `${uid}-heat-${sheetName.replace(/\W+/g, '')}`;
+
+                    let panelHtml = '';
+                    if (!isExec) {
+                        // Chart A: daily office line + Chart B: status donut
+                        panelHtml += `<div class="viz-chart-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px">
+                            <div class="viz-chart-card"><div class="viz-chart-header">Daily Office Attendance — ${esc(sheetName)}</div><div id="${dailyId}" class="viz-chart-body" style="min-height:320px"></div></div>
+                            <div class="viz-chart-card"><div class="viz-chart-header">Status Distribution</div><div id="${donutId}" class="viz-chart-body" style="min-height:320px"></div></div>
+                        </div>`;
+                        // Chart C: country bar
+                        panelHtml += `<div class="viz-chart-card" style="margin-top:16px"><div class="viz-chart-header">Employees by Country (${esc(sheetName)})</div><div id="${countryId}" class="viz-chart-body" style="min-height:300px"></div></div>`;
+                        // Chart D: heatmap
+                        panelHtml += `<div class="viz-chart-card" style="margin-top:16px"><div class="viz-chart-header">Top 30 Employees — Office-Day Heatmap</div><div id="${heatId}" class="viz-chart-body" style="min-height:420px;overflow-x:auto"></div></div>`;
+                    } else {
+                        // Executive: one chart only
+                        panelHtml += `<div class="viz-chart-card"><div class="viz-chart-header">Daily Office Attendance — ${esc(sheetName)}</div><div id="${dailyId}" class="viz-chart-body" style="min-height:320px"></div></div>`;
+                    }
+                    root.innerHTML = panelHtml;
+
+                    setTimeout(() => {
+                        // Chart A — daily office count line
+                        const dates = Object.keys(dailyCounts).sort();
+                        const countsArr = dates.map(d => dailyCounts[d] || 0);
+                        if (dates.length > 0 && document.getElementById(dailyId)) {
+                            _renderChart(dailyId, {
+                                chart: { type: 'line', height: 320, toolbar: { show: false } },
+                                series: [{ name: 'In Office', data: countsArr }],
+                                xaxis: { categories: dates.map(d => d.slice(-5)), labels: { rotate: -45, style: { fontSize: '10px' } } },
+                                stroke: { width: 3, curve: 'smooth' },
+                                colors: ['#0EA5E9'],
+                                markers: { size: 4 },
+                                dataLabels: { enabled: false },
+                                grid: { borderColor: 'rgba(0,0,0,0.06)' },
+                                tooltip: { x: { formatter: (_v, { dataPointIndex }) => dates[dataPointIndex] } },
+                            });
+                        }
+
+                        if (!isExec) {
+                            // Chart B — donut of status counts
+                            const statusKeys = Object.keys(statusTotals).filter(k => k !== '_blank');
+                            if (statusKeys.length > 0 && document.getElementById(donutId)) {
+                                _renderChart(donutId, {
+                                    chart: { type: 'donut', height: 320 },
+                                    series: statusKeys.map(k => statusTotals[k] || 0),
+                                    labels: statusKeys.map(k => `${k} — ${esc(legend[k] || k)}`),
+                                    colors: statusKeys.map(k => STATUS_COLORS[k] || '#94A3B8'),
+                                    plotOptions: { pie: { donut: { size: '62%' } } },
+                                    legend: { position: 'bottom' },
+                                    dataLabels: { enabled: true, formatter: (v) => v.toFixed(0) + '%' },
+                                });
+                            }
+
+                            // Chart C — country breakdown horizontal bar
+                            const byCountry = {};
+                            rows.forEach(r => {
+                                const c = r.country || 'Unknown';
+                                byCountry[c] = (byCountry[c] || 0) + 1;
+                            });
+                            const countryLabels = Object.keys(byCountry).sort((a, b) => byCountry[b] - byCountry[a]);
+                            const countryVals = countryLabels.map(c => byCountry[c]);
+                            if (countryLabels.length > 0 && document.getElementById(countryId)) {
+                                _renderChart(countryId, {
+                                    chart: { type: 'bar', height: Math.max(280, countryLabels.length * 36 + 60), toolbar: { show: false } },
+                                    series: [{ name: 'Employees', data: countryVals }],
+                                    xaxis: { categories: countryLabels.map(c => _truncate(String(c), 24)) },
+                                    colors: EW_PALETTE,
+                                    plotOptions: { bar: { horizontal: true, borderRadius: 4, barHeight: '60%', distributed: true } },
+                                    dataLabels: { enabled: true, style: { fontSize: '11px', colors: ['#fff'] } },
+                                    legend: { show: false },
+                                    grid: { borderColor: 'rgba(0,0,0,0.06)' },
+                                });
+                            }
+
+                            // Chart D — heatmap: top 30 employees × day, colored by office-day
+                            const ranked = rows
+                                .map(r => ({ row: r, office: (r.status_counts && r.status_counts.O) || 0 }))
+                                .sort((a, b) => b.office - a.office)
+                                .slice(0, 30);
+                            if (ranked.length > 0 && dates.length > 0 && document.getElementById(heatId)) {
+                                const series = ranked.map(({ row }) => ({
+                                    name: _truncate(row.name || row.employee_number || '—', 24),
+                                    data: dates.map(d => {
+                                        const code = (row.daily_status || {})[d] || '';
+                                        const rank = _ewStatusRank(code);
+                                        return { x: d.slice(-5), y: rank, meta: { code, date: d } };
+                                    }),
+                                }));
+                                _renderChart(heatId, {
+                                    chart: { type: 'heatmap', height: Math.max(420, ranked.length * 18 + 80), toolbar: { show: false } },
+                                    series,
+                                    colors: ['#0EA5E9'],
+                                    dataLabels: { enabled: false },
+                                    plotOptions: {
+                                        heatmap: {
+                                            radius: 2,
+                                            useFillColorAsStroke: false,
+                                            colorScale: {
+                                                ranges: [
+                                                    { from: 0, to: 0, name: '—', color: STATUS_COLORS._blank },
+                                                    { from: 1, to: 1, name: 'Office', color: STATUS_COLORS.O },
+                                                    { from: 2, to: 2, name: 'WFH', color: STATUS_COLORS.H },
+                                                    { from: 3, to: 3, name: 'Leave', color: STATUS_COLORS.L },
+                                                    { from: 4, to: 4, name: 'Biz Trip', color: STATUS_COLORS.B },
+                                                    { from: 5, to: 5, name: 'Sick', color: STATUS_COLORS.S },
+                                                ],
+                                            },
+                                        },
+                                    },
+                                    xaxis: { labels: { rotate: -45, style: { fontSize: '9px' } } },
+                                    legend: { show: true, position: 'bottom' },
+                                    tooltip: {
+                                        custom: ({ seriesIndex, dataPointIndex, w }) => {
+                                            const p = w.config.series[seriesIndex].data[dataPointIndex];
+                                            const code = (p && p.meta && p.meta.code) || '—';
+                                            const label = legend[code] || (code ? code : 'Not logged');
+                                            return `<div style="padding:6px 10px"><b>${w.config.series[seriesIndex].name}</b><br/>${p.meta && p.meta.date || ''}<br/>${esc(code || '—')} · ${esc(label)}</div>`;
+                                        },
+                                    },
+                                });
+                            }
+                        }
+                    }, 60);
+                };
+
+                // ─── Employee table renderer (shared across months) ───
+                const EMP_HEADERS = ['Employee #', 'Name', 'Sector', 'Country'];
+                const empToRows = (list) => list.map(e => [e.employee_number || '—', e.name || '—', e.business_sector || '—', e.country || '—']);
+
+                const renderEmployeeTable = () => {
+                    const wrap = document.getElementById(empTableId);
+                    if (!wrap) return [];
+                    const bar = document.getElementById(empFilterBarId);
+                    const filters = {};
+                    if (bar) {
+                        bar.querySelectorAll('[data-ef]').forEach(el => {
+                            const v = (el.value || '').trim();
+                            if (v) filters[el.dataset.ef] = v;
+                        });
+                    }
+                    let filtered = employees;
+                    if (filters.country) filtered = filtered.filter(e => e.country === filters.country);
+                    if (filters.sector) filtered = filtered.filter(e => e.business_sector === filters.sector);
+                    if (filters.q) {
+                        const q = filters.q.toLowerCase();
+                        filtered = filtered.filter(e =>
+                            (e.name || '').toLowerCase().includes(q) ||
+                            String(e.employee_number || '').toLowerCase().includes(q)
+                        );
+                    }
+
+                    // Register filter state for PDF pipeline
+                    _registerFilterState('EMPLOYEE_WHEREABOUTS', filters);
+
+                    if (filtered.length === 0) {
+                        _renderEmptyState(wrap, {
+                            message: 'No employees match the current filters.',
+                            onReset: () => {
+                                if (!bar) return;
+                                bar.querySelectorAll('select, input').forEach(el => { el.value = ''; });
+                                renderEmployeeTable();
+                            },
+                        });
+                        return [];
+                    }
+
+                    const rows = empToRows(filtered);
+                    let tblHtml = `<div class="viz-table-wrap"><table class="viz-data-table"><thead><tr>`;
+                    tblHtml += EMP_HEADERS.map(h => `<th class="viz-sortable-th">${esc(h)} <span class="viz-sort-icon"></span></th>`).join('');
+                    tblHtml += `</tr></thead><tbody>`;
+                    rows.slice(0, 500).forEach(r => {
+                        tblHtml += '<tr>';
+                        r.forEach(cell => {
+                            const raw = cell == null ? '' : String(cell).replace(/"/g, '&quot;');
+                            tblHtml += `<td data-raw="${raw}">${esc(cell)}</td>`;
+                        });
+                        tblHtml += '</tr>';
+                    });
+                    tblHtml += '</tbody></table>';
+                    if (rows.length > 500) tblHtml += `<div class="viz-table-overflow">Showing 500 of ${rows.length} rows</div>`;
+                    tblHtml += '</div>';
+                    wrap.innerHTML = tblHtml;
+                    _makeTablesSortable(wrap);
+                    return filtered;
+                };
+
+                // ─── Wire month tabs ───
+                const tabsEl = document.getElementById(tabsId);
+                if (tabsEl) {
+                    tabsEl.querySelectorAll('.ew-tab-btn').forEach(btn => {
+                        btn.addEventListener('click', () => {
+                            tabsEl.querySelectorAll('.ew-tab-btn').forEach(b => {
+                                b.classList.remove('active');
+                                b.style.background = 'transparent';
+                                b.style.color = '#6B6B8A';
+                                b.style.borderBottomColor = 'transparent';
+                            });
+                            btn.classList.add('active');
+                            btn.style.background = 'rgba(14,165,233,0.1)';
+                            btn.style.color = '#0369A1';
+                            btn.style.borderBottomColor = '#0EA5E9';
+                            renderMonthPanel(btn.dataset.month);
+                        });
+                    });
+                }
+
+                // ─── Wire employee filter bar ───
+                if (!isExec) {
+                    const empBar = document.getElementById(empFilterBarId);
+                    if (empBar) {
+                        empBar.querySelectorAll('select[data-ef]').forEach(sel =>
+                            sel.addEventListener('change', renderEmployeeTable));
+                        empBar.querySelectorAll('input[data-ef]').forEach(inp => {
+                            let db = null;
+                            inp.addEventListener('input', () => {
+                                clearTimeout(db);
+                                db = setTimeout(renderEmployeeTable, 250);
+                            });
+                        });
+                        const resetBtn = empBar.querySelector('[data-ew-reset]');
+                        if (resetBtn) resetBtn.addEventListener('click', () => {
+                            empBar.querySelectorAll('select, input').forEach(el => { el.value = ''; });
+                            renderEmployeeTable();
+                        });
+                    }
+                    // Wire CSV
+                    _wireCSVButton(empCsvId, 'employee_whereabouts.csv', EMP_HEADERS, () => {
+                        const bar = document.getElementById(empFilterBarId);
+                        const filters = {};
+                        if (bar) bar.querySelectorAll('[data-ef]').forEach(el => { const v = (el.value || '').trim(); if (v) filters[el.dataset.ef] = v; });
+                        let filtered = employees;
+                        if (filters.country) filtered = filtered.filter(e => e.country === filters.country);
+                        if (filters.sector) filtered = filtered.filter(e => e.business_sector === filters.sector);
+                        if (filters.q) {
+                            const q = filters.q.toLowerCase();
+                            filtered = filtered.filter(e =>
+                                (e.name || '').toLowerCase().includes(q) ||
+                                String(e.employee_number || '').toLowerCase().includes(q)
+                            );
+                        }
+                        return empToRows(filtered);
+                    });
+                }
+
+                // ─── Initial renders ───
+                if (sheetsParsed.length > 0) renderMonthPanel(sheetsParsed[0]);
+                if (!isExec) renderEmployeeTable();
+                _registerFilterState('EMPLOYEE_WHEREABOUTS', {});
+                if (window.lucide) window.lucide.createIcons();
+            }
+
+            // Rank letter status codes for heatmap coloring (0 = blank/weekend).
+            function _ewStatusRank(code) {
+                if (!code) return 0;
+                const c = String(code).trim().toUpperCase();
+                if (c === 'O') return 1;
+                if (c === 'H') return 2;
+                if (c === 'L') return 3;
+                if (c === 'B') return 4;
+                if (c === 'S') return 5;
+                return 0;
             }
 
             // ═══════════════════════════════════════════════════

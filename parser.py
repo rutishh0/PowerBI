@@ -266,6 +266,12 @@ _TYPE_SIGNALS: Dict[str, List[str]] = {
         "vp/account manager", "onerous/non onerous", "project plan requirements",
         "expected year of signature",
     ],
+    "EMPLOYEE_WHEREABOUTS": [
+        "employee number", "employee name", "business sector",
+        "personal leave inside", "personal leave outside",
+        "approved cross border", "approved business t",
+        "easter break",
+    ],
 }
 
 # Hard boosts keyed on lower-case sheet names
@@ -288,7 +294,110 @@ _SHEET_PREFIX_BOOSTS: Dict[str, str] = {
 }
 
 
-def detect_file_type(all_sheets: Dict[str, pd.DataFrame]) -> str:
+_COMMERCIAL_PLAN_FILENAME_RE = re.compile(
+    r"(?i)\b(\d{4}[_\s]plan|annual\s+plan|commercial\s+plan)\b"
+)
+
+
+# EMPLOYEE_WHEREABOUTS — Middle East regional monthly attendance tracker
+_MONTH_YEAR_SHEET_RE = re.compile(
+    r"(?i)^\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s*[-/ ]?\s*(\d{4})\s*$"
+)
+_MONTH_NAME_TO_NUM = {
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+    "jul": 7, "aug": 8, "sep": 9, "sept": 9, "oct": 10, "nov": 11, "dec": 12,
+}
+
+
+def _whereabouts_signals(all_sheets: Dict[str, pd.DataFrame], filename: str = "") -> int:
+    """
+    Score EMPLOYEE_WHEREABOUTS signals:
+      * sheet name matches month-year pattern (e.g. 'Apr 2026') — PRIMARY
+      * a sheet has >=3 of the 4 header cells (Employee Number, Employee Name,
+        Business Sector, Country) within its first 12 rows — STRONG
+      * filename contains 'whereabouts' — SUPPORTING
+    Returns an integer score (2+ => definitive EMPLOYEE_WHEREABOUTS).
+    """
+    hits = 0
+
+    # Month-year sheet name hit
+    for sn in all_sheets:
+        if _MONTH_YEAR_SHEET_RE.match(sn.strip()):
+            hits += 1
+            break  # count only once — one such sheet is enough
+
+    # Header-keyword hit: need >=3 of the 4 keywords in same workbook
+    required = {"employee number", "employee name", "business sector", "country"}
+    found_keywords: set = set()
+    for sn, df in all_sheets.items():
+        try:
+            sample = df.head(12)
+            for row in sample.values:
+                for v in row:
+                    if _is_blank(v):
+                        continue
+                    t = _clean(v).lower()
+                    for kw in required:
+                        if kw == t or (kw in t and len(t) < len(kw) + 12):
+                            found_keywords.add(kw)
+        except Exception:
+            continue
+    if len(found_keywords) >= 3:
+        hits += 1
+
+    # Filename hit
+    if filename and "whereabouts" in filename.lower():
+        hits += 1
+
+    return hits
+
+
+def _commercial_plan_signals(all_sheets: Dict[str, pd.DataFrame], filename: str = "") -> int:
+    """
+    Count COMMERCIAL_PLAN detection hits:
+      * sheet name matches 1YP or 5YP (any combination)
+      * a sheet contains 'Week Beginning' in its first 10 rows
+      * any sheet name matches the annual-plan regex
+      * filename matches the annual-plan regex
+    Returns an integer score (2+ => definitive COMMERCIAL_PLAN).
+    """
+    hits = 0
+    for sn in all_sheets:
+        sn_l = sn.lower().strip()
+        if sn_l == "1yp" or sn_l == "5yp" or sn_l.startswith("1yp") or sn_l.startswith("5yp"):
+            hits += 1
+        if _COMMERCIAL_PLAN_FILENAME_RE.search(sn):
+            hits += 1
+    for sn, df in all_sheets.items():
+        try:
+            sample = df.head(10)
+            for row in sample.values:
+                for v in row:
+                    if not _is_blank(v) and "week beginning" in _clean(v).lower():
+                        hits += 1
+                        break
+                else:
+                    continue
+                break
+        except Exception:
+            continue
+    if filename and _COMMERCIAL_PLAN_FILENAME_RE.search(filename):
+        hits += 1
+    return hits
+
+
+def detect_file_type(all_sheets: Dict[str, pd.DataFrame], filename: str = "") -> str:
+    # COMMERCIAL_PLAN takes priority when two or more of its signals hit —
+    # its sheet names ("1YP", "5YP SPE SALES") are distinctive enough that
+    # no other file type can trigger them.
+    if _commercial_plan_signals(all_sheets, filename) >= 2:
+        return "COMMERCIAL_PLAN"
+
+    # EMPLOYEE_WHEREABOUTS — checked before generic content-signal scoring
+    # because its month-year sheet names are very distinctive.
+    if _whereabouts_signals(all_sheets, filename) >= 2:
+        return "EMPLOYEE_WHEREABOUTS"
+
     scores: Dict[str, int] = {k: 0 for k in _TYPE_SIGNALS}
 
     for sheet_name, df in all_sheets.items():
@@ -3386,6 +3495,1027 @@ def _parse_global_hopper(all_sheets: Dict[str, pd.DataFrame], filename: str) -> 
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# COMMERCIAL_PLAN Parser (Account Management annual plan workbooks)
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Target shape
+# ------------
+# Three sheets, each with a distinct layout:
+#
+#   1YP                 — One Year Plan (category status + weekly timeline)
+#   5YP SPE SALES       — flat five-year SPE sales register (forward-filled
+#                         Customer column)
+#   SPE SALES PER YEAR  — pivoted multi-year Customer/Engines summary with
+#                         "Grand Total" rows per year band
+#
+# The parser produces:
+#
+#   one_year_plan.items              list of issue rows with category and weekly status
+#   five_year_spe_sales.items        list of flat SPE sale rows (Customer is forward-filled)
+#   five_year_spe_sales.totals       derived rollups: by_year / by_engine / by_customer
+#   annual_summary.by_year           structured pivot of "SPE SALES PER YEAR"
+#
+# NOTE: written to be crash-proof — every extractor returns a partial result
+# and logs a warning rather than raising on malformed rows.
+
+
+_PLAN_YEAR_RE = re.compile(r"(\d{4})[_\s]+PLAN", re.IGNORECASE)
+_PLAN_YEAR_BANNER_MIN = 2020
+_PLAN_YEAR_BANNER_MAX = 2040
+_PLAN_CATEGORY_ORDER = ["COMMERCIAL", "AM", "SALES", "CUSTOMER OPS"]
+_PLAN_STATUS_RE = re.compile(r"^\s*L[1-4]\b", re.IGNORECASE)
+
+
+def _plan_year_from_filename(filename: str) -> Optional[int]:
+    if not filename:
+        return None
+    m = _PLAN_YEAR_RE.search(filename)
+    if m:
+        try:
+            y = int(m.group(1))
+            if _PLAN_YEAR_BANNER_MIN <= y <= _PLAN_YEAR_BANNER_MAX:
+                return y
+        except Exception:
+            return None
+    return None
+
+
+def _plan_to_iso_date(v: Any) -> Optional[str]:
+    """Normalise a weekly-date cell to ISO YYYY-MM-DD; return None when blank."""
+    if _is_blank(v):
+        return None
+    if isinstance(v, (datetime, date)):
+        return v.strftime("%Y-%m-%d")
+    s = _clean(v)
+    if not s:
+        return None
+    # Accept "2024-10-07" or parseable date strings
+    for fmt in _DATE_FMTS:
+        try:
+            return datetime.strptime(s, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    try:
+        return pd.to_datetime(s, dayfirst=True).strftime("%Y-%m-%d")
+    except Exception:
+        return None
+
+
+def _plan_find_header_row(df: pd.DataFrame, max_scan: int = 15) -> int:
+    """Find the 1YP header row (looks for 'Blue Chip' + 'Customer' + 'Owner')."""
+    for i in range(min(max_scan, len(df))):
+        row = df.iloc[i]
+        vals = {_clean(v).lower() for v in row if not _is_blank(v)}
+        # Check for anchor keywords
+        hits = sum(
+            1 for kw in ("blue chip", "customer", "issue", "description", "owner")
+            if any(kw == v or v.startswith(kw) for v in vals)
+        )
+        if hits >= 3:
+            return i
+    return -1
+
+
+def _plan_find_category_row(df: pd.DataFrame, max_scan: int = 10) -> int:
+    """
+    Find the row with the category banner (COMMERCIAL / AM / SALES / CUSTOMER OPS).
+    These labels live in adjacent columns somewhere in the first ~5 rows.
+    """
+    needles = {"commercial", "am", "sales", "customer ops"}
+    for i in range(min(max_scan, len(df))):
+        row = df.iloc[i]
+        vals = [_clean(v).lower() for v in row]
+        hits = sum(1 for v in vals if v in needles)
+        if hits >= 3:
+            return i
+    return -1
+
+
+def _plan_extract_category_columns(df: pd.DataFrame, cat_row_idx: int) -> Dict[str, int]:
+    """Return {CATEGORY: column_index} for the 4 category banner columns."""
+    out: Dict[str, int] = {}
+    if cat_row_idx < 0 or cat_row_idx >= len(df):
+        return out
+    row = df.iloc[cat_row_idx]
+    canon = {
+        "commercial": "COMMERCIAL",
+        "am": "AM",
+        "sales": "SALES",
+        "customer ops": "CUSTOMER OPS",
+    }
+    for j in range(len(row)):
+        v = _clean(row.iloc[j]).lower()
+        if v in canon:
+            out[canon[v]] = j
+    return out
+
+
+def _plan_cell(row: pd.Series, idx: int) -> Any:
+    """Safe positional access on a row."""
+    if idx < 0 or idx >= len(row):
+        return None
+    v = row.iloc[idx]
+    if _is_blank(v):
+        return None
+    return v
+
+
+def _plan_cell_text(row: pd.Series, idx: int) -> Optional[str]:
+    v = _plan_cell(row, idx)
+    if v is None:
+        return None
+    if isinstance(v, (datetime, date)):
+        return v.strftime("%Y-%m-%d")
+    s = _clean(v)
+    return s or None
+
+
+def _plan_parse_1yp(df: pd.DataFrame) -> Dict[str, Any]:
+    """Extract the One Year Plan sheet."""
+    out: Dict[str, Any] = {
+        "week_columns": [],
+        "category_columns": [],
+        "items": [],
+    }
+    if df is None or df.empty:
+        return out
+
+    hdr_idx = _plan_find_header_row(df)
+    if hdr_idx < 0:
+        logger.warning("1YP: could not locate header row (Blue Chip/Customer/Owner).")
+        return out
+
+    hdr_row = df.iloc[hdr_idx]
+
+    # Map the six leading label columns (Blue Chip | Customer | Issue | Description | Owner | Latest Update)
+    label_col: Dict[str, int] = {}
+    _label_keys = {
+        "blue chip": "blue_chip",
+        "customer": "customer",
+        "issue": "issue",
+        "description": "description",
+        "owner": "owner",
+        "latest update": "latest_update",
+    }
+    for j in range(len(hdr_row)):
+        key = _clean(hdr_row.iloc[j]).lower()
+        if key in _label_keys and _label_keys[key] not in label_col:
+            label_col[_label_keys[key]] = j
+
+    # Category banner row (usually row 0) and columns
+    cat_row_idx = _plan_find_category_row(df)
+    cat_col_map = _plan_extract_category_columns(df, cat_row_idx) if cat_row_idx >= 0 else {}
+    out["category_columns"] = [c for c in _PLAN_CATEGORY_ORDER if c in cat_col_map]
+
+    # Week-date columns: any column in the header row whose value parses as a date,
+    # plus also scan the row immediately below the header (some workbooks keep the
+    # "Week N" label on the header and the actual date one row down).
+    week_cols: List[tuple] = []  # (col_index, iso_date)
+    seen_cols: set = set()
+
+    def _scan_row_for_dates(row_idx: int) -> None:
+        if row_idx < 0 or row_idx >= len(df):
+            return
+        r = df.iloc[row_idx]
+        for j in range(len(r)):
+            if j in seen_cols:
+                continue
+            iso = _plan_to_iso_date(r.iloc[j])
+            if iso and iso.startswith(("19", "20")):
+                week_cols.append((j, iso))
+                seen_cols.add(j)
+
+    _scan_row_for_dates(hdr_idx)
+    _scan_row_for_dates(hdr_idx + 1)
+
+    # Sort week columns by column index to preserve left-to-right order
+    week_cols.sort(key=lambda x: x[0])
+    out["week_columns"] = [iso for _, iso in week_cols]
+
+    # Determine where data rows start: row immediately after header (skip the
+    # second-date row if present).
+    data_start = hdr_idx + 1
+    if data_start < len(df):
+        # If the first row after header has ONLY dates/blanks, skip it
+        probe = df.iloc[data_start]
+        only_dates = True
+        any_val = False
+        for j in range(len(probe)):
+            v = probe.iloc[j]
+            if _is_blank(v):
+                continue
+            any_val = True
+            if _plan_to_iso_date(v) is None:
+                only_dates = False
+                break
+        if any_val and only_dates:
+            data_start += 1
+
+    # Build items
+    items: List[Dict[str, Any]] = []
+    category_col_pairs = [(cat, cat_col_map[cat]) for cat in out["category_columns"]]
+
+    for i in range(data_start, len(df)):
+        row = df.iloc[i]
+        # Skip entirely blank rows
+        if not _non_blank_vals(row):
+            continue
+
+        blue_chip = _plan_cell_text(row, label_col.get("blue_chip", -1))
+        customer = _plan_cell_text(row, label_col.get("customer", -1))
+        issue = _plan_cell_text(row, label_col.get("issue", -1))
+        description = _plan_cell_text(row, label_col.get("description", -1))
+        owner = _plan_cell_text(row, label_col.get("owner", -1))
+        latest_update = _plan_cell_text(row, label_col.get("latest_update", -1))
+
+        # A row is a real data row if it has ANY of these meaningful fields
+        meaningful = any([blue_chip, customer, issue, description, owner, latest_update])
+        has_status = False
+
+        # Category status
+        cat_status: Dict[str, Optional[str]] = {c: None for c in out["category_columns"]}
+        for cat, col in category_col_pairs:
+            v = _plan_cell_text(row, col)
+            if v:
+                cat_status[cat] = v
+                has_status = True
+
+        # Weekly status
+        weekly_status: Dict[str, Optional[str]] = {iso: None for _, iso in week_cols}
+        for j, iso in week_cols:
+            v = _plan_cell_text(row, j)
+            if v:
+                weekly_status[iso] = v
+                has_status = True
+
+        if not (meaningful or has_status):
+            continue
+
+        # Derive status_summary
+        all_cell_vals = [v for v in weekly_status.values() if v]
+        if not owner or not owner.strip():
+            status_summary = "Unassigned"
+        elif all_cell_vals and all(_clean(v).lower() in ("complete", "completed", "done") for v in all_cell_vals):
+            status_summary = "Completed"
+        elif any(_PLAN_STATUS_RE.match(_clean(v or "")) for v in list(cat_status.values()) + list(weekly_status.values()) if v):
+            status_summary = "Active"
+        elif has_status or meaningful:
+            status_summary = "Active"
+        else:
+            status_summary = "Unassigned"
+
+        # Raw passthrough: keep every non-blank cell so nothing is lost downstream
+        raw: Dict[str, Any] = {}
+        for j in range(len(row)):
+            v = row.iloc[j]
+            if _is_blank(v):
+                continue
+            if isinstance(v, (datetime, date)):
+                raw[f"col_{j}"] = v.strftime("%Y-%m-%d")
+            elif isinstance(v, float) and v == int(v):
+                raw[f"col_{j}"] = int(v)
+            else:
+                raw[f"col_{j}"] = v if not isinstance(v, (bytes, bytearray)) else None
+
+        items.append({
+            "row_index": int(i),
+            "blue_chip": blue_chip,
+            "customer": customer,
+            "issue": issue,
+            "description": description,
+            "owner": owner,
+            "latest_update": latest_update,
+            "category_status": cat_status,
+            "weekly_status": weekly_status,
+            "status_summary": status_summary,
+            "raw": raw,
+        })
+
+    out["items"] = items
+    return out
+
+
+def _plan_parse_5yp(df: pd.DataFrame) -> Dict[str, Any]:
+    """
+    Extract the 5YP SPE SALES tabular sheet.
+    Header is on row 0: Customer | Engine Type | Year | Quarter | Amount | Comments.
+    Customer is forward-filled across blank cells.
+    """
+    out: Dict[str, Any] = {
+        "items": [],
+        "totals": {
+            "by_year": {},
+            "by_engine": {},
+            "by_customer": {},
+            "total_opportunities": 0,
+            "total_amount": 0.0,
+        },
+    }
+    if df is None or df.empty:
+        return out
+
+    # Find header
+    hdr_idx = -1
+    want = {"customer", "engine type", "year", "quarter", "amount"}
+    for i in range(min(5, len(df))):
+        row = df.iloc[i]
+        vals = {_clean(v).lower() for v in row if not _is_blank(v)}
+        if len(want & vals) >= 4:
+            hdr_idx = i
+            break
+    if hdr_idx < 0:
+        logger.warning("5YP SPE SALES: could not locate header row.")
+        return out
+
+    hdr_row = df.iloc[hdr_idx]
+    col_idx: Dict[str, int] = {}
+    aliases = {
+        "customer": "customer",
+        "engine type": "engine_type",
+        "engine": "engine_type",
+        "year": "year",
+        "quarter": "quarter",
+        "amount": "amount",
+        "comments": "comments",
+        "comment": "comments",
+    }
+    for j in range(len(hdr_row)):
+        k = _clean(hdr_row.iloc[j]).lower()
+        if k in aliases and aliases[k] not in col_idx:
+            col_idx[aliases[k]] = j
+
+    items: List[Dict[str, Any]] = []
+    last_customer: Optional[str] = None
+
+    totals_year: Dict[str, int] = {}
+    totals_engine: Dict[str, int] = {}
+    totals_customer: Dict[str, int] = {}
+    total_amount = 0.0
+
+    for i in range(hdr_idx + 1, len(df)):
+        row = df.iloc[i]
+        if not _non_blank_vals(row):
+            continue
+
+        # Forward-fill customer
+        raw_customer = _plan_cell_text(row, col_idx.get("customer", -1))
+        if raw_customer:
+            last_customer = raw_customer
+        customer = raw_customer or last_customer
+
+        engine_type = _plan_cell_text(row, col_idx.get("engine_type", -1))
+        year_cell = _plan_cell(row, col_idx.get("year", -1))
+        year: Optional[int] = None
+        if isinstance(year_cell, (int, float)) and not isinstance(year_cell, bool):
+            try:
+                yi = int(year_cell)
+                if _PLAN_YEAR_BANNER_MIN <= yi <= _PLAN_YEAR_BANNER_MAX:
+                    year = yi
+            except Exception:
+                year = None
+        elif isinstance(year_cell, str):
+            try:
+                yi = int(_clean(year_cell))
+                if _PLAN_YEAR_BANNER_MIN <= yi <= _PLAN_YEAR_BANNER_MAX:
+                    year = yi
+            except Exception:
+                year = None
+
+        quarter = _plan_cell_text(row, col_idx.get("quarter", -1))
+        amount = _to_float(_plan_cell(row, col_idx.get("amount", -1)))
+        comments = _plan_cell_text(row, col_idx.get("comments", -1))
+
+        # A row is a real sale if it has engine_type OR year OR amount
+        if not any([engine_type, year, amount, quarter]):
+            logger.warning("5YP SPE SALES: skipping row %d (no engine/year/amount).", i)
+            continue
+
+        items.append({
+            "row_index": int(i),
+            "customer": customer,
+            "engine_type": engine_type,
+            "year": year,
+            "quarter": quarter,
+            "amount": amount,
+            "comments": comments,
+        })
+
+        # Rollups — each opportunity counts as 1 unit
+        if year is not None:
+            totals_year[str(year)] = totals_year.get(str(year), 0) + 1
+        if engine_type:
+            totals_engine[engine_type] = totals_engine.get(engine_type, 0) + 1
+        if customer:
+            totals_customer[customer] = totals_customer.get(customer, 0) + 1
+        if isinstance(amount, (int, float)):
+            total_amount += float(amount)
+
+    out["items"] = items
+    out["totals"] = {
+        "by_year": dict(sorted(totals_year.items())),
+        "by_engine": dict(sorted(totals_engine.items(), key=lambda kv: (-kv[1], kv[0]))),
+        "by_customer": dict(sorted(totals_customer.items(), key=lambda kv: (-kv[1], kv[0]))),
+        "total_opportunities": len(items),
+        "total_amount": round(total_amount, 4),
+    }
+    return out
+
+
+def _plan_parse_spe_sales_per_year(df: pd.DataFrame) -> Dict[str, Any]:
+    """
+    Extract the SPE SALES PER YEAR pivot sheet.
+    Layout: year banners sit on row 0 (or row 1). For each banner the next
+    2-3 columns form a Customer | Engines | (blank) block. Inside the block
+    rows alternate: customer-name row, engine-type row (both with a numeric
+    count in the Engines column), ending with a "Grand Total" row.
+    """
+    out: Dict[str, Any] = {"by_year": {}}
+    if df is None or df.empty:
+        return out
+
+    # Find the year banner row — scan first 3 rows for integer cells in range
+    banner_row_idx = -1
+    banners: List[tuple] = []  # (col_index, year)
+    for i in range(min(3, len(df))):
+        row = df.iloc[i]
+        candidates: List[tuple] = []
+        for j in range(len(row)):
+            v = row.iloc[j]
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                try:
+                    yi = int(v)
+                    if _PLAN_YEAR_BANNER_MIN <= yi <= _PLAN_YEAR_BANNER_MAX:
+                        candidates.append((j, yi))
+                except Exception:
+                    continue
+            elif isinstance(v, str):
+                try:
+                    yi = int(_clean(v))
+                    if _PLAN_YEAR_BANNER_MIN <= yi <= _PLAN_YEAR_BANNER_MAX:
+                        candidates.append((j, yi))
+                except Exception:
+                    continue
+        if len(candidates) >= 2:
+            banner_row_idx = i
+            banners = candidates
+            break
+    if banner_row_idx < 0:
+        logger.warning("SPE SALES PER YEAR: could not locate year banner row.")
+        return out
+
+    # Sort banners by column and compute the column span each owns
+    banners.sort(key=lambda x: x[0])
+    col_bounds: List[tuple] = []  # (customer_col, engines_col, year)
+    for idx, (col, yr) in enumerate(banners):
+        # Customer column = banner col; Engines column = banner col + 1
+        customer_col = col
+        engines_col = col + 1
+        col_bounds.append((customer_col, engines_col, yr))
+
+    # The header row (with "Customer"/"Engines" labels) is 1-2 rows below banners
+    # Data starts after that.
+    data_start = banner_row_idx + 1
+    # Skip a divider row of '.' characters if present
+    if data_start < len(df):
+        probe = df.iloc[data_start]
+        if any(_clean(v) == "." for v in probe if not _is_blank(v)):
+            data_start += 1
+    # Skip the "Customer / Engines" header row if present
+    if data_start < len(df):
+        probe = df.iloc[data_start]
+        vals_l = {_clean(v).lower() for v in probe if not _is_blank(v)}
+        if "customer" in vals_l or "engines" in vals_l:
+            data_start += 1
+
+    by_year: Dict[str, Dict[str, Any]] = {}
+
+    for customer_col, engines_col, yr in col_bounds:
+        year_block: Dict[str, Any] = {
+            "year": yr,
+            "customers": [],
+            "grand_total": 0,
+        }
+        current_customer: Optional[Dict[str, Any]] = None
+
+        for i in range(data_start, len(df)):
+            row = df.iloc[i]
+            name_cell = _plan_cell_text(row, customer_col)
+            count_cell = _plan_cell(row, engines_col)
+
+            # Stop when we hit the Grand Total for this year
+            if name_cell and "grand total" in name_cell.lower():
+                try:
+                    year_block["grand_total"] = int(_to_float(count_cell) or 0)
+                except Exception:
+                    year_block["grand_total"] = 0
+                break
+
+            # Skip fully blank slice
+            if not name_cell and _is_blank(count_cell):
+                continue
+
+            count: Optional[int] = None
+            fv = _to_float(count_cell)
+            if fv is not None:
+                try:
+                    count = int(fv)
+                except Exception:
+                    count = None
+
+            if name_cell:
+                # Heuristic: if the label looks like an engine type (ALL CAPS / known engines),
+                # it's an engine row for the CURRENT customer. Otherwise it's a new customer.
+                # Engine type patterns seen in the data: XWB-84, XWB-97, TRENT7000,
+                # TRENT1000, Trent 7000, etc.
+                is_engine = False
+                up = name_cell.upper()
+                if re.match(r"^(XWB|TRENT)[\s\-]?\d+", up):
+                    is_engine = True
+                elif up.startswith("TRENT "):
+                    is_engine = True
+
+                if is_engine and current_customer is not None:
+                    current_customer["engines"].append({
+                        "type": name_cell,
+                        "count": count if count is not None else 0,
+                    })
+                    current_customer["total"] = current_customer.get("total", 0) + (count or 0)
+                else:
+                    # New customer entry
+                    current_customer = {
+                        "name": name_cell,
+                        "engines": [],
+                        "total": count if count is not None else 0,
+                    }
+                    year_block["customers"].append(current_customer)
+
+        # If Grand Total wasn't explicitly found, compute from customers
+        if not year_block["grand_total"]:
+            year_block["grand_total"] = sum(
+                c.get("total", 0) for c in year_block["customers"]
+            )
+
+        by_year[str(yr)] = year_block
+
+    out["by_year"] = by_year
+    return out
+
+
+def _parse_commercial_plan(all_sheets: Dict[str, pd.DataFrame], filename: str) -> Dict:
+    """Parse an Account Management annual plan workbook (e.g. 2026_PLAN.xlsx)."""
+    errors: List[str] = []
+    parsed_sheet_names: List[str] = []
+    ignored_sheet_names: List[str] = []
+
+    # ── 1YP ──────────────────────────────────────────────────────────────────
+    one_year_plan: Dict[str, Any] = {
+        "week_columns": [],
+        "category_columns": [],
+        "items": [],
+    }
+    for name, df in all_sheets.items():
+        if name.strip().lower().startswith("1yp"):
+            try:
+                one_year_plan = _plan_parse_1yp(df)
+                parsed_sheet_names.append(name)
+            except Exception as e:
+                logger.exception("Failed to parse 1YP sheet '%s'", name)
+                errors.append(f"1YP parse error ({name}): {e}")
+            break
+    else:
+        logger.warning("COMMERCIAL_PLAN: no 1YP sheet found.")
+
+    # ── 5YP SPE SALES ────────────────────────────────────────────────────────
+    five_year: Dict[str, Any] = {
+        "items": [],
+        "totals": {
+            "by_year": {},
+            "by_engine": {},
+            "by_customer": {},
+            "total_opportunities": 0,
+            "total_amount": 0.0,
+        },
+    }
+    for name, df in all_sheets.items():
+        nl = name.strip().lower()
+        if nl.startswith("5yp") and "spe" in nl and "per year" not in nl:
+            try:
+                five_year = _plan_parse_5yp(df)
+                parsed_sheet_names.append(name)
+            except Exception as e:
+                logger.exception("Failed to parse 5YP SPE SALES sheet '%s'", name)
+                errors.append(f"5YP SPE SALES parse error ({name}): {e}")
+            break
+
+    # Fallback: any 5YP sheet if the specific one not found
+    if not five_year["items"]:
+        for name, df in all_sheets.items():
+            nl = name.strip().lower()
+            if nl.startswith("5yp") and name not in parsed_sheet_names:
+                try:
+                    five_year = _plan_parse_5yp(df)
+                    parsed_sheet_names.append(name)
+                except Exception as e:
+                    logger.exception("Failed to parse fallback 5YP sheet '%s'", name)
+                    errors.append(f"5YP fallback parse error ({name}): {e}")
+                break
+
+    # ── SPE SALES PER YEAR ───────────────────────────────────────────────────
+    annual_summary: Dict[str, Any] = {"by_year": {}}
+    for name, df in all_sheets.items():
+        nl = name.strip().lower()
+        if "per year" in nl or (nl.startswith("spe") and "year" in nl):
+            try:
+                annual_summary = _plan_parse_spe_sales_per_year(df)
+                parsed_sheet_names.append(name)
+            except Exception as e:
+                logger.exception("Failed to parse SPE SALES PER YEAR sheet '%s'", name)
+                errors.append(f"SPE SALES PER YEAR parse error ({name}): {e}")
+            break
+
+    # Anything else goes into ignored_sheets
+    for name in all_sheets:
+        if name not in parsed_sheet_names:
+            ignored_sheet_names.append(name)
+
+    # Plan-year resolution: filename → earliest year in 5YP → current year
+    plan_year = _plan_year_from_filename(filename)
+    if plan_year is None:
+        years_seen: List[int] = []
+        for item in five_year.get("items", []):
+            y = item.get("year")
+            if isinstance(y, int):
+                years_seen.append(y)
+        if years_seen:
+            plan_year = min(years_seen)
+        else:
+            plan_year = datetime.utcnow().year
+
+    return {
+        "file_type": "COMMERCIAL_PLAN",
+        "metadata": {
+            "source_file": filename,
+            "sheets_parsed": parsed_sheet_names,
+            "plan_year": plan_year,
+            "sheets_ignored": ignored_sheet_names,
+        },
+        "one_year_plan": one_year_plan,
+        "five_year_spe_sales": five_year,
+        "annual_summary": annual_summary,
+        "errors": errors,
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# EMPLOYEE_WHEREABOUTS Parser
+# ══════════════════════════════════════════════════════════════════════════════
+
+_WHEREABOUTS_LEGEND_DEFAULTS: Dict[str, str] = {
+    "O": "Office",
+    "H": "Home / WFH",
+    "WFH": "Work From Home",
+    "L": "Leave",
+    "B": "Business Trip",
+    "S": "Sick",
+    "PL": "Personal Leave",
+    "CB": "Cross Border",
+    "EB": "Easter Break",
+    "HOL": "Holiday",
+}
+
+
+def _whereabouts_parse_month(sheet_name: str) -> Optional[Dict[str, Any]]:
+    """Parse 'Apr 2026' → {sheet, year, month, days_in_month, start_date, end_date}."""
+    m = _MONTH_YEAR_SHEET_RE.match(sheet_name.strip())
+    if not m:
+        return None
+    month_token = m.group(1).lower()[:4] if m.group(1).lower().startswith("sept") else m.group(1).lower()[:3]
+    month_num = _MONTH_NAME_TO_NUM.get(month_token)
+    if month_num is None:
+        return None
+    try:
+        year = int(m.group(2))
+    except Exception:
+        return None
+    # days_in_month via calendar
+    import calendar
+    _, days_in_month = calendar.monthrange(year, month_num)
+    start_date = f"{year:04d}-{month_num:02d}-01"
+    end_date = f"{year:04d}-{month_num:02d}-{days_in_month:02d}"
+    return {
+        "sheet": sheet_name,
+        "year": year,
+        "month": month_num,
+        "days_in_month": days_in_month,
+        "start_date": start_date,
+        "end_date": end_date,
+    }
+
+
+def _whereabouts_find_header_row(df: pd.DataFrame, max_scan: int = 20) -> int:
+    """
+    Locate the row that contains 'Employee Number' in an early column.
+    Returns the row index (0-based) or -1 if not found.
+    """
+    scan_rows = min(max_scan, len(df))
+    for i in range(scan_rows):
+        try:
+            row = df.iloc[i]
+        except Exception:
+            continue
+        for j in range(min(10, len(row))):
+            v = row.iloc[j]
+            if _is_blank(v):
+                continue
+            t = _clean(v).lower()
+            if "employee number" in t or t == "employee no" or t == "emp no":
+                return i
+    return -1
+
+
+def _whereabouts_map_columns(
+    header_row: pd.Series,
+    days_in_month: int,
+) -> Dict[str, Any]:
+    """
+    Map header cells to column indexes. Locates:
+      no_col, emp_num_col, name_col, sector_col, country_col
+      day_cols: list of (col_idx, day_number)   (1..days_in_month)
+      notes_col (optional)
+    """
+    col_map: Dict[str, Any] = {
+        "no": None, "emp_num": None, "name": None,
+        "sector": None, "country": None, "notes": None,
+        "day_cols": [],
+    }
+    for j in range(len(header_row)):
+        v = header_row.iloc[j]
+        if _is_blank(v):
+            continue
+        t = _clean(v).lower()
+        if t == "no." or t == "no" or t == "#":
+            if col_map["no"] is None:
+                col_map["no"] = j
+        elif "employee number" in t or t in ("emp no", "emp number", "employee no"):
+            col_map["emp_num"] = j
+        elif "employee name" in t or t == "name":
+            col_map["name"] = j
+        elif "business sector" in t or t == "sector":
+            col_map["sector"] = j
+        elif t == "country" or "country" in t:
+            if col_map["country"] is None:
+                col_map["country"] = j
+        elif "note" in t:
+            col_map["notes"] = j
+        else:
+            # Day-number header: integer 1..31
+            raw = header_row.iloc[j]
+            try:
+                if isinstance(raw, (int, float)) and not (isinstance(raw, float) and raw != raw):
+                    n = int(raw)
+                    if 1 <= n <= 31:
+                        col_map["day_cols"].append((j, n))
+                elif isinstance(raw, str) and raw.strip().isdigit():
+                    n = int(raw.strip())
+                    if 1 <= n <= 31:
+                        col_map["day_cols"].append((j, n))
+            except Exception:
+                pass
+
+    # If day-number header scan yielded nothing, fall back to position-based:
+    # everything right of country through to notes-or-end.
+    if not col_map["day_cols"] and col_map["country"] is not None:
+        start = col_map["country"] + 1
+        end = col_map["notes"] if col_map["notes"] is not None else len(header_row)
+        for j in range(start, min(end, start + days_in_month)):
+            col_map["day_cols"].append((j, j - start + 1))
+
+    # Trim day_cols that exceed days_in_month (defensive)
+    col_map["day_cols"] = [(c, d) for (c, d) in col_map["day_cols"] if d <= days_in_month]
+    # Sort by day number ascending
+    col_map["day_cols"].sort(key=lambda t: t[1])
+    return col_map
+
+
+def _whereabouts_legend_label(code: str) -> str:
+    """Return a friendly label for a status code, falling back to the code itself."""
+    if not code:
+        return code
+    upper = code.strip().upper()
+    if upper in _WHEREABOUTS_LEGEND_DEFAULTS:
+        return _WHEREABOUTS_LEGEND_DEFAULTS[upper]
+    # Heuristic partial matches for free-text values
+    low = code.lower()
+    if "eid" in low or "holiday" in low:
+        return "Public Holiday"
+    if "leave" in low:
+        return "Leave"
+    if "sick" in low:
+        return "Sick"
+    if "busines" in low or "trip" in low:
+        return "Business Trip"
+    if "home" in low or "wfh" in low:
+        return "Home / WFH"
+    if "office" in low:
+        return "Office"
+    if "easter" in low:
+        return "Easter Break"
+    if "cross" in low and "border" in low:
+        return "Cross Border"
+    # Unknown — use the code itself as its own label
+    return code
+
+
+def _parse_employee_whereabouts(all_sheets: Dict[str, pd.DataFrame], filename: str) -> Dict:
+    """Parse a Middle East Employee Whereabouts workbook."""
+    errors: List[str] = []
+
+    months_meta: List[Dict[str, Any]] = []
+    sheets_parsed: List[str] = []
+    sheets_ignored: List[str] = []
+    whereabouts: Dict[str, List[Dict[str, Any]]] = {}
+    employees_by_num: Dict[str, Dict[str, Any]] = {}
+    status_totals_by_month: Dict[str, Dict[str, int]] = {}
+    daily_office_count_by_month: Dict[str, Dict[str, int]] = {}
+    by_country: Dict[str, int] = {}
+    by_sector: Dict[str, int] = {}
+    all_status_codes: Dict[str, int] = {}  # for legend inference
+
+    for sheet_name, df in all_sheets.items():
+        month_meta = _whereabouts_parse_month(sheet_name)
+        if not month_meta:
+            sheets_ignored.append(sheet_name)
+            continue
+
+        hdr_idx = _whereabouts_find_header_row(df, max_scan=20)
+        if hdr_idx < 0:
+            logger.warning(
+                "EMPLOYEE_WHEREABOUTS: sheet '%s' has no 'Employee Number' header; skipping",
+                sheet_name,
+            )
+            errors.append(f"{sheet_name}: header row not found")
+            sheets_ignored.append(sheet_name)
+            continue
+
+        header_row = df.iloc[hdr_idx]
+        col_map = _whereabouts_map_columns(header_row, month_meta["days_in_month"])
+
+        if col_map["emp_num"] is None and col_map["name"] is None:
+            logger.warning(
+                "EMPLOYEE_WHEREABOUTS: sheet '%s' missing employee columns; skipping",
+                sheet_name,
+            )
+            errors.append(f"{sheet_name}: missing employee column")
+            sheets_ignored.append(sheet_name)
+            continue
+
+        if not col_map["day_cols"]:
+            logger.warning(
+                "EMPLOYEE_WHEREABOUTS: sheet '%s' has no day columns; skipping",
+                sheet_name,
+            )
+            errors.append(f"{sheet_name}: no day columns detected")
+            sheets_ignored.append(sheet_name)
+            continue
+
+        year = month_meta["year"]
+        month = month_meta["month"]
+
+        sheet_records: List[Dict[str, Any]] = []
+        sheet_status_totals: Dict[str, int] = {}
+        sheet_daily_office: Dict[str, int] = {
+            f"{year:04d}-{month:02d}-{d:02d}": 0
+            for d in range(1, month_meta["days_in_month"] + 1)
+        }
+
+        max_col = len(df.columns)
+
+        for ri in range(hdr_idx + 1, len(df)):
+            try:
+                row = df.iloc[ri]
+            except Exception:
+                continue
+
+            emp_num_raw = row.iloc[col_map["emp_num"]] if col_map["emp_num"] is not None and col_map["emp_num"] < max_col else None
+            name_raw = row.iloc[col_map["name"]] if col_map["name"] is not None and col_map["name"] < max_col else None
+
+            if _is_blank(emp_num_raw) and _is_blank(name_raw):
+                continue  # blank row
+
+            emp_num = _to_str_ref(emp_num_raw)
+            if emp_num is None:
+                # If emp_num is blank but name exists, synthesise from name
+                nm = _clean(name_raw)
+                if nm:
+                    emp_num = f"UNKNOWN-{nm[:30]}"
+                else:
+                    logger.warning("EMPLOYEE_WHEREABOUTS: row %d in '%s' skipped (no emp number or name)", ri, sheet_name)
+                    continue
+
+            name = _clean(name_raw) or None
+            sector = _clean(row.iloc[col_map["sector"]]) if col_map["sector"] is not None and col_map["sector"] < max_col else None
+            sector = sector or None
+            country = _clean(row.iloc[col_map["country"]]) if col_map["country"] is not None and col_map["country"] < max_col else None
+            country = country or None
+
+            # Register employee (first occurrence wins)
+            if emp_num not in employees_by_num:
+                employees_by_num[emp_num] = {
+                    "employee_number": emp_num,
+                    "name": name,
+                    "business_sector": sector,
+                    "country": country,
+                }
+                if country:
+                    by_country[country] = by_country.get(country, 0) + 1
+                if sector:
+                    by_sector[sector] = by_sector.get(sector, 0) + 1
+
+            daily_status: Dict[str, Optional[str]] = {}
+            status_counts: Dict[str, int] = {}
+
+            for (col_idx, day_num) in col_map["day_cols"]:
+                iso = f"{year:04d}-{month:02d}-{day_num:02d}"
+                if col_idx >= max_col:
+                    daily_status[iso] = None
+                    status_counts["_blank"] = status_counts.get("_blank", 0) + 1
+                    sheet_status_totals["_blank"] = sheet_status_totals.get("_blank", 0) + 1
+                    continue
+                cell = row.iloc[col_idx]
+                if _is_blank(cell):
+                    daily_status[iso] = None
+                    status_counts["_blank"] = status_counts.get("_blank", 0) + 1
+                    sheet_status_totals["_blank"] = sheet_status_totals.get("_blank", 0) + 1
+                else:
+                    code = _clean(cell)
+                    if not code:
+                        daily_status[iso] = None
+                        status_counts["_blank"] = status_counts.get("_blank", 0) + 1
+                        sheet_status_totals["_blank"] = sheet_status_totals.get("_blank", 0) + 1
+                    else:
+                        daily_status[iso] = code
+                        status_counts[code] = status_counts.get(code, 0) + 1
+                        sheet_status_totals[code] = sheet_status_totals.get(code, 0) + 1
+                        all_status_codes[code] = all_status_codes.get(code, 0) + 1
+                        # Office count (treat code 'O' or string containing 'office')
+                        upper = code.strip().upper()
+                        if upper == "O" or upper == "OFFICE" or "office" in code.lower():
+                            sheet_daily_office[iso] = sheet_daily_office.get(iso, 0) + 1
+
+            sheet_records.append({
+                "employee_number": emp_num,
+                "name": name,
+                "country": country,
+                "daily_status": daily_status,
+                "status_counts": status_counts,
+            })
+
+        whereabouts[sheet_name] = sheet_records
+        status_totals_by_month[sheet_name] = sheet_status_totals
+        daily_office_count_by_month[sheet_name] = sheet_daily_office
+        months_meta.append(month_meta)
+        sheets_parsed.append(sheet_name)
+
+    # Build legend from observed codes
+    legend: Dict[str, str] = {}
+    # Prefer the canonical short codes first (deterministic order)
+    for code in sorted(all_status_codes.keys(), key=lambda s: (len(s), s)):
+        legend[code] = _whereabouts_legend_label(code)
+    # Ensure defaults present even if not observed (useful for UI legend)
+    for k, v in _WHEREABOUTS_LEGEND_DEFAULTS.items():
+        legend.setdefault(k, v)
+
+    employees_list = list(employees_by_num.values())
+    employees_list.sort(key=lambda e: (e.get("employee_number") or ""))
+
+    unique_countries = sorted({e.get("country") for e in employees_list if e.get("country")})
+    unique_sectors = sorted({e.get("business_sector") for e in employees_list if e.get("business_sector")})
+
+    return {
+        "file_type": "EMPLOYEE_WHEREABOUTS",
+        "metadata": {
+            "source_file": filename,
+            "sheets_parsed": sheets_parsed,
+            "sheets_ignored": sheets_ignored,
+            "months": months_meta,
+            "total_employees": len(employees_list),
+            "unique_countries": unique_countries,
+            "unique_sectors": unique_sectors,
+        },
+        "employees": employees_list,
+        "whereabouts": whereabouts,
+        "legend": legend,
+        "aggregates": {
+            "by_country": by_country,
+            "by_sector": by_sector,
+            "daily_office_count_by_month": daily_office_count_by_month,
+            "status_totals_by_month": status_totals_by_month,
+        },
+        "errors": errors,
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Unknown / Fallback Parser
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -3467,7 +4597,7 @@ def parse_file(
             "errors": ["Could not load workbook — file may be corrupt or unsupported."],
         }
 
-    file_type = detect_file_type(all_sheets)
+    file_type = detect_file_type(all_sheets, filename)
 
     try:
         if file_type == "SOA":
@@ -3482,6 +4612,10 @@ def parse_file(
             return _parse_shop_visit(all_sheets, filename)
         elif file_type == "SVRG_MASTER":
             return _parse_svrg_master(all_sheets, filename)
+        elif file_type == "COMMERCIAL_PLAN":
+            return _parse_commercial_plan(all_sheets, filename)
+        elif file_type == "EMPLOYEE_WHEREABOUTS":
+            return _parse_employee_whereabouts(all_sheets, filename)
         else:
             return _parse_unknown(all_sheets, filename)
     except Exception as e:

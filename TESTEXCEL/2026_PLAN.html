@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>2026 Commercial Plan — Benchmark</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<script src="https://cdn.jsdelivr.net/npm/apexcharts@3.49.0/dist/apexcharts.min.js"></script>
+<style>
+:root{
+  --bg: #0b0f14;
+  --panel: #131a22;
+  --panel-2: #18212c;
+  --ink: #e7eef7;
+  --ink-dim: #9eb0c4;
+  --accent: #7bd3ff;
+  --accent-2: #b6a1ff;
+  --ok: #5ee7a7;
+  --warn: #ffb547;
+  --hot: #ff6b6b;
+  --line: #1f2b38;
+  --chip: #22313f;
+  --shadow: 0 6px 24px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:linear-gradient(180deg,#0a0e13,#0b0f14 280px);color:var(--ink);font-family:'Inter','Segoe UI',system-ui,-apple-system,sans-serif;}
+a{color:var(--accent)}
+header.top{
+  padding:28px 32px 16px 32px;
+  border-bottom:1px solid var(--line);
+  background:linear-gradient(135deg,rgba(123,211,255,.08),rgba(182,161,255,.04));
+}
+header.top h1{margin:0;font-size:28px;letter-spacing:-.5px}
+header.top .sub{color:var(--ink-dim);font-size:13px;margin-top:6px}
+.badge{display:inline-block;padding:2px 10px;border-radius:999px;background:var(--chip);color:var(--ink);font-size:11px;margin-right:6px;border:1px solid var(--line)}
+main{padding:18px 24px 80px}
+.tabs{display:flex;gap:8px;margin:18px 8px 22px 8px;flex-wrap:wrap}
+.tab{
+  padding:10px 18px;border-radius:10px;background:var(--panel);
+  border:1px solid var(--line);color:var(--ink-dim);cursor:pointer;
+  font-weight:600;font-size:13px;transition:all .18s;
+}
+.tab:hover{color:var(--ink);border-color:#2a3a4c}
+.tab.active{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#0a0e13;border-color:transparent;box-shadow:var(--shadow)}
+.view{display:none}
+.view.active{display:block;animation:fade .25s ease}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.grid{display:grid;gap:16px}
+.grid-6{grid-template-columns:repeat(6,minmax(0,1fr))}
+.grid-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.grid-2{grid-template-columns:1fr 1fr}
+.grid-5{grid-template-columns:repeat(5,minmax(0,1fr))}
+@media (max-width:1100px){.grid-6{grid-template-columns:repeat(3,1fr)}.grid-3,.grid-2,.grid-5{grid-template-columns:1fr}}
+.card{
+  background:var(--panel);border:1px solid var(--line);border-radius:14px;
+  padding:18px;box-shadow:var(--shadow)
+}
+.card h3{margin:0 0 14px 0;font-size:14px;letter-spacing:.5px;color:var(--ink-dim);text-transform:uppercase}
+.kpi{padding:18px;background:linear-gradient(135deg,var(--panel),var(--panel-2));border:1px solid var(--line);border-radius:14px}
+.kpi .label{font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:1px}
+.kpi .value{font-size:28px;font-weight:700;margin-top:6px}
+.kpi .meta{font-size:11px;color:var(--ink-dim);margin-top:4px}
+.filterbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.filterbar select,.filterbar input[type=text]{
+  background:var(--panel-2);border:1px solid var(--line);color:var(--ink);
+  padding:8px 10px;border-radius:8px;font-size:13px;outline:none;min-width:150px
+}
+.filterbar button{
+  background:var(--chip);color:var(--ink);border:1px solid var(--line);
+  padding:8px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600
+}
+.filterbar button:hover{background:#2a3a4c}
+.filterbar .btn-export{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#0a0e13;border:0}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+thead th{
+  text-align:left;padding:10px 10px;border-bottom:1px solid var(--line);
+  background:var(--panel-2);color:var(--ink-dim);font-weight:600;letter-spacing:.3px;
+  position:sticky;top:0;cursor:pointer;user-select:none
+}
+thead th:hover{color:var(--ink)}
+tbody td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+tbody tr:hover{background:rgba(123,211,255,.04)}
+.table-wrap{max-height:640px;overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+.chip{display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;margin:1px 2px;border:1px solid var(--line);background:var(--panel-2);color:var(--ink)}
+.chip.L1{background:rgba(94,231,167,.12);color:var(--ok);border-color:rgba(94,231,167,.3)}
+.chip.L2{background:rgba(255,181,71,.12);color:var(--warn);border-color:rgba(255,181,71,.3)}
+.chip.L3{background:rgba(255,140,97,.12);color:#ff8c61;border-color:rgba(255,140,97,.3)}
+.chip.L4{background:rgba(255,107,107,.14);color:var(--hot);border-color:rgba(255,107,107,.3)}
+.chip.status-Active{background:rgba(123,211,255,.12);color:var(--accent);border-color:rgba(123,211,255,.3)}
+.chip.status-Planned{background:rgba(255,181,71,.12);color:var(--warn);border-color:rgba(255,181,71,.3)}
+.chip.status-Unassigned{background:rgba(158,176,196,.10);color:var(--ink-dim);border-color:var(--line)}
+.row-detail{background:var(--panel-2);font-size:11.5px;color:var(--ink-dim)}
+.row-detail .mini-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;padding:8px 0}
+.row-detail .mini-grid .w{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+.row-detail .w .d{color:var(--ink);font-size:10.5px;font-weight:600}
+.row-detail .w .v{margin-top:3px;color:var(--ink-dim)}
+.expand-btn{background:transparent;border:0;color:var(--accent);cursor:pointer;font-size:12px}
+.year-card{background:linear-gradient(150deg,var(--panel),var(--panel-2));border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:var(--shadow)}
+.year-card h4{margin:0;font-size:22px;letter-spacing:-.5px}
+.year-card .total{font-size:12px;color:var(--ink-dim);margin-top:4px}
+.year-card .cust-list{margin-top:10px;max-height:180px;overflow:auto}
+.year-card .cust-list .c{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed var(--line);font-size:12px}
+.year-card .cust-list .c:last-child{border-bottom:0}
+.year-card .c .n{color:var(--ink)}
+.year-card .c .e{color:var(--ink-dim);font-size:11px;margin-left:6px}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--ink-dim);margin-top:8px}
+.legend .sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:middle}
+footer{color:var(--ink-dim);font-size:11px;padding:16px 24px;border-top:1px solid var(--line);margin-top:24px}
+.tag{display:inline-block;background:var(--chip);color:var(--ink);padding:1px 7px;border-radius:5px;font-size:10px;border:1px solid var(--line);margin-right:3px}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1 id="h-title">2026 Commercial Plan</h1>
+  <div class="sub" id="h-sub">Loading…</div>
+</header>
+
+<main>
+  <div class="filterbar" style="margin-left:8px">
+    <label style="font-size:12px;color:var(--ink-dim)">Year filter (cascades):</label>
+    <select id="globalYear">
+      <option value="ALL">All years</option>
+    </select>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-view="overview">Overview</div>
+    <div class="tab" data-view="actions">Action Log (1YP)</div>
+    <div class="tab" data-view="pipeline">Pipeline (5YP)</div>
+    <div class="tab" data-view="yearly">Yearly Breakdown</div>
+  </div>
+
+  <!-- ==================== OVERVIEW ==================== -->
+  <section class="view active" id="view-overview">
+    <div class="grid grid-6" id="kpiRow"></div>
+    <div class="grid grid-2" style="margin-top:16px">
+      <div class="card"><h3>Annual Engine Forecast (2026–2030)</h3><div id="chartAnnual"></div></div>
+      <div class="card"><h3>Engine Family Mix by Year</h3><div id="chartFamilyMix"></div></div>
+    </div>
+    <div class="grid grid-2" style="margin-top:16px">
+      <div class="card"><h3>Top 10 Customers — Total Engines</h3><div id="chartTopCust"></div></div>
+      <div class="card"><h3>1YP Actions by Owner</h3><div id="chartOwners"></div></div>
+    </div>
+  </section>
+
+  <!-- ==================== ACTION LOG ==================== -->
+  <section class="view" id="view-actions">
+    <div class="card">
+      <div class="filterbar">
+        <select id="flt-cust"><option value="">Customer (all)</option></select>
+        <select id="flt-owner"><option value="">Owner (all)</option></select>
+        <select id="flt-cat"><option value="">Category (all)</option></select>
+        <select id="flt-status"><option value="">Status (all)</option></select>
+        <input type="text" id="flt-search" placeholder="Search issue / description / update…" style="flex:1;min-width:220px" />
+        <button id="btn-reset">Reset</button>
+        <button id="btn-export-actions" class="btn-export">Export CSV</button>
+      </div>
+      <h3>Weekly Activity Heatmap (top 15 customers by activity)</h3>
+      <div id="chartHeatmap"></div>
+      <div class="legend">
+        <span><span class="sw" style="background:#5ee7a7"></span>L1</span>
+        <span><span class="sw" style="background:#ffb547"></span>L2</span>
+        <span><span class="sw" style="background:#ff8c61"></span>L3</span>
+        <span><span class="sw" style="background:#ff6b6b"></span>L4</span>
+        <span><span class="sw" style="background:#7bd3ff"></span>Other activity</span>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <h3>Action Items</h3>
+      <div class="table-wrap">
+        <table id="tbl-actions">
+          <thead><tr>
+            <th data-k="customer">Customer</th>
+            <th data-k="issue">Issue</th>
+            <th data-k="description">Description</th>
+            <th data-k="owner">Owner</th>
+            <th data-k="latest_update">Latest Update</th>
+            <th>Category</th>
+            <th data-k="weeks_active">Weeks</th>
+            <th data-k="status_summary">Status</th>
+            <th></th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== PIPELINE ==================== -->
+  <section class="view" id="view-pipeline">
+    <div class="card">
+      <div class="filterbar">
+        <select id="p-year"><option value="">Year (all)</option></select>
+        <select id="p-engine"><option value="">Engine (all)</option></select>
+        <select id="p-cust"><option value="">Customer (all)</option></select>
+        <select id="p-qtr"><option value="">Quarter (all)</option></select>
+        <button id="p-reset">Reset</button>
+        <button id="btn-export-pipeline" class="btn-export">Export CSV</button>
+      </div>
+    </div>
+    <div class="grid grid-2" style="margin-top:16px">
+      <div class="card"><h3>Pipeline Funnel — Year × Quarter × Engine count</h3><div id="chartFunnel"></div></div>
+      <div class="card"><h3>Customer × Year Heatmap</h3><div id="chartPipeHeat"></div></div>
+    </div>
+    <div class="grid grid-2" style="margin-top:16px">
+      <div class="card"><h3>Amount by Year (£m — where captured)</h3><div id="chartAmount"></div></div>
+      <div class="card">
+        <h3>Pipeline Items</h3>
+        <div class="table-wrap" style="max-height:360px">
+          <table id="tbl-pipeline">
+            <thead><tr>
+              <th data-k="customer">Customer</th>
+              <th data-k="engine_type">Engine</th>
+              <th data-k="year">Year</th>
+              <th data-k="quarter">Qtr</th>
+              <th data-k="amount">Amount</th>
+              <th data-k="comments">Comments</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== YEARLY ==================== -->
+  <section class="view" id="view-yearly">
+    <div class="grid grid-5" id="yearCards"></div>
+    <div class="card" style="margin-top:16px">
+      <h3>SPE Sales Per Year — Full pivot</h3>
+      <div class="table-wrap">
+        <table id="tbl-yearly">
+          <thead id="tbl-yearly-head"></thead>
+          <tbody id="tbl-yearly-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  Benchmark reference visualisation. Parsed directly from <code>2026_PLAN.xlsx</code> via openpyxl — independent of V6/parser.py.
+  <span class="tag">ApexCharts 3.49.0</span>
+  <span class="tag" id="genTag"></span>
+</footer>
+
+<script id="payload" type="application/json">{"file_type": "COMMERCIAL_PLAN", "metadata": {"source_file": "2026_PLAN.xlsx", "sheets_parsed": ["1YP", "5YP SPE SALES", "SPE SALES PER YEAR"], "plan_year": 2026, "generated_at": "2026-04-23T09:27:10", "counts": {"one_year_plan_items": 28, "five_year_spe_items": 46, "annual_summary_years": 5}}, "one_year_plan": {"week_columns": ["2026-01-01", "2026-01-08", "2026-01-15", "2026-01-22", "2026-01-29", "2026-02-05", "2026-02-12", "2026-02-19", "2026-02-26", "2026-03-05", "2026-03-12", "2026-03-19", "2026-03-26", "2026-04-02", "2026-04-09", "2026-04-16", "2026-04-23", "2026-04-30", "2026-05-07", "2026-05-14", "2026-05-21", "2026-05-28", "2026-06-04", "2026-06-11", "2026-06-18", "2026-06-25", "2026-07-02", "2026-07-09", "2026-07-16", "2026-07-23", "2026-07-30", "2026-08-06", "2026-08-13", "2026-08-20", "2026-08-27", "2026-09-03", "2026-09-10", "2026-09-17", "2026-09-24", "2026-10-01", "2026-10-08", "2026-10-15", "2026-10-22", "2026-10-29", "2026-11-05", "2026-11-12", "2026-11-19", "2026-11-26", "2026-12-03", "2026-12-10", "2026-12-17", "2026-12-24"], "historical_week_columns": ["2024-10-07", "2024-10-14", "2024-10-21", "2024-10-28", "2024-11-04", "2024-11-11", "2024-11-18", "2024-11-25", "2024-12-02", "2024-12-09", "2024-12-16", "2024-12-23", "2024-12-30"], "category_columns": ["COMMERCIAL", "AM", "SALES", "CUSTOMER OPS"], "items": [{"row_index": 7, "blue_chip": null, "customer": "Ethiopian", "issue": "Dispute and Debt", "description": "Need to settle AOG claim in order to unlock debt", "owner": "Gordon", "primary_owner": "Gordon", "campaign_owner": "Gordon", "latest_update": "L1 approved.  L2 Planned", "campaign_description": "A350-900, A350-1000, 787 & Norse 787 campaign", "category_status": {"COMMERCIAL": null, "AM": "L1", "SALES": "L2", "CUSTOMER OPS": null}, "historical_status": {"2024-10-14": "L1", "2024-10-21": "L2", "2024-11-04": "EIS & \nKBP meeting\nOffer Letter", "2024-11-11": "Negotiations", "2024-12-02": "Feedback on Offer\nNegotiations", "2024-12-09": "Amndt?", "2024-12-16": "ETH sign or Offset Debt"}, "weekly_status": {"2026-03-26": "ICT Kick Off", "2026-04-02": "Osman in Addis, TCA Value Sell, Derate analysis, LLP Service", "2026-04-09": "Osman in Addis, TCA Value Sell, Derate analysis, LLP Service", "2026-04-16": "L1 strategy", "2026-04-23": "L2 Strategy", "2026-04-30": "L3 Strategy\nIATA Africa Addis", "2026-05-07": "L3 Approval", "2026-05-14": "IC Meeting", "2026-05-21": "Package proposal submission", "2026-06-11": "ET Senior visit to Derby & agree proposal", "2026-07-23": "Announcement Farnborough"}, "weeks_active": 11, "status_summary": "Active"}, {"row_index": 8, "blue_chip": null, "customer": "Ethiopian", "issue": null, "description": null, "owner": null, "primary_owner": null, "campaign_owner": null, "latest_update": null, "campaign_description": "2 A350-900 Whitetail TCA + SPE", "category_status": {"COMMERCIAL": null, "AM": null, "SALES": null, "CUSTOMER OPS": null}, "historical_status": {}, "weekly_status": {"2026-04-02": "Osman in Addis", "2026-04-16": "L2 for amended proposal (rate, training , TCA & SPE escalation)", "2026-05-14": "Proposal Signature", "2026-05-21": "TCA & PA  contract amendment", "2026-06-11": "PA Signature", "2026-06-25": "SPE Delivery"}, "weeks_active": 6, "status_summary": "Active"}, {"row_index": 9, "blue_chip": null, "customer": "Gulf", "issue": "Settlement/Sales", "description": "Need to settle the AOG Remedy to unlock Sale opportunity", "owner": "Georgia", "primary_owner": "Georgia", "campaign_owner": "Georgia", "latest_update": null, "campaign_description": "Project Falcon", "category_status": {"COMMERCIAL": "L2", "AM": "L2", "SALES": "L3/L4", "CUSTOMER OPS": null}, "historical_status": {"2024-10-07": "L2", "2024-10-14": "L2", "2024-10-21": "L3/L4", "2024-11-11": "Bahrain Airshow  & Submit +2 Proposal", "2024-11-18": "Strategy review for 5+5 propsoal", "2024-11-25": "Feedback from GFA", "2024-12-09": "Revised Submission"}, "weekly_status": {"2026-03-05": "Initial customer meeting to share proposal", "2026-04-02": "Follow-up meeting and bid 2 submission", "2026-04-09": "Customer meeting to discuss proposal valuation", "2026-04-16": "Follow up with senior management", "2026-04-23": "Bid 3 submission", "2026-05-07": "Proposal agreement and offer letter submission", "2026-05-21": "Offer l.etter signed", "2026-05-28": "Prod engine lease executed"}, "weeks_active": 8, "status_summary": "Active"}, {"row_index": 10, "blue_chip": null, "customer": "Qatar", "issue": null, "description": null, "owner": "Issy", "primary_owner": null, "campaign_owner": "Issy", "latest_update": null, "campaign_description": "A350-1000 Campaign, 60 AC", "category_status": {"COMMERCIAL": null, "AM": null, "SALES": null, "CUSTOMER OPS": null}, "historical_status": {}, "weekly_status": {"2026-03-05": "Date TBC on when travel is allowed - target for a session in Doha to review feedback on precious A350-1000 Campaign", "2026-05-14": "A350 Triparty  Meeting"}, "weeks_active": 2, "status_summary": "Active"}, {"row_index": 11, "blue_chip": null, "customer": "Qatar", "issue": "Debt", "description": "Need to solve for Qatar CRC", "owner": "Issy", "primary_owner": "Issy", "campaign_owner": null, "latest_update": null, "campaign_description": "Amendment 12 (Extension)", "category_status": {"COMMERCIAL": null, "AM": "Identify Stand repair", "SALES": "Discussion with Qatar on workable solution", "CUSTOMER OPS": null}, "historical_status": {"2024-10-14": "Identify Stand repair", "2024-10-21": "Discussion with Qatar on workable solution", "2024-11-04": "L1 Strategy", "2024-11-11": "Propose solution to stratgey", "2024-12-02": "Follow on session on CRC debt with Qatar\nSession with Tim to pursue net off"}, "weekly_status": {"2026-01-22": "Amendment 12 (84k extension) signature expected"}, "weeks_active": 1, "status_summary": "Active"}, {"row_index": 12, "blue_chip": null, "customer": "MSR", "issue": null, "description": null, "owner": "Georges", "primary_owner": null, "campaign_owner": "Georges", "latest_update": null, "campaign_description": "Trent 700 Extension", "category_status": {"COMMERCIAL": null, "AM": null, "SALES": null, "CUSTOMER OPS": null}, "historical_status": {}, "weekly_status": {"2026-03-19": "Submit Proposal", "2026-04-16": "Proposal Negotiatiion", "2026-05-28": "Agree a Proposal", "2026-06-04": "Contracting"}, "weeks_active": 4, "status_summary": "Active"}, {"row_index": 13, "blue_chip": null, "customer": "MSR", "issue": null, "description": null, "owner": "Georges", "primary_owner": null, "campaign_owner": "Georges", "latest_update": null, "campaign_description": "Widebody Campaign  (Trent 7000 / XW-84 / Trent 1000)", "category_status": {"COMMERCIAL": null, "AM": null, "SALES": null, "CUSTOMER OPS": null}, "historical_status": {}, "weekly_status": {}, "weeks_active": 0, "status_summary": "Unassigned"}, {"row_index": 14, "blue_chip": null, "customer": "MSR", "issue": "Debt", "description": "Drive for 0 debt", "owner": "Georges", "primary_owner": "Georges", "campaign_owner": "Georges", "latest_update": null, "campaign_description": "EP Trent XWB-84 upsell", "category_status": {"COMMERCIAL": null, "AM": null, "SALES": "MSR Raise AOG credits", "CUSTOMER OPS": "Clear Debt"}, "historical_status": {"2024-10-21": "MSR Raise AOG credits", "2024-10-28": "Clear Debt", "2024-11-25": "ULW Dispute?"}, "weekly_status": {"2026-03-26": "Agree Proposal", "2026-04-23": "Agree Proposal"}, "weeks_active": 2, "status_summary": "Active"}, {"row_index": 15, "blue_chip": null, "customer": "Emirates", "issue": "SPE delivery", "description": "Deliver SPE", "owner": "Darren", "primary_owner": "Darren", "campaign_owner": "Darren", "latest_update": null, "campaign_description": "Project Pantheon", "category_status": {"COMMERCIAL": null, "AM": null, "SALES": null, "CUSTOMER OPS": "SPE Delivery"}, "historical_status": {"2024-10-28": "SPE Delivery"}, "weekly_status": {"2026-01-08": "Level 1 Finance Approval", "2026-01-22": "Level 2 Finance Approval", "2026-01-29": "Customer Negotiations", "2026-03-05": "Re-Run Finance Models", "2026-03-26": "Level 1 Finance Approval", "2026-04-09": "Level 2 Finance Approval", "2026-04-16": "Customer Negotiations", "2026-05-21": "Contracting", "2026-07-30": "Execution"}, "weeks_active": 9, "status_summary": "Active"}, {"row_index": 16, "blue_chip": null, "customer": "Saudia", "issue": null, "description": null, "owner": "Georges", "primary_owner": null, "campaign_owner": "Georges", "latest_update": null, "campaign_description": "Solve Commercial Issue", "category_status": {"COMMERCIAL": null, "AM": null, "SALES": null, "CUSTOMER OPS": null}, "historical_status": {}, "weekly_status": {"2026-01-22": "Solve Commercial issues"}, "weeks_active": 1, "status_summary": "Active"}, {"row_index": 17, "blue_chip": null, "customer": "Saudia", "issue": null, "description": null, "owner": "Georges", "primary_owner": null, "campaign_owner": "Georges", "latest_update": null, "campaign_description": "Widebody Campaign  (Trent 7000 / XWB-97)", "category_status": {"COMMERCIAL": null, "AM": null, "SALES": null, "CUSTOMER OPS": null}, "historical_status": {}, "weekly_status": {"2026-05-07": "Start Campaign"}, "weeks_active": 1, "status_summary": "Active"}, {"row_index": 18, "blue_chip": null, "customer": "Saudia", "issue": null, "description": null, "owner": "Georges", "primary_owner": null, "campaign_owner": "Georges", "latest_update": null, "campaign_description": "Extend Trent 700s (Classic)", "category_status": {"COMMERCIAL": null, "AM": null, "SALES": null, "CUSTOMER OPS": null}, "historical_status": {}, "weekly_status": {"2026-05-07": "Start Campaign"}, "weeks_active": 1, "status_summary": "Active"}, {"row_index": 19, "blue_chip": null, "customer": "Flynas", "issue": "Sales", "description": "Sign Proposal", "owner": "Craig", "primary_owner": "Craig", "campaign_owner": "Georges", "latest_update": null, "campaign_description": "Contracting Trent 7000", "category_status": {"COMMERCIAL": null, "AM": null, "SALES": null, "CUSTOMER OPS": null}, "historical_status": {"2024-11-18": "Meeting CEO Dubai", "2024-12-09": "Sign Proposal"}, "weekly_status": {"2026-04-30": "Contracting Trent 7000", "2026-10-29": "Spare Deposit"}, "weeks_active": 2, "status_summary": "Active"}, {"row_index": 20, "blue_chip": null, "customer": "Flyadeal", "issue": "Sales", "description": "Secure Proposal", "owner": "Craig", "primary_owner": "Craig", "campaign_owner": "Georges", "latest_update": null, "campaign_description": "Contracting Trent 7000", "category_status": {"COMMERCIAL": null, "AM": null, "SALES": null, "CUSTOMER OPS": "Meeting with DG"}, "historical_status": {"2024-10-28": "Meeting with DG", "2024-11-04": "Follow on meeting", "2024-11-11": "BAFO", "2024-11-18": "Resolultion AQ30", "2024-12-16": "Sign Proposal"}, "weekly_status": {"2026-01-08": "Contracting Trent 7000", "2026-07-02": "Spare Deposit"}, "weeks_active": 2, "status_summary": "Active"}, {"row_index": 21, "blue_chip": null, "customer": "Etihad", "issue": "Sales", "description": "Submit proposal", "owner": "Craig", "primary_owner": "Craig", "campaign_owner": "Gordon", "latest_update": null, "campaign_description": "A330neo Abra SPE", "category_status": {"COMMERCIAL": null, "AM": null, "SALES": "RFP recieved", "CUSTOMER OPS": "L1"}, "historical_status": {"2024-10-21": "RFP recieved", "2024-10-28": "L1", "2024-11-04": "L2", "2024-11-11": "L3", "2024-11-25": "L4", "2024-12-09": "Submit Proposal", "2024-12-16": "Counter Proposal"}, "weekly_status": {"2026-03-26": "RR proposal signed with Abra", "2026-06-04": "Etihad LoI with Abra", "2026-06-18": "Etihad commitment on SPE pull forward", "2026-07-09": "PA amendment submitted", "2026-08-06": "PA amendment signed", "2026-11-12": "Trent 7000 SPE delivery"}, "weeks_active": 6, "status_summary": "Active"}, {"row_index": 22, "blue_chip": null, "customer": "Etihad", "issue": null, "description": null, "owner": "Gordon", "primary_owner": null, "campaign_owner": "Gordon", "latest_update": null, "campaign_description": "Trent 7000 TCA & SFAA", "category_status": {"COMMERCIAL": null, "AM": null, "SALES": null, "CUSTOMER OPS": null}, "historical_status": {}, "weekly_status": {"2026-04-02": "TCA & SFAA updated drafts issued to Etihad", "2026-04-23": "L2 Final Approval", "2026-04-30": "Senior Close Meeting", "2026-05-14": "Contract signature"}, "weeks_active": 4, "status_summary": "Active"}, {"row_index": 23, "blue_chip": null, "customer": "SilkWay", "issue": null, "description": null, "owner": "Alexei", "primary_owner": null, "campaign_owner": "Alexei", "latest_update": null, "campaign_description": null, "category_status": {"COMMERCIAL": null, "AM": null, "SALES": null, "CUSTOMER OPS": null}, "historical_status": {}, "weekly_status": {}, "weeks_active": 0, "status_summary": "Unassigned"}, {"row_index": 24, "blue_chip": null, "customer": "RIA", "issue": null, "description": null, "owner": "Georges", "primary_owner": null, "campaign_owner": "Georges", "latest_update": null, "campaign_description": "Contracting Trent XWB-97", "category_status": {"COMMERCIAL": null, "AM": null, "SALES": null, "CUSTOMER OPS": null}, "historical_status": {}, "weekly_status": {"2026-04-16": "Contracting Product Agreement", "2026-06-25": "Spare Deposit"}, "weeks_active": 2, "status_summary": "Active"}, {"row_index": 25, "blue_chip": null, "customer": "Kuwait", "issue": null, "description": null, "owner": "Georgia", "primary_owner": null, "campaign_owner": "Georgia", "latest_update": null, "campaign_description": "A350-900 Campaign", "category_status": {"COMMERCIAL": null, "AM": null, "SALES": null, "CUSTOMER OPS": null}, "historical_status": {}, "weekly_status": {}, "weeks_active": 0, "status_summary": "Unassigned"}, {"row_index": 26, "blue_chip": null, "customer": "Air Tanzania", "issue": null, "description": null, "owner": "Gordon", "primary_owner": null, "campaign_owner": "Gordon", "latest_update": null, "campaign_description": "SPE sale", "category_status": {"COMMERCIAL": null, "AM": null, "SALES": null, "CUSTOMER OPS": null}, "historical_status": {}, "weekly_status": {"2026-04-09": "Further deposit payment $12.7", "2026-04-23": "Final balance payment $1.1M & BoS"}, "weeks_active": 2, "status_summary": "Active"}, {"row_index": 27, "blue_chip": null, "customer": "Uzbekistan Airways", "issue": null, "description": null, "owner": "Alexei", "primary_owner": null, "campaign_owner": "Alexei", "latest_update": null, "campaign_description": "22 B787-9 TCA campaign", "category_status": {"COMMERCIAL": null, "AM": null, "SALES": null, "CUSTOMER OPS": null}, "historical_status": {}, "weekly_status": {"2026-02-05": "Visit UzAir to present proposal", "2026-02-12": "09/02,  Omar meeting with UZ Ambassador, UK", "2026-02-19": "17/02, UK-UZ infrastructure conference (Omar mtg with Lord Alderdice) and  CEO.", "2026-02-26": "Proposal resent to UzAir CEO by Omar. 26/02,  evening - C5 Foreign ministers summit", "2026-03-05": "Omar/team mtg with Adrian Gane (Board Member)", "2026-03-19": "Alexei mtg with Nicholas (head of  UKTI in Tashkent) (IPO)", "2026-04-16": "15-16/04 CA conference in Astana", "2026-04-23": "Follow up letter from Omar to CEO to request update/mtg", "2026-06-04": "UZ presdential vist to UK", "2026-06-11": "KBP, 11/06", "2026-07-16": "Farnborough invite + (CA delegation)"}, "weeks_active": 11, "status_summary": "Active"}, {"row_index": 28, "blue_chip": null, "customer": "Air Mauritius", "issue": null, "description": null, "owner": "Georgia", "primary_owner": null, "campaign_owner": "Georgia", "latest_update": null, "campaign_description": "Fleet Restructure", "category_status": {"COMMERCIAL": null, "AM": null, "SALES": null, "CUSTOMER OPS": null}, "historical_status": {}, "weekly_status": {"2026-04-02": "NDA Signed", "2026-04-23": "Fleet Review feedback"}, "weeks_active": 2, "status_summary": "Active"}, {"row_index": 29, "blue_chip": null, "customer": "Air Astana", "issue": null, "description": null, "owner": "Alexei", "primary_owner": null, "campaign_owner": "Alexei", "latest_update": null, "campaign_description": null, "category_status": {"COMMERCIAL": null, "AM": null, "SALES": null, "CUSTOMER OPS": null}, "historical_status": {}, "weekly_status": {"2026-01-29": "Proposal in October 2025, 29/01 visit  to RR Derby by  assessemnt team", "2026-03-26": "SVS L2 pack", "2026-04-02": "03/04, presentation of updated proposal in Almaty", "2026-04-16": "UK HMA meeting with CEO  -request fpr  guarantees", "2026-04-23": "Intro letter from Omar to the new CEO", "2026-05-07": "EX CEO (now advisor) P Foster visit to RR Derby in May, date TBC (Omar)", "2026-05-14": "meeting to discuss guarantees (ToW/AOG), date TBC - key aspect forf decision, according to CEO", "2026-06-04": "Meeting with CEO during  IATA (Omar)", "2026-07-16": "Farnborough invite + (CA delegation)", "2026-08-06": "Minister Bryant’s visit, date TBC (RR mtg with CEO as aprt of the agenda), may move to September", "2026-10-29": "engine decsion (further delay possible)"}, "weeks_active": 11, "status_summary": "Active"}, {"row_index": 30, "blue_chip": null, "customer": "Somon Air", "issue": null, "description": null, "owner": "Alexei", "primary_owner": null, "campaign_owner": "Alexei", "latest_update": null, "campaign_description": null, "category_status": {"COMMERCIAL": null, "AM": null, "SALES": null, "CUSTOMER OPS": null}, "historical_status": {}, "weekly_status": {"2026-01-01": "Meeting with CTO, NDA and UKEF letter in Dec-25", "2026-03-26": "SVSL2 pack,", "2026-04-02": "02/04 presentation of 1st proposal in Dushanbe", "2026-04-16": "Comments received on 1st proposal", "2026-04-23": "Intro letter from Omar to the  CEO", "2026-04-30": "response to comments", "2026-05-21": "Airline visit to RR Derby", "2026-06-11": "KBP, date TBC", "2026-07-09": "engine decision (delay possible)", "2026-07-16": "Farnborough invite + (CA delegation)"}, "weeks_active": 10, "status_summary": "Active"}, {"row_index": 31, "blue_chip": null, "customer": "Uganda Future", "issue": null, "description": null, "owner": "Gordon", "primary_owner": null, "campaign_owner": "Gordon", "latest_update": null, "campaign_description": "Spare Engine Sale", "category_status": {"COMMERCIAL": null, "AM": null, "SALES": null, "CUSTOMER OPS": null}, "historical_status": {}, "weekly_status": {"2026-04-02": "L2 Approvals", "2026-04-09": "Submit final offer", "2026-04-16": "Submit formal proposal", "2026-04-23": "RRPF proposal", "2026-04-30": "Proposal signed. Draft CoL", "2026-05-07": "PA amendment & CoL", "2026-05-28": "PA & CoL signed", "2026-06-18": "SPE Delivery"}, "weeks_active": 8, "status_summary": "Active"}, {"row_index": 32, "blue_chip": null, "customer": "Desert Wings SPE", "issue": null, "description": null, "owner": null, "primary_owner": null, "campaign_owner": null, "latest_update": null, "campaign_description": "Trent 7000 Sale", "category_status": {"COMMERCIAL": null, "AM": null, "SALES": null, "CUSTOMER OPS": null}, "historical_status": {}, "weekly_status": {"2026-04-16": "Meeting CEO", "2026-04-30": "Submit Proposal", "2026-07-02": "Sign Proposal", "2026-07-30": "Contracting", "2026-12-03": "Spare Sale"}, "weeks_active": 5, "status_summary": "Active"}, {"row_index": 33, "blue_chip": null, "customer": "SRA", "issue": null, "description": null, "owner": null, "primary_owner": null, "campaign_owner": null, "latest_update": null, "campaign_description": "Trent XWB-84 Deposit", "category_status": {"COMMERCIAL": null, "AM": null, "SALES": null, "CUSTOMER OPS": null}, "historical_status": {}, "weekly_status": {"2026-04-16": "Meeting CEO", "2026-06-04": "Submit Proposal", "2026-07-23": "Sign Proposal", "2026-08-27": "Contracting", "2026-10-01": "Sign Contract", "2026-12-10": "Deposit"}, "weeks_active": 6, "status_summary": "Active"}, {"row_index": 34, "blue_chip": null, "customer": "Air Algerir", "issue": null, "description": null, "owner": null, "primary_owner": null, "campaign_owner": null, "latest_update": null, "campaign_description": "Trent 7000 Contracting", "category_status": {"COMMERCIAL": null, "AM": null, "SALES": null, "CUSTOMER OPS": null}, "historical_status": {}, "weekly_status": {"2026-01-01": "Contracting Trent 7000 TCA", "2026-06-04": "Submit Proposal", "2026-07-23": "Sign Proposal", "2026-08-27": "Contracting", "2026-10-01": "Sign Contract", "2026-12-10": "Deposit"}, "weeks_active": 6, "status_summary": "Active"}]}, "five_year_spe_sales": {"items": [{"row_index": 2, "customer": "Emirates", "engine_type": "XWB-84", "year": 2026, "quarter": "Q2", "amount": 23.3, "comments": null}, {"row_index": 3, "customer": "Emirates", "engine_type": "XWB-84", "year": 2026, "quarter": "Q4", "amount": 24.0, "comments": null}, {"row_index": 4, "customer": "Emirates", "engine_type": "XWB-84", "year": 2027, "quarter": "Q1", "amount": null, "comments": null}, {"row_index": 5, "customer": "Emirates", "engine_type": "XWB-84", "year": 2027, "quarter": "Q2", "amount": null, "comments": null}, {"row_index": 6, "customer": "Emirates", "engine_type": "XWB-84", "year": 2027, "quarter": "Q2", "amount": null, "comments": null}, {"row_index": 7, "customer": "Emirates", "engine_type": "XWB-84", "year": 2027, "quarter": "Q3", "amount": null, "comments": null}, {"row_index": 8, "customer": "Emirates", "engine_type": "XWB-84", "year": 2027, "quarter": "Q3", "amount": null, "comments": null}, {"row_index": 9, "customer": "Emirates", "engine_type": "XWB-84", "year": 2027, "quarter": "Q4", "amount": null, "comments": null}, {"row_index": 10, "customer": "Emirates", "engine_type": "XWB-84", "year": 2028, "quarter": "Q1", "amount": null, "comments": null}, {"row_index": 11, "customer": "Emirates", "engine_type": "XWB-84", "year": 2028, "quarter": "Q2", "amount": null, "comments": null}, {"row_index": 12, "customer": "Emirates", "engine_type": "XWB-84", "year": 2031, "quarter": "Q1", "amount": null, "comments": null}, {"row_index": 13, "customer": "Emirates", "engine_type": "XWB-84", "year": 2031, "quarter": "Q3", "amount": null, "comments": null}, {"row_index": 14, "customer": "Etihad", "engine_type": "XWB-97", "year": 2026, "quarter": "Q3", "amount": null, "comments": null}, {"row_index": 15, "customer": "Etihad", "engine_type": "XWB-97", "year": 2028, "quarter": "Q3/Q4", "amount": null, "comments": null}, {"row_index": 16, "customer": "Etihad", "engine_type": "XWB-97", "year": 2028, "quarter": null, "amount": null, "comments": null}, {"row_index": 17, "customer": "Etihad", "engine_type": "XWB-97", "year": 2029, "quarter": null, "amount": null, "comments": null}, {"row_index": 18, "customer": "Etihad", "engine_type": "XWB-97", "year": 2029, "quarter": null, "amount": null, "comments": null}, {"row_index": 19, "customer": "Etihad", "engine_type": "XWB-97", "year": 2029, "quarter": null, "amount": null, "comments": null}, {"row_index": 20, "customer": "Etihad", "engine_type": "XWB-97", "year": 2030, "quarter": "Q3/Q4", "amount": null, "comments": null}, {"row_index": 21, "customer": "Etihad", "engine_type": "Trent 7000", "year": 2027, "quarter": "Q2", "amount": null, "comments": "Possibly 2026 Q4"}, {"row_index": 22, "customer": "Etihad", "engine_type": "Trent 7000", "year": 2027, "quarter": "Q3", "amount": null, "comments": null}, {"row_index": 23, "customer": "Etihad", "engine_type": "Trent 7000", "year": 2027, "quarter": "Q4", "amount": null, "comments": null}, {"row_index": 24, "customer": "Etihad", "engine_type": "Trent 7000", "year": 2028, "quarter": "Q1", "amount": null, "comments": null}, {"row_index": 25, "customer": "Etihad", "engine_type": "Trent 7000", "year": 2028, "quarter": "Q2", "amount": null, "comments": null}, {"row_index": 26, "customer": "Etihad", "engine_type": "Trent 7000", "year": 2029, "quarter": "Q3", "amount": null, "comments": null}, {"row_index": 27, "customer": "Flynas", "engine_type": "TRENT1000", "year": 2028, "quarter": "Q2", "amount": null, "comments": null}, {"row_index": 28, "customer": "Flynas", "engine_type": "TRENT1000", "year": 2028, "quarter": "Q4", "amount": null, "comments": null}, {"row_index": 29, "customer": "Flynas", "engine_type": "TRENT7000", "year": 2027, "quarter": "Q1", "amount": null, "comments": null}, {"row_index": 30, "customer": "Flynas", "engine_type": "TRENT7000", "year": 2029, "quarter": "Q1", "amount": null, "comments": null}, {"row_index": 31, "customer": "Flynas", "engine_type": "TRENT7000", "year": 2029, "quarter": "Q3", "amount": null, "comments": null}, {"row_index": 32, "customer": "Flyadeal", "engine_type": "TRENT7000", "year": 2027, "quarter": "Q2", "amount": null, "comments": null}, {"row_index": 33, "customer": "Flyadeal", "engine_type": "TRENT7000", "year": 2028, "quarter": "Q2", "amount": null, "comments": null}, {"row_index": 34, "customer": "Flyadeal", "engine_type": "TRENT7000", "year": 2029, "quarter": "Q2", "amount": null, "comments": null}, {"row_index": 35, "customer": "Flyadeal", "engine_type": "TRENT7000", "year": 2029, "quarter": "Q3", "amount": null, "comments": null}, {"row_index": 36, "customer": "Egypt Air", "engine_type": "XWB-84", "year": 2026, "quarter": "Q2", "amount": null, "comments": null}, {"row_index": 37, "customer": "Egypt Air", "engine_type": "XWB-84", "year": 2027, "quarter": "Q1", "amount": null, "comments": null}, {"row_index": 38, "customer": "Egypt Air", "engine_type": "XWB-84", "year": 2030, "quarter": null, "amount": null, "comments": null}, {"row_index": 39, "customer": "Air Algerie", "engine_type": "TRENT7000", "year": 2026, "quarter": "Q1", "amount": null, "comments": null}, {"row_index": 40, "customer": "Air Algerie", "engine_type": "TRENT7000", "year": 2027, "quarter": "Q3", "amount": null, "comments": null}, {"row_index": 41, "customer": "Ethiopian", "engine_type": "XWB-84", "year": 2029, "quarter": "Q3", "amount": null, "comments": null}, {"row_index": 42, "customer": "Ethiopian", "engine_type": "XWB-84", "year": 2030, "quarter": "Q3", "amount": null, "comments": null}, {"row_index": 43, "customer": "Ethiopian", "engine_type": "XWB-84", "year": 2026, "quarter": "Q2", "amount": null, "comments": null}, {"row_index": 44, "customer": "Silkways", "engine_type": "XWB-97", "year": 2028, "quarter": "Q4", "amount": null, "comments": null}, {"row_index": 45, "customer": "RiyadhAir", "engine_type": "XWB-97", "year": 2030, "quarter": null, "amount": null, "comments": null}, {"row_index": 46, "customer": "Tanzania", "engine_type": "TRENT1000", "year": 2026, "quarter": "Q2", "amount": null, "comments": null}, {"row_index": 47, "customer": "Mauritius", "engine_type": "XWB-84", "year": 2027, "quarter": "Q4", "amount": null, "comments": null}], "totals": {"by_year": {"2026": 7, "2027": 14, "2028": 10, "2029": 9, "2030": 4, "2031": 2}, "by_engine": {"XWB-84": 19, "XWB-97": 9, "TRENT7000": 9, "Trent 7000": 6, "TRENT1000": 3}, "by_customer": {"Etihad": 13, "Emirates": 12, "Flynas": 5, "Flyadeal": 4, "Egypt Air": 3, "Ethiopian": 3, "Air Algerie": 2, "Silkways": 1, "RiyadhAir": 1, "Tanzania": 1, "Mauritius": 1}, "total_opportunities": 46, "total_amount": 47.3}}, "annual_summary": {"by_year": {"2026": {"year": 2026, "customers": [{"name": "Air Algerie", "total": 1, "engines": [{"type": "TRENT7000", "count": 1}]}, {"name": "Egypt Air", "total": 1, "engines": [{"type": "XWB-84", "count": 1}]}, {"name": "Emirates", "total": 2, "engines": [{"type": "XWB-84", "count": 2}]}, {"name": "Etihad", "total": 1, "engines": [{"type": "XWB-97", "count": 1}]}, {"name": "Tanzania", "total": 1, "engines": [{"type": "TRENT1000", "count": 1}]}, {"name": "Ethiopian", "total": 1, "engines": [{"type": "XWB-84", "count": 1}]}], "grand_total": 7}, "2027": {"year": 2027, "customers": [{"name": "Air Algerie", "total": 1, "engines": [{"type": "TRENT7000", "count": 1}]}, {"name": "Egypt Air", "total": 1, "engines": [{"type": "XWB-84", "count": 1}]}, {"name": "Emirates", "total": 6, "engines": [{"type": "XWB-84", "count": 6}]}, {"name": "Etihad", "total": 3, "engines": [{"type": "Trent 7000", "count": 3}]}, {"name": "Flyadeal", "total": 1, "engines": [{"type": "TRENT7000", "count": 1}]}, {"name": "Flynas", "total": 1, "engines": [{"type": "TRENT7000", "count": 1}]}, {"name": "Mauritius", "total": 1, "engines": [{"type": "XWB-84", "count": 1}]}], "grand_total": 14}, "2028": {"year": 2028, "customers": [{"name": "Emirates", "total": 2, "engines": [{"type": "XWB-84", "count": 2}]}, {"name": "Etihad", "total": 4, "engines": [{"type": "Trent 7000", "count": 2}, {"type": "XWB-97", "count": 2}]}, {"name": "Flyadeal", "total": 1, "engines": [{"type": "TRENT7000", "count": 1}]}, {"name": "Flynas", "total": 2, "engines": [{"type": "TRENT1000", "count": 2}]}, {"name": "Silkways", "total": 1, "engines": [{"type": "XWB-97", "count": 1}]}], "grand_total": 10}, "2029": {"year": 2029, "customers": [{"name": "Ethiopian", "total": 1, "engines": [{"type": "XWB-84", "count": 1}]}, {"name": "Etihad", "total": 4, "engines": [{"type": "Trent 7000", "count": 1}, {"type": "XWB-97", "count": 3}]}, {"name": "Flyadeal", "total": 2, "engines": [{"type": "TRENT7000", "count": 2}]}, {"name": "Flynas", "total": 2, "engines": [{"type": "TRENT7000", "count": 2}]}], "grand_total": 9}, "2030": {"year": 2030, "customers": [{"name": "Egypt Air", "total": 1, "engines": [{"type": "XWB-84", "count": 1}]}, {"name": "Ethiopian", "total": 1, "engines": [{"type": "XWB-84", "count": 1}]}, {"name": "Etihad", "total": 1, "engines": [{"type": "XWB-97", "count": 1}]}, {"name": "RiyadhAir", "total": 1, "engines": [{"type": "XWB-97", "count": 1}]}], "grand_total": 4}}, "year_list": [2026, 2027, 2028, 2029, 2030]}}</script>
+<script>
+const DATA = JSON.parse(document.getElementById('payload').textContent);
+
+// -------------- helpers --------------
+const $ = (s,root=document)=>root.querySelector(s);
+const $$ = (s,root=document)=>Array.from(root.querySelectorAll(s));
+const esc = s => s==null ? '' : String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const by = (arr, k) => arr.reduce((o,x)=>(o[x[k]]=(o[x[k]]||0)+1,o),{});
+const uniq = arr => Array.from(new Set(arr.filter(Boolean))).sort();
+function downloadCSV(rows, name){
+  const csv = rows.map(r=>r.map(v=>{
+    if(v==null) return '';
+    v = String(v).replace(/"/g,'""');
+    return /[",\n]/.test(v) ? `"${v}"` : v;
+  }).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = Object.assign(document.createElement('a'),{href:url,download:name});
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+
+// -------------- header --------------
+const meta = DATA.metadata;
+document.getElementById('h-title').textContent = `${meta.plan_year} Commercial Plan — Benchmark`;
+document.getElementById('h-sub').innerHTML =
+  `<span class="badge">${esc(meta.source_file)}</span>` +
+  meta.sheets_parsed.map(s=>`<span class="badge">${esc(s)}</span>`).join('') +
+  `<span class="badge">${meta.counts.one_year_plan_items} 1YP items</span>` +
+  `<span class="badge">${meta.counts.five_year_spe_items} 5YP items</span>` +
+  `<span class="badge">${meta.counts.annual_summary_years} years summarised</span>`;
+document.getElementById('genTag').textContent = 'generated ' + meta.generated_at;
+
+// -------------- tabs --------------
+$$('.tab').forEach(t=>t.addEventListener('click',()=>{
+  $$('.tab').forEach(x=>x.classList.remove('active'));
+  $$('.view').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active');
+  $('#view-'+t.dataset.view).classList.add('active');
+  // Re-render heavy charts on first show to avoid apex zero-size issue
+  if(t.dataset.view==='actions') renderHeatmap();
+  if(t.dataset.view==='pipeline') { renderFunnel(); renderPipeHeat(); renderAmount(); }
+}));
+
+// -------------- global year filter --------------
+const allYears = Array.from(new Set(
+  DATA.five_year_spe_sales.items.map(x=>x.year).concat(
+    Object.keys(DATA.annual_summary.by_year).map(Number)
+  ).filter(Boolean)
+)).sort();
+const gy = $('#globalYear');
+allYears.forEach(y=>{ const o=document.createElement('option'); o.value=y; o.textContent=y; gy.appendChild(o); });
+gy.addEventListener('change',()=>{ renderOverview(); renderPipeline(); renderYearly(); });
+
+function getYearFilter(){ const v = gy.value; return v==='ALL' ? null : Number(v); }
+
+// -------------- OVERVIEW --------------
+function renderKpis(){
+  const yf = getYearFilter();
+  const items5 = DATA.five_year_spe_sales.items.filter(i=>!yf || i.year===yf);
+  const actions = DATA.one_year_plan.items;
+  const yearTotals = DATA.annual_summary.by_year;
+  const yearSum = Object.values(yearTotals).reduce((s,y)=>s+(y.grand_total||0),0);
+  const uniqueCust = new Set(actions.map(a=>a.customer).filter(Boolean).concat(items5.map(i=>i.customer).filter(Boolean))).size;
+  const uniqueOwners = new Set(actions.map(a=>a.owner).filter(Boolean)).size;
+  const kpis = [
+    ['1YP action items', actions.length, '= open planning rows'],
+    ['5YP SPE opportunities', items5.length, yf? `year ${yf}` : 'across 2026-2031'],
+    ['5-year engine total', yearSum, 'across annual pivot'],
+    ['Active customers', uniqueCust, '1YP + 5YP union'],
+    ['Unique owners (1YP)', uniqueOwners, 'action-log owners'],
+    ['Plan year', meta.plan_year, meta.sheets_parsed.length+' sheets'],
+  ];
+  $('#kpiRow').innerHTML = kpis.map(k=>`
+    <div class="kpi"><div class="label">${esc(k[0])}</div><div class="value">${esc(k[1])}</div><div class="meta">${esc(k[2])}</div></div>
+  `).join('');
+}
+
+let chAnnual, chFamily, chTopCust, chOwners;
+function renderOverview(){
+  renderKpis();
+  const yearTotals = DATA.annual_summary.by_year;
+  const yearsList = Object.keys(yearTotals).sort();
+  // 1. Annual engine forecast
+  const annualData = yearsList.map(y=>yearTotals[y].grand_total||0);
+  if(chAnnual) chAnnual.destroy();
+  chAnnual = new ApexCharts($('#chartAnnual'), {
+    chart:{type:'bar',height:280,toolbar:{show:false},background:'transparent'},
+    theme:{mode:'dark'},
+    series:[{name:'Engines',data:annualData}],
+    xaxis:{categories:yearsList},
+    colors:['#7bd3ff'],
+    plotOptions:{bar:{columnWidth:'45%',borderRadius:6,dataLabels:{position:'top'}}},
+    dataLabels:{enabled:true,offsetY:-18,style:{colors:['#e7eef7'],fontSize:'11px'}},
+    grid:{borderColor:'#1f2b38'}, tooltip:{theme:'dark'}
+  });
+  chAnnual.render();
+
+  // 2. Engine family mix by year
+  const families = ['XWB-84','XWB-97','Trent 7000','TRENT7000','TRENT1000'];
+  const familySeries = families.map(f=>({
+    name:f,
+    data: yearsList.map(y=>{
+      const custs = yearTotals[y].customers||[];
+      let total=0;
+      custs.forEach(c=>c.engines.forEach(e=>{ if((e.type||'').toUpperCase().replace(/\s+/g,'')===f.toUpperCase().replace(/\s+/g,'')) total+=e.count; }));
+      return total;
+    })
+  }));
+  if(chFamily) chFamily.destroy();
+  chFamily = new ApexCharts($('#chartFamilyMix'), {
+    chart:{type:'bar',stacked:true,height:280,toolbar:{show:false},background:'transparent'},
+    theme:{mode:'dark'},
+    series:familySeries,
+    xaxis:{categories:yearsList},
+    colors:['#7bd3ff','#b6a1ff','#5ee7a7','#ffb547','#ff6b6b'],
+    plotOptions:{bar:{columnWidth:'60%',borderRadius:4}},
+    legend:{position:'top',labels:{colors:'#e7eef7'}},
+    grid:{borderColor:'#1f2b38'}, tooltip:{theme:'dark'}
+  });
+  chFamily.render();
+
+  // 3. Top 10 customers by total engines (across annual pivot)
+  const custTotals = {};
+  Object.values(yearTotals).forEach(y=>{
+    (y.customers||[]).forEach(c=>{
+      if(!c.name) return;
+      custTotals[c.name] = (custTotals[c.name]||0) + (c.total||0);
+    });
+  });
+  const topCust = Object.entries(custTotals).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  if(chTopCust) chTopCust.destroy();
+  chTopCust = new ApexCharts($('#chartTopCust'), {
+    chart:{type:'bar',height:320,toolbar:{show:false},background:'transparent'},
+    theme:{mode:'dark'},
+    series:[{name:'Engines',data:topCust.map(x=>x[1])}],
+    xaxis:{categories:topCust.map(x=>x[0])},
+    plotOptions:{bar:{horizontal:true,borderRadius:4,dataLabels:{position:'top'}}},
+    dataLabels:{enabled:true,offsetX:24,style:{colors:['#e7eef7'],fontSize:'11px'}},
+    colors:['#b6a1ff'],
+    grid:{borderColor:'#1f2b38'}, tooltip:{theme:'dark'}
+  });
+  chTopCust.render();
+
+  // 4. 1YP actions by owner
+  const owners = {};
+  DATA.one_year_plan.items.forEach(i=>{ if(i.owner) owners[i.owner]=(owners[i.owner]||0)+1; });
+  const sortedOwners = Object.entries(owners).sort((a,b)=>b[1]-a[1]);
+  if(chOwners) chOwners.destroy();
+  chOwners = new ApexCharts($('#chartOwners'), {
+    chart:{type:'bar',height:320,toolbar:{show:false},background:'transparent'},
+    theme:{mode:'dark'},
+    series:[{name:'Actions',data:sortedOwners.map(x=>x[1])}],
+    xaxis:{categories:sortedOwners.map(x=>x[0])},
+    plotOptions:{bar:{horizontal:true,borderRadius:4,dataLabels:{position:'top'}}},
+    dataLabels:{enabled:true,offsetX:20,style:{colors:['#e7eef7'],fontSize:'11px'}},
+    colors:['#5ee7a7'],
+    grid:{borderColor:'#1f2b38'}, tooltip:{theme:'dark'}
+  });
+  chOwners.render();
+}
+
+// -------------- ACTION LOG --------------
+function levelColor(v){
+  if(!v) return null;
+  const s = String(v).toUpperCase();
+  if(/L4/.test(s)) return {cls:'L4', color:'#ff6b6b', value:4};
+  if(/L3/.test(s)) return {cls:'L3', color:'#ff8c61', value:3};
+  if(/L2/.test(s)) return {cls:'L2', color:'#ffb547', value:2};
+  if(/L1/.test(s)) return {cls:'L1', color:'#5ee7a7', value:1};
+  return {cls:'', color:'#7bd3ff', value:0.6};
+}
+
+function populateActionFilters(){
+  const items = DATA.one_year_plan.items;
+  const fillSel = (sel, values) => {
+    values.forEach(v=>{ const o=document.createElement('option'); o.value=v; o.textContent=v; sel.appendChild(o); });
+  };
+  fillSel($('#flt-cust'), uniq(items.map(i=>i.customer)));
+  fillSel($('#flt-owner'), uniq(items.map(i=>i.owner)));
+  fillSel($('#flt-cat'), DATA.one_year_plan.category_columns);
+  fillSel($('#flt-status'), uniq(items.map(i=>i.status_summary)));
+}
+
+function actionFiltered(){
+  const c = $('#flt-cust').value;
+  const o = $('#flt-owner').value;
+  const cat = $('#flt-cat').value;
+  const st = $('#flt-status').value;
+  const q = $('#flt-search').value.trim().toLowerCase();
+  return DATA.one_year_plan.items.filter(i=>{
+    if(c && i.customer!==c) return false;
+    if(o && i.owner!==o) return false;
+    if(cat){
+      const v = i.category_status && i.category_status[cat];
+      if(!v) return false;
+    }
+    if(st && i.status_summary!==st) return false;
+    if(q){
+      const hay = [i.issue,i.description,i.latest_update,i.campaign_description].filter(Boolean).join(' ').toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+let sortState = {key:null, dir:1};
+function renderActionTable(){
+  const tbody = $('#tbl-actions tbody');
+  let data = actionFiltered();
+  if(sortState.key){
+    const k = sortState.key;
+    data = data.slice().sort((a,b)=>{
+      const av = a[k]??'', bv = b[k]??'';
+      if(av<bv) return -sortState.dir;
+      if(av>bv) return sortState.dir;
+      return 0;
+    });
+  }
+  tbody.innerHTML = data.map((i,idx)=>{
+    const cats = (i.category_status && DATA.one_year_plan.category_columns.map(cn=>{
+      const v = i.category_status[cn];
+      if(!v) return '';
+      const lc = levelColor(v);
+      return `<span class="chip ${lc?lc.cls:''}" title="${esc(cn)}: ${esc(v)}">${esc(cn.slice(0,3))}: ${esc(v)}</span>`;
+    }).join('')) || '';
+    return `
+      <tr>
+        <td><strong>${esc(i.customer||'—')}</strong>${i.blue_chip?`<br><span class="tag">${esc(i.blue_chip)}</span>`:''}</td>
+        <td>${esc(i.issue||'')}</td>
+        <td>${esc(i.description||i.campaign_description||'')}</td>
+        <td>${esc(i.owner||'')}</td>
+        <td style="max-width:260px">${esc(i.latest_update||'')}</td>
+        <td>${cats}</td>
+        <td style="text-align:center">${i.weeks_active||0}</td>
+        <td><span class="chip status-${esc(i.status_summary)}">${esc(i.status_summary)}</span></td>
+        <td><button class="expand-btn" data-idx="${idx}">Details</button></td>
+      </tr>
+      <tr class="row-detail" style="display:none" data-detail="${idx}">
+        <td colspan="9">
+          <strong>Campaign:</strong> ${esc(i.campaign_description||'—')}
+          <div class="mini-grid">
+            ${Object.keys(i.weekly_status).sort().map(d=>`<div class="w"><div class="d">${esc(d)}</div><div class="v">${esc(i.weekly_status[d])}</div></div>`).join('') || '<em>No 2026 weekly activity recorded.</em>'}
+          </div>
+          ${Object.keys(i.historical_status).length ? `<div style="margin-top:6px"><strong>Historical (2024):</strong>
+             <div class="mini-grid">${Object.keys(i.historical_status).sort().map(d=>`<div class="w"><div class="d">${esc(d)}</div><div class="v">${esc(i.historical_status[d])}</div></div>`).join('')}</div></div>`:''}
+        </td>
+      </tr>
+    `;
+  }).join('');
+  tbody.querySelectorAll('.expand-btn').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const idx = b.dataset.idx;
+      const det = tbody.querySelector(`[data-detail="${idx}"]`);
+      det.style.display = det.style.display==='none' ? '' : 'none';
+    });
+  });
+}
+
+$$('#tbl-actions thead th').forEach(th=>{
+  if(!th.dataset.k) return;
+  th.addEventListener('click',()=>{
+    const k = th.dataset.k;
+    if(sortState.key===k) sortState.dir*=-1;
+    else { sortState.key=k; sortState.dir=1; }
+    renderActionTable();
+  });
+});
+
+let chHeat;
+function renderHeatmap(){
+  const items = actionFiltered();
+  const weeks = DATA.one_year_plan.week_columns;
+  // top 15 customers by weeks_active
+  const custTotals = {};
+  items.forEach(i=>{ if(i.customer) custTotals[i.customer] = (custTotals[i.customer]||0) + (i.weeks_active||0); });
+  const topCust = Object.entries(custTotals).sort((a,b)=>b[1]-a[1]).slice(0,15).map(x=>x[0]);
+
+  const series = topCust.map(cust=>({
+    name: cust,
+    data: weeks.map(w=>{
+      // aggregate any activity at that week for that customer
+      const rows = items.filter(i=>i.customer===cust);
+      let best = 0;
+      rows.forEach(r=>{
+        const v = r.weekly_status && r.weekly_status[w];
+        if(v){
+          const lc = levelColor(v);
+          best = Math.max(best, lc?lc.value:0.6);
+        }
+      });
+      return {x:w, y:best};
+    })
+  }));
+
+  if(chHeat) chHeat.destroy();
+  chHeat = new ApexCharts($('#chartHeatmap'), {
+    chart:{type:'heatmap',height:420,toolbar:{show:false},background:'transparent'},
+    theme:{mode:'dark'},
+    series,
+    dataLabels:{enabled:false},
+    xaxis:{categories:weeks,labels:{rotate:-45,style:{fontSize:'9px'},formatter:v=>v.slice(5)}},
+    colors:['#7bd3ff'],
+    plotOptions:{
+      heatmap:{
+        enableShades:false,
+        colorScale:{ranges:[
+          {from:0,to:0,color:'#131a22',name:'none'},
+          {from:0.5,to:0.9,color:'#7bd3ff',name:'note'},
+          {from:1,to:1.4,color:'#5ee7a7',name:'L1'},
+          {from:1.5,to:2.4,color:'#ffb547',name:'L2'},
+          {from:2.5,to:3.4,color:'#ff8c61',name:'L3'},
+          {from:3.5,to:4,color:'#ff6b6b',name:'L4'},
+        ]}
+      }
+    },
+    grid:{borderColor:'#1f2b38'}, tooltip:{theme:'dark'}
+  });
+  chHeat.render();
+}
+
+['flt-cust','flt-owner','flt-cat','flt-status','flt-search'].forEach(id=>{
+  $('#'+id).addEventListener('input',()=>{ renderActionTable(); renderHeatmap(); });
+});
+$('#btn-reset').addEventListener('click',()=>{
+  ['flt-cust','flt-owner','flt-cat','flt-status','flt-search'].forEach(id=>$('#'+id).value='');
+  renderActionTable(); renderHeatmap();
+});
+$('#btn-export-actions').addEventListener('click',()=>{
+  const rows = actionFiltered();
+  const header = ['Customer','Blue Chip','Issue','Description','Owner','Latest Update','Commercial','AM','Sales','Customer Ops','Weeks Active','Status','Weekly Activity'];
+  const out = [header];
+  rows.forEach(i=>{
+    out.push([
+      i.customer,i.blue_chip,i.issue,i.description||i.campaign_description,i.owner,i.latest_update,
+      (i.category_status||{}).COMMERCIAL, (i.category_status||{}).AM, (i.category_status||{}).SALES, (i.category_status||{})['CUSTOMER OPS'],
+      i.weeks_active, i.status_summary,
+      Object.entries(i.weekly_status||{}).map(([d,v])=>`${d}: ${v}`).join(' | ')
+    ]);
+  });
+  downloadCSV(out,'2026_PLAN_action_log.csv');
+});
+
+// -------------- PIPELINE --------------
+function populatePipeFilters(){
+  const items = DATA.five_year_spe_sales.items;
+  const fill = (sel, values) => values.forEach(v=>{ const o=document.createElement('option'); o.value=v; o.textContent=v; sel.appendChild(o); });
+  fill($('#p-year'), uniq(items.map(i=>String(i.year)).filter(x=>x!=='null')));
+  fill($('#p-engine'), uniq(items.map(i=>i.engine_type)));
+  fill($('#p-cust'), uniq(items.map(i=>i.customer)));
+  fill($('#p-qtr'), uniq(items.map(i=>i.quarter)));
+}
+
+function pipeFiltered(){
+  const yf = getYearFilter();
+  const y = $('#p-year').value;
+  const e = $('#p-engine').value;
+  const c = $('#p-cust').value;
+  const q = $('#p-qtr').value;
+  return DATA.five_year_spe_sales.items.filter(i=>{
+    if(yf && i.year!==yf) return false;
+    if(y && String(i.year)!==y) return false;
+    if(e && i.engine_type!==e) return false;
+    if(c && i.customer!==c) return false;
+    if(q && i.quarter!==q) return false;
+    return true;
+  });
+}
+
+let chFunnel, chPipeHeat, chAmount;
+function renderFunnel(){
+  const items = pipeFiltered();
+  const years = uniq(items.map(i=>i.year).filter(Boolean)).sort();
+  const quarters = ['Q1','Q2','Q3','Q4','Q3/Q4','—'];
+  const qSet = uniq(items.map(i=>i.quarter || '—'));
+  const qOrdered = quarters.filter(q=>qSet.includes(q)).concat(qSet.filter(q=>!quarters.includes(q)));
+  const series = qOrdered.map(q=>({
+    name: q,
+    data: years.map(y=>items.filter(i=>i.year===y && (i.quarter||'—')===q).length)
+  }));
+  if(chFunnel) chFunnel.destroy();
+  chFunnel = new ApexCharts($('#chartFunnel'), {
+    chart:{type:'bar',stacked:true,height:340,toolbar:{show:false},background:'transparent'},
+    theme:{mode:'dark'}, series,
+    xaxis:{categories:years},
+    colors:['#5ee7a7','#7bd3ff','#b6a1ff','#ffb547','#ff8c61','#9eb0c4'],
+    plotOptions:{bar:{columnWidth:'45%',borderRadius:4}},
+    legend:{position:'top',labels:{colors:'#e7eef7'}},
+    grid:{borderColor:'#1f2b38'}, tooltip:{theme:'dark'}
+  });
+  chFunnel.render();
+}
+
+function renderPipeHeat(){
+  const items = pipeFiltered();
+  const years = uniq(items.map(i=>i.year).filter(Boolean)).sort();
+  const custs = uniq(items.map(i=>i.customer).filter(Boolean));
+  const series = custs.map(c=>({
+    name:c, data: years.map(y=>({x:String(y), y:items.filter(i=>i.customer===c && i.year===y).length}))
+  }));
+  if(chPipeHeat) chPipeHeat.destroy();
+  chPipeHeat = new ApexCharts($('#chartPipeHeat'), {
+    chart:{type:'heatmap',height:340,toolbar:{show:false},background:'transparent'},
+    theme:{mode:'dark'}, series,
+    dataLabels:{enabled:true,style:{colors:['#0a0e13'],fontSize:'10px'}},
+    colors:['#7bd3ff'],
+    plotOptions:{heatmap:{enableShades:true,shadeIntensity:0.6}},
+    grid:{borderColor:'#1f2b38'}, tooltip:{theme:'dark'}
+  });
+  chPipeHeat.render();
+}
+
+function renderAmount(){
+  const items = pipeFiltered();
+  const years = uniq(items.map(i=>i.year).filter(Boolean)).sort();
+  const data = years.map(y=>{
+    const s = items.filter(i=>i.year===y).reduce((a,i)=>a+(i.amount||0),0);
+    return +s.toFixed(2);
+  });
+  if(chAmount) chAmount.destroy();
+  chAmount = new ApexCharts($('#chartAmount'), {
+    chart:{type:'line',height:300,toolbar:{show:false},background:'transparent'},
+    theme:{mode:'dark'},
+    series:[{name:'Amount',data}],
+    xaxis:{categories:years},
+    stroke:{curve:'smooth',width:3},
+    markers:{size:6},
+    colors:['#b6a1ff'],
+    grid:{borderColor:'#1f2b38'}, tooltip:{theme:'dark'},
+    dataLabels:{enabled:true,style:{colors:['#e7eef7'],fontSize:'11px'},background:{enabled:false}}
+  });
+  chAmount.render();
+}
+
+function renderPipelineTable(){
+  const tbody = $('#tbl-pipeline tbody');
+  const items = pipeFiltered();
+  tbody.innerHTML = items.map(i=>`
+    <tr>
+      <td><strong>${esc(i.customer||'')}</strong></td>
+      <td><span class="tag">${esc(i.engine_type||'')}</span></td>
+      <td>${esc(i.year||'')}</td>
+      <td>${esc(i.quarter||'')}</td>
+      <td>${i.amount!=null?`£${i.amount.toFixed(1)}m`:''}</td>
+      <td style="max-width:260px">${esc(i.comments||'')}</td>
+    </tr>
+  `).join('');
+}
+
+function renderPipeline(){ renderFunnel(); renderPipeHeat(); renderAmount(); renderPipelineTable(); }
+['p-year','p-engine','p-cust','p-qtr'].forEach(id=>$('#'+id).addEventListener('change',renderPipeline));
+$('#p-reset').addEventListener('click',()=>{ ['p-year','p-engine','p-cust','p-qtr'].forEach(id=>$('#'+id).value=''); renderPipeline(); });
+$('#btn-export-pipeline').addEventListener('click',()=>{
+  const rows = pipeFiltered();
+  const out = [['Customer','Engine','Year','Quarter','Amount (£m)','Comments']];
+  rows.forEach(i=>out.push([i.customer,i.engine_type,i.year,i.quarter,i.amount,i.comments]));
+  downloadCSV(out,'2026_PLAN_pipeline.csv');
+});
+
+// -------------- YEARLY --------------
+function renderYearly(){
+  const yt = DATA.annual_summary.by_year;
+  const years = Object.keys(yt).sort();
+  const host = $('#yearCards');
+  host.innerHTML = '';
+  years.forEach((y,idx)=>{
+    const d = yt[y];
+    const chartId = `yc-${y}`;
+    const card = document.createElement('div');
+    card.className='year-card';
+    card.innerHTML = `
+      <h4>${esc(y)}</h4>
+      <div class="total"><strong style="color:var(--accent);font-size:16px">${d.grand_total}</strong> engines</div>
+      <div id="${chartId}" style="margin-top:8px"></div>
+      <div class="cust-list">
+        ${d.customers.map(c=>`<div class="c"><span class="n">${esc(c.name)} <span class="e">${c.engines.map(e=>e.type+' ('+e.count+')').join(', ')}</span></span><span>${c.total}</span></div>`).join('')}
+      </div>
+    `;
+    host.appendChild(card);
+
+    // per-engine bar chart per year card
+    const engineAgg = {};
+    d.customers.forEach(c=>c.engines.forEach(e=>{ engineAgg[e.type] = (engineAgg[e.type]||0)+e.count; }));
+    const keys = Object.keys(engineAgg);
+    const vals = keys.map(k=>engineAgg[k]);
+    if(keys.length){
+      new ApexCharts(document.getElementById(chartId),{
+        chart:{type:'bar',height:140,toolbar:{show:false},sparkline:{enabled:false},background:'transparent'},
+        theme:{mode:'dark'},
+        series:[{name:'Engines',data:vals}],
+        xaxis:{categories:keys,labels:{style:{fontSize:'9px'}}},
+        plotOptions:{bar:{borderRadius:3,columnWidth:'60%',dataLabels:{position:'top'}}},
+        colors:['#7bd3ff'],
+        dataLabels:{enabled:true,offsetY:-14,style:{fontSize:'10px',colors:['#e7eef7']}},
+        grid:{borderColor:'#1f2b38',padding:{left:0,right:0,top:-14}},
+        yaxis:{show:false},tooltip:{theme:'dark'}
+      }).render();
+    }
+  });
+
+  // Full pivot table
+  const headRow = ['<tr>'];
+  const cols = [];
+  years.forEach(y=>{
+    headRow.push(`<th colspan="2" style="text-align:center;background:linear-gradient(135deg,rgba(123,211,255,.1),rgba(182,161,255,.05))">${esc(y)}</th>`);
+    cols.push([y+' Customer', y+' Engines']);
+  });
+  headRow.push('</tr>');
+  const subHead = '<tr>'+years.map(()=>'<th>Customer/Engine</th><th>Count</th>').join('')+'</tr>';
+  $('#tbl-yearly-head').innerHTML = headRow.join('')+subHead;
+
+  const body = [];
+  const maxRows = Math.max(...years.map(y=>{
+    return (yt[y].customers||[]).reduce((s,c)=>s+1+c.engines.length,0) + 1;
+  }));
+  const yRows = years.map(y=>{
+    const rows = [];
+    (yt[y].customers||[]).forEach(c=>{
+      rows.push([`<strong>${esc(c.name)}</strong>`, c.total]);
+      c.engines.forEach(e=>rows.push([`<span class="tag">${esc(e.type)}</span>`, e.count]));
+    });
+    rows.push([`<strong style="color:var(--accent)">Grand Total</strong>`, yt[y].grand_total]);
+    return rows;
+  });
+  for(let r=0;r<maxRows;r++){
+    const cells = [];
+    yRows.forEach(rows=>{
+      const cell = rows[r];
+      if(cell){
+        cells.push(`<td>${cell[0]}</td><td>${cell[1]}</td>`);
+      } else {
+        cells.push(`<td></td><td></td>`);
+      }
+    });
+    body.push('<tr>'+cells.join('')+'</tr>');
+  }
+  $('#tbl-yearly-body').innerHTML = body.join('');
+}
+
+// -------------- Init --------------
+populateActionFilters();
+populatePipeFilters();
+renderOverview();
+renderActionTable();
+renderPipelineTable();
+renderYearly();
+// Heavy charts on their tab open, but also warm the first pipeline/heatmap
+setTimeout(()=>{ renderHeatmap(); renderPipeline(); }, 150);
+</script>
+</body>
+</html>

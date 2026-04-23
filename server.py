@@ -544,11 +544,22 @@ def delete_file(file_id):
     """Delete a specific file from the database."""
     from storage import delete_file_by_id
     success = delete_file_by_id(file_id)
-    
+
     if success:
         return jsonify({"message": "File deleted successfully"})
     else:
         return jsonify({"error": "Failed to delete file"}), 500
+
+
+@app.route("/api/parsed/<path:fname>", methods=["DELETE"])
+@login_required
+def delete_parsed_file(fname):
+    """Remove a parsed file from the in-memory session store (dashboard-side removal)."""
+    sid = _get_session_id()
+    if sid in _parsed_store and fname in _parsed_store[sid]:
+        del _parsed_store[sid][fname]
+        return jsonify({"ok": True, "filename": fname})
+    return jsonify({"ok": False, "error": "not found"}), 404
 
 
 # ─────────────────────────────────────────────────────────────
