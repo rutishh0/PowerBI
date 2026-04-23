@@ -669,6 +669,12 @@
     </div>
 
     <!-- ═══════════════ SCRIPTS ═══════════════ -->
+    <!-- Feature flags MUST be defined BEFORE bundles execute -->
+    <script>
+        // Feature flags for JS access
+        window.__FEATURE_FLAGS = {{ feature_flags | tojson }};
+    </script>
+
     <!-- GSAP + ScrollTrigger -->
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
@@ -676,25 +682,14 @@
     <!-- ApexCharts -->
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.49.0/dist/apexcharts.min.js"></script>
 
-    <!-- Dashboard JS -->
-    <script src="/static/js/charts.js"></script>
-    <script src="/static/js/components.js"></script>
-    {% if feature_flags.show_ai %}
-    <script src="/static/js/ai-chat.js"></script>
-    {% endif %}
+    <!-- App bundles: dashboard must load before app (app's RRComponents references RRCharts) -->
+    <script src="/static/js/dashboard.js"></script>
+    <script src="/static/js/app.js"></script>
+
+    <!-- Optional bundles -->
     {% if feature_flags.show_secret_chat %}
     <script src="/static/js/secret-chat.js"></script>
     {% endif %}
-    {% if feature_flags.show_files %}
-    <script src="/static/js/files.js"></script>
-    {% endif %}
-    <script src="/static/js/visualizer.js"></script>
-    <script src="/static/js/app.js"></script>
-
-    <script>
-        // Feature flags for JS access
-        window.__FEATURE_FLAGS = {{ feature_flags | tojson }};
-    </script>
 
 </body>
 

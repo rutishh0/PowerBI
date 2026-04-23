@@ -1,1 +1,0 @@
-C:\Program Files\Python310\python.exe: can't open file 'C:\\Users\\Rutishkrishna\\Desktop\\RR\\RR Powerbi\\V5\\_diag_money2.py': [Errno 2] No such file or directory

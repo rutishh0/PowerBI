@@ -17,32 +17,24 @@ import math
 import base64
 import time
 import concurrent.futures
-from datetime import datetime
-from collections import OrderedDict
 
-import numpy as np
 import pandas as pd
 from flask import Flask, render_template, request, jsonify, send_file, session, redirect, url_for
 from functools import wraps
 from flask_cors import CORS
 
 # Universal parser — handles SOA, INVOICE_LIST, OPPORTUNITY_TRACKER, SHOP_VISIT, SVRG_MASTER
-from parser_universal import parse_file, detect_file_type
+from parser import parse_file
 # Keep old parser for PDF export backward compat
-try:
-    from parser import parse_soa_workbook, serialize_parsed_data, aging_bucket, fmt_currency, AGING_ORDER, AGING_COLORS
-except ImportError:
-    parse_soa_workbook = None
-    serialize_parsed_data = None
+from parser import parse_soa_workbook, serialize_parsed_data, aging_bucket, fmt_currency, AGING_ORDER, AGING_COLORS
 from pdf_export import generate_pdf_report
 from ai_chat import build_system_prompt, call_openrouter
-from db import init_db, save_file_to_db
-from r2_storage import (
-    upload_to_r2, download_from_r2, delete_from_r2,
+from storage import init_db, save_file_to_db
+from storage import (
+    download_from_r2, delete_from_r2,
     generate_r2_key, create_multipart_upload, upload_part,
     complete_multipart_upload, abort_multipart_upload, R2_PUBLIC_URL,
 )
-import math
 import datetime as dt
 
 # Tracks active multipart uploads: { session_upload_id: { r2_key, r2_upload_id, parts[], filename, total, file_size } }
@@ -386,7 +378,7 @@ def export_pdf():
 
     if file_type == 'GLOBAL_HOPPER' or first_parsed.get("file_type") == 'GLOBAL_HOPPER':
         try:
-            from pdf_export_hopper import generate_hopper_pdf_report
+            from pdf_export import generate_hopper_pdf_report
             pdf_bytes = generate_hopper_pdf_report(
                 parsed_data=first_parsed,
                 sections_to_include=sections_to_include,
@@ -406,7 +398,7 @@ def export_pdf():
 
     if file_type == 'OPPORTUNITY_TRACKER' or first_parsed.get("file_type") == 'OPPORTUNITY_TRACKER':
         try:
-            from pdf_export_opp import generate_opp_pdf_report
+            from pdf_export import generate_opp_pdf_report
             pdf_bytes = generate_opp_pdf_report(
                 parsed_data=first_parsed,
                 sections_to_include=sections_to_include,
@@ -482,7 +474,7 @@ def export_pdf():
 @login_required
 def list_files():
     """List all uploaded files from the database."""
-    from db import get_all_files
+    from storage import get_all_files
     files = get_all_files()
     return jsonify(files)
 
@@ -491,7 +483,7 @@ def list_files():
 @login_required
 def download_file(file_id):
     """Download a specific file from the database."""
-    from db import get_file_by_id
+    from storage import get_file_by_id
     file_record = get_file_by_id(file_id)
     
     if not file_record:
@@ -550,7 +542,7 @@ def upload_files_to_db():
 @login_required
 def delete_file(file_id):
     """Delete a specific file from the database."""
-    from db import delete_file_by_id
+    from storage import delete_file_by_id
     success = delete_file_by_id(file_id)
     
     if success:
@@ -678,7 +670,7 @@ def r2_chunk_finalize():
     del _multipart_sessions[session_id]
 
     # Save metadata to PostgreSQL (no file bytes — just a pointer to R2)
-    from db import save_r2_file_metadata
+    from storage import save_r2_file_metadata
     sid = _get_session_id()
     row_id = save_r2_file_metadata(
         filename=filename,
@@ -701,7 +693,7 @@ def r2_chunk_finalize():
 @login_required
 def list_r2_files():
     """List all R2-stored files (metadata from DB)."""
-    from db import get_all_r2_files
+    from storage import get_all_r2_files
     files = get_all_r2_files()
     return jsonify(files)
 
@@ -710,7 +702,7 @@ def list_r2_files():
 @login_required
 def download_r2_file(file_id):
     """Download a file from R2 by DB id."""
-    from db import get_r2_file_by_id
+    from storage import get_r2_file_by_id
     meta = get_r2_file_by_id(file_id)
     if not meta:
         return jsonify({"error": "File not found"}), 404
@@ -730,7 +722,7 @@ def download_r2_file(file_id):
 @login_required
 def delete_r2_file(file_id):
     """Delete a file from R2 and its metadata from DB."""
-    from db import delete_r2_file_by_id
+    from storage import delete_r2_file_by_id
     r2_key = delete_r2_file_by_id(file_id)
     if not r2_key:
         return jsonify({"error": "File not found"}), 404
@@ -744,7 +736,7 @@ def delete_r2_file(file_id):
 @login_required
 def parse_r2_file(file_id):
     """Download file from R2, parse it, return JSON + store in memory for dashboard."""
-    from db import get_r2_file_by_id
+    from storage import get_r2_file_by_id
     meta = get_r2_file_by_id(file_id)
     if not meta:
         return jsonify({"error": "File not found"}), 404
@@ -989,10 +981,6 @@ def compare_models():
 if __name__ == "__main__":
     import webbrowser
     import threading
-    
-    # Initialize DB (create table if needed)
-    print("Initializing Database...")
-    init_db()
 
     port = int(os.environ.get("PORT", 5000))
     print(f"\n  Rolls-Royce Data Visualizer")

@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>EPI Invoice List — Benchmark</title>
+<script src="https://cdn.jsdelivr.net/npm/apexcharts@3.49.0/dist/apexcharts.min.js"></script>
+<style>
+  :root {
+    --bg: #0b1220;
+    --panel: #111a2e;
+    --panel-2: #162241;
+    --border: #24324f;
+    --text: #e6ecf7;
+    --muted: #8b99b8;
+    --accent: #5aa2ff;
+    --ok: #22c55e;
+    --warn: #f59e0b;
+    --bad: #ef4444;
+    --purple: #a78bfa;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+               font: 14px/1.45 "Segoe UI", Roboto, system-ui, -apple-system, Arial, sans-serif; }
+  a { color: var(--accent); }
+  header { padding: 22px 28px; border-bottom: 1px solid var(--border);
+           background: linear-gradient(180deg, #0f1a35, #0b1220); }
+  header h1 { margin: 0 0 6px; font-size: 22px; font-weight: 600; letter-spacing: .2px; }
+  header .sub { color: var(--muted); font-size: 12.5px; }
+  main { padding: 22px 28px 60px; max-width: 1400px; margin: 0 auto; }
+  .kpis { display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap: 14px; margin: 18px 0 22px; }
+  .kpi { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .kpi .label { color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .8px; }
+  .kpi .val { font-size: 20px; font-weight: 600; margin-top: 6px; }
+  .kpi .val.small { font-size: 16px; }
+  .kpi.ok .val { color: var(--ok); }
+  .kpi.warn .val { color: var(--warn); }
+  .kpi.bad .val { color: var(--bad); }
+  .charts { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 18px; }
+  .charts-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .card h2 { margin: 0 0 12px; font-size: 14px; font-weight: 600; color: #cfd8ec; letter-spacing: .3px; }
+  .card h2 .hint { color: var(--muted); font-weight: 400; font-size: 12px; margin-left: 8px; }
+  .groups { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .group { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 12.5px; }
+  .group .lbl { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .6px; }
+  .group .amt { font-size: 16px; font-weight: 600; margin-top: 4px; }
+  .group .frm { color: var(--muted); font-size: 11px; margin-top: 4px; font-family: ui-monospace, Consolas, monospace; }
+  .filters { display: flex; flex-wrap: wrap; gap: 10px; margin: 4px 0 14px; align-items: center; }
+  .filters input, .filters select {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 10px; font-size: 13px; min-width: 140px;
+  }
+  .filters input[type=search] { min-width: 260px; }
+  .filters .count { color: var(--muted); margin-left: auto; font-size: 12.5px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+  thead th { background: var(--panel-2); color: #cfd8ec; font-weight: 600; cursor: pointer; user-select: none; position: sticky; top: 0; }
+  thead th:hover { background: #1c2a4e; }
+  tbody tr:hover { background: #16213e; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.ref { font-family: ui-monospace, Consolas, monospace; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .pill.Paid { background: #0f3b22; color: #5ee89a; }
+  .pill.Outstanding { background: #0f2a4a; color: #7ab5ff; }
+  .pill.Overdue { background: #3a1414; color: #ff8b8b; }
+  .pill.Disputed { background: #3a2a14; color: #f5c26b; }
+  .pill.Credit { background: #28124a; color: #c7a3ff; }
+  .pill.Unknown { background: #222; color: #aaa; }
+  .table-wrap { max-height: 560px; overflow: auto; border: 1px solid var(--border); border-radius: 10px; }
+  footer { padding: 20px 28px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--border); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .desc-trunc { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
+  @media (max-width: 1100px) {
+    .kpis { grid-template-columns: repeat(3, 1fr); }
+    .charts { grid-template-columns: 1fr; }
+    .charts-2 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>EPI Invoice List</h1>
+  <div class="sub">
+    <span id="meta-file"></span> · <span id="meta-sheet"></span> ·
+    <span id="meta-rows"></span> invoices · <span id="meta-currency"></span>
+  </div>
+</header>
+<main>
+  <section class="kpis" id="kpis"></section>
+
+  <section class="charts">
+    <div class="card">
+      <h2>Aging distribution <span class="hint">count per bucket</span></h2>
+      <div id="chartAging"></div>
+    </div>
+    <div class="card">
+      <h2>Status <span class="hint">by invoice count</span></h2>
+      <div id="chartStatus"></div>
+    </div>
+  </section>
+
+  <section class="charts-2">
+    <div class="card">
+      <h2>Monthly invoice count <span class="hint">by document date</span></h2>
+      <div id="chartMonthly"></div>
+    </div>
+    <div class="card">
+      <h2>Top 10 by |amount|</h2>
+      <div id="chartTop10"></div>
+    </div>
+  </section>
+
+  <section class="card" style="margin-bottom:18px">
+    <h2>Source subtotals <span class="hint">SUM formulas preserved from Sheet1</span></h2>
+    <div class="groups" id="groups"></div>
+  </section>
+
+  <section class="card">
+    <h2>Invoice table</h2>
+    <div class="filters">
+      <input id="q" type="search" placeholder="Search text, reference, assignment..." />
+      <select id="fStatus"><option value="">All statuses</option></select>
+      <select id="fCurrency"><option value="">All currencies</option></select>
+      <select id="fBucket"><option value="">All aging buckets</option></select>
+      <span class="count" id="tableCount"></span>
+    </div>
+    <div class="table-wrap">
+      <table id="tbl">
+        <thead>
+          <tr>
+            <th data-k="reference">Reference</th>
+            <th data-k="doc_date">Doc Date</th>
+            <th data-k="text">Description</th>
+            <th data-k="amount" class="num">Amount</th>
+            <th data-k="currency">Cur</th>
+            <th data-k="net_due_date">Net Due</th>
+            <th data-k="days_late" class="num">Days Late</th>
+            <th data-k="status">Status</th>
+            <th data-k="aging_bucket">Aging</th>
+            <th data-k="assignment">Assignment</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+<footer>
+  Generated <span id="gen-ts"></span> · Source <span id="f-src"></span> · Today anchor <span id="f-today"></span>
+</footer>
+
+<script id="epi-data" type="application/json">{"meta": {"source_path": "C:\\Users\\Rutishkrishna\\Desktop\\RR\\RR Powerbi\\V6\\New info\\EPI 16.02.xlsx", "sheet": "Sheet1", "header": ["Reference", "Document Date", "Net due date", "Document currency", "Amount in doc. curr.", "Reference Key 3", "Text", "Assignment"], "row_count": 106, "generated_at": "2026-04-23T00:06:00", "today": "2026-04-22"}, "kpis": {"total_count": 106, "total_amount": 11661590.029999975, "total_outstanding": 26474192.96, "total_overdue": 45040069.0, "total_disputed": 615213.1599999999, "total_credit": -60467885.08999999, "avg_days_late_overdue": 192.67567567567568}, "aging_counts": {"Not due": 8, "0-30": 4, "31-60": 18, "61-90": 3, "91-180": 38, "181-365": 17, "365+": 18}, "aging_amounts": {"Not due": 26474192.96, "0-30": 13237096.48, "31-60": 21583898.43, "61-90": -176068.4, "91-180": -20367913.020000003, "181-365": -29919887.55, "365+": 830271.1299999999}, "status_counts": {"Disputed": 7, "Overdue": 74, "Outstanding": 8, "Credit": 17}, "status_amounts": {"Disputed": 615213.1599999999, "Overdue": 45040069.0, "Outstanding": 26474192.96, "Credit": -60467885.08999999}, "monthly": [["2022-06", {"count": 1, "amount": 4663.38}], ["2022-11", {"count": 1, "amount": 2640.0}], ["2023-04", {"count": 1, "amount": -564.9}], ["2023-07", {"count": 1, "amount": -553.0}], ["2023-09", {"count": 1, "amount": 978.0}], ["2023-10", {"count": 1, "amount": 318419.0}], ["2023-12", {"count": 4, "amount": 53837.450000000004}], ["2024-03", {"count": 3, "amount": 139672.22999999998}], ["2024-06", {"count": 1, "amount": 857169.72}], ["2024-07", {"count": 1, "amount": 1700.0}], ["2024-09", {"count": 1, "amount": -1042434.08}], ["2024-12", {"count": 1, "amount": 555734.33}], ["2025-03", {"count": 1, "amount": 28320.0}], ["2025-06", {"count": 5, "amount": 63887.82}], ["2025-07", {"count": 4, "amount": 94667.5}], ["2025-08", {"count": 2, "amount": -291153.0}], ["2025-09", {"count": 3, "amount": -417024.63}], ["2025-10", {"count": 17, "amount": 6183022.23}], ["2025-11", {"count": 13, "amount": -10789678.81}], ["2025-12", {"count": 24, "amount": 11256833.149999991}], ["2026-01", {"count": 13, "amount": -3272156.0000000005}], ["2026-02", {"count": 7, "amount": 7913609.64}]], "currency_counts": {"USD": 106}, "top10": [{"row": 95, "reference": "", "doc_date": "2025-12-26", "net_due_date": "2025-05-29", "currency": "USD", "amount": -28217714.96, "text": "1620061217", "assignment": "DEG9054", "days_late": 328, "aging_bucket": "181-365", "status": "Credit"}, {"row": 75, "reference": "0099727860", "doc_date": "2026-02-03", "net_due_date": "2026-03-05", "currency": "USD", "amount": 7931181.95, "text": "CRC FOR ESN 21950", "assignment": "5006056914 / DEG10", "days_late": 48, "aging_bucket": "31-60", "status": "Overdue"}, {"row": 74, "reference": "0099648085", "doc_date": "2025-12-12", "net_due_date": "2026-03-01", "currency": "USD", "amount": 7491732.34, "text": "", "assignment": "DEG 10215", "days_late": 52, "aging_bucket": "31-60", "status": "Overdue"}, {"row": 83, "reference": "0099648086", "doc_date": "2025-12-12", "net_due_date": "2026-04-01", "currency": "USD", "amount": 7491732.34, "text": "", "assignment": "DEG 10215", "days_late": 21, "aging_bucket": "0-30", "status": "Overdue"}, {"row": 87, "reference": "0099648087", "doc_date": "2025-12-12", "net_due_date": "2026-05-01", "currency": "USD", "amount": 7491732.34, "text": "", "assignment": "DEG 10215", "days_late": -9, "aging_bucket": "Not due", "status": "Outstanding"}, {"row": 91, "reference": "0099648088", "doc_date": "2025-12-12", "net_due_date": "2026-06-01", "currency": "USD", "amount": 7491732.34, "text": "", "assignment": "DEG 10215", "days_late": -40, "aging_bucket": "Not due", "status": "Outstanding"}, {"row": 96, "reference": "1620062565", "doc_date": "2025-12-24", "net_due_date": "2025-12-24", "currency": "USD", "amount": -7085775.83, "text": "DCN004803  CA-09492 DEG6272 ESN21376", "assignment": "25ULW21376", "days_late": 119, "aging_bucket": "91-180", "status": "Credit"}, {"row": 97, "reference": "1620062187", "doc_date": "2025-11-06", "net_due_date": "2025-11-06", "currency": "USD", "amount": -5562918.83, "text": "DCN004532 CA-09492 DEG6272 ESN 21950", "assignment": "25ULW21950", "days_late": 167, "aging_bucket": "91-180", "status": "Credit"}, {"row": 98, "reference": "1620062625", "doc_date": "2026-01-14", "net_due_date": "2026-01-14", "currency": "USD", "amount": -5479868.69, "text": "DCN004861 CA-09492 DEG6272 ESN 21771", "assignment": "26ULW21771", "days_late": 98, "aging_bucket": "91-180", "status": "Credit"}, {"row": 99, "reference": "1620062566", "doc_date": "2025-12-24", "net_due_date": "2025-12-24", "currency": "USD", "amount": -5470072.14, "text": "DCN004802 CA-09492 DEG6272 ESN 21608", "assignment": "25ULW21608", "days_late": 119, "aging_bucket": "91-180", "status": "Credit"}], "invoices": [{"row": 2, "reference": "", "doc_date": "2022-06-17", "net_due_date": "2022-05-01", "currency": "USD", "amount": 4663.38, "text": "Bal to canx by credit 17.6.22", "assignment": "DEG 9054", "days_late": 1452, "aging_bucket": "365+", "status": "Disputed"}, {"row": 3, "reference": "", "doc_date": "2022-11-07", "net_due_date": "2022-10-01", "currency": "USD", "amount": 2640.0, "text": "BAL LEFT AGAINST INV 0097819658", "assignment": "DEG 10215", "days_late": 1299, "aging_bucket": "365+", "status": "Overdue"}, {"row": 4, "reference": "0098359070", "doc_date": "2023-09-24", "net_due_date": "2023-10-24", "currency": "USD", "amount": 978.0, "text": "Part returned - should be credited", "assignment": "5C-P0423946", "days_late": 911, "aging_bucket": "365+", "status": "Disputed"}, {"row": 5, "reference": "1820146074", "doc_date": "2023-10-19", "net_due_date": "2023-11-18", "currency": "USD", "amount": 318419.0, "text": "RR Non-Qualififed Line Maintenace on ESN 10499", "assignment": "DEG 10258", "days_late": 886, "aging_bucket": "365+", "status": "Overdue"}, {"row": 6, "reference": "1820146781", "doc_date": "2023-12-01", "net_due_date": "2023-12-31", "currency": "USD", "amount": 586.91, "text": "Late Payment Invoice - disputed by ETH", "assignment": "", "days_late": 843, "aging_bucket": "365+", "status": "Disputed"}, {"row": 7, "reference": "1820146780", "doc_date": "2023-12-01", "net_due_date": "2023-12-31", "currency": "USD", "amount": 813.6, "text": "Late Payment Invoice - disputed by ETH", "assignment": "", "days_late": 843, "aging_bucket": "365+", "status": "Disputed"}, {"row": 8, "reference": "1820146782", "doc_date": "2023-12-01", "net_due_date": "2023-12-31", "currency": "USD", "amount": 1293.79, "text": "Late Payment Invoice - disputed by ETH", "assignment": "", "days_late": 843, "aging_bucket": "365+", "status": "Disputed"}, {"row": 9, "reference": "1820146779", "doc_date": "2023-12-01", "net_due_date": "2023-12-31", "currency": "USD", "amount": 51143.15, "text": "Late Payment Invoice - disputed by ETH", "assignment": "", "days_late": 843, "aging_bucket": "365+", "status": "Disputed"}, {"row": 10, "reference": "1820149089", "doc_date": "2024-03-15", "net_due_date": "2024-04-14", "currency": "USD", "amount": 4538.84, "text": "Late Payment Invoice", "assignment": "", "days_late": 738, "aging_bucket": "365+", "status": "Overdue"}, {"row": 11, "reference": "1820149083", "doc_date": "2024-03-15", "net_due_date": "2024-04-14", "currency": "USD", "amount": 13464.47, "text": "Late Payment Invoice", "assignment": "", "days_late": 738, "aging_bucket": "365+", "status": "Overdue"}, {"row": 12, "reference": "1820149082", "doc_date": "2024-03-15", "net_due_date": "2024-04-14", "currency": "USD", "amount": 121668.92, "text": "Late Payment Invoice", "assignment": "", "days_late": 738, "aging_bucket": "365+", "status": "Overdue"}, {"row": 13, "reference": "1820150734", "doc_date": "2024-06-04", "net_due_date": "2024-07-04", "currency": "USD", "amount": 857169.72, "text": "Late Payment Interest Invoice, as at 1st June 2024", "assignment": "", "days_late": 657, "aging_bucket": "365+", "status": "Overdue"}, {"row": 14, "reference": "1820151587", "doc_date": "2024-07-26", "net_due_date": "2024-08-25", "currency": "USD", "amount": 1700.0, "text": "Tool loan on TL2024_0305 12/9/24 ok for payment", "assignment": "7G-P0461526", "days_late": 605, "aging_bucket": "365+", "status": "Overdue"}, {"row": 15, "reference": "0099057194", "doc_date": "2024-12-16", "net_due_date": "2025-01-15", "currency": "USD", "amount": 555734.33, "text": "Disputed trent 1000 legal case", "assignment": "CRC ESN 21105", "days_late": 462, "aging_bucket": "365+", "status": "Disputed"}, {"row": 16, "reference": "0099219798", "doc_date": "2025-03-28", "net_due_date": "2025-04-27", "currency": "USD", "amount": 28320.0, "text": "", "assignment": "4E-P0499770", "days_late": 360, "aging_bucket": "181-365", "status": "Overdue"}, {"row": 17, "reference": "0099334366", "doc_date": "2025-06-02", "net_due_date": "2025-07-02", "currency": "USD", "amount": 1590.0, "text": "", "assignment": "P0515913", "days_late": 294, "aging_bucket": "181-365", "status": "Overdue"}, {"row": 18, "reference": "0099334365", "doc_date": "2025-06-02", "net_due_date": "2025-07-02", "currency": "USD", "amount": 1638.0, "text": "", "assignment": "P0515913", "days_late": 294, "aging_bucket": "181-365", "status": "Overdue"}, {"row": 19, "reference": "0099335798", "doc_date": "2025-06-03", "net_due_date": "2025-07-03", "currency": "USD", "amount": 24050.0, "text": "", "assignment": "4E-P0515702", "days_late": 293, "aging_bucket": "181-365", "status": "Overdue"}, {"row": 20, "reference": "1820158179", "doc_date": "2025-06-17", "net_due_date": "2025-07-17", "currency": "USD", "amount": 6441.54, "text": "Late Payment Invoice", "assignment": "DEG9054", "days_late": 279, "aging_bucket": "181-365", "status": "Overdue"}, {"row": 21, "reference": "1820158178", "doc_date": "2025-06-17", "net_due_date": "2025-07-17", "currency": "USD", "amount": 30168.28, "text": "Late Payment Invoice", "assignment": "DEG10215", "days_late": 279, "aging_bucket": "181-365", "status": "Overdue"}, {"row": 22, "reference": "1820158803", "doc_date": "2025-07-11", "net_due_date": "2025-08-10", "currency": "USD", "amount": 46250.0, "text": "For the charges of General Visual Inspection", "assignment": "", "days_late": 255, "aging_bucket": "181-365", "status": "Overdue"}, {"row": 23, "reference": "1820158804", "doc_date": "2025-07-11", "net_due_date": "2025-08-10", "currency": "USD", "amount": 47900.0, "text": "For the charges of ESN 10509 EGB", "assignment": "", "days_late": 255, "aging_bucket": "181-365", "status": "Overdue"}, {"row": 24, "reference": "0099425814", "doc_date": "2025-07-30", "net_due_date": "2025-08-29", "currency": "USD", "amount": 247.5, "text": "", "assignment": "4E-P0521900-07", "days_late": 236, "aging_bucket": "181-365", "status": "Overdue"}, {"row": 25, "reference": "0099425860", "doc_date": "2025-07-30", "net_due_date": "2025-08-29", "currency": "USD", "amount": 270.0, "text": "ptp 11.09.25 remit rec'd", "assignment": "4E-P0522031-08", "days_late": 236, "aging_bucket": "181-365", "status": "Overdue"}, {"row": 26, "reference": "0099477785", "doc_date": "2025-11-10", "net_due_date": "2025-10-01", "currency": "USD", "amount": 720.0, "text": "0099477785 short paid", "assignment": "CRC for ESN 10500", "days_late": 203, "aging_bucket": "181-365", "status": "Overdue"}, {"row": 27, "reference": "", "doc_date": "2026-02-10", "net_due_date": "2025-11-07", "currency": "USD", "amount": 65.09, "text": "bal of 99683380 shortpaid FIN0194356", "assignment": "5005795809", "days_late": 166, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 28, "reference": "0099540444", "doc_date": "2025-10-08", "net_due_date": "2025-11-07", "currency": "USD", "amount": 145559.38, "text": "CRC for ESN 21229", "assignment": "5005703727", "days_late": 166, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 29, "reference": "0099540448", "doc_date": "2025-10-08", "net_due_date": "2025-11-07", "currency": "USD", "amount": 365292.59, "text": "CRC for ESN 10509", "assignment": "4000745709", "days_late": 166, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 30, "reference": "0099540449", "doc_date": "2025-10-08", "net_due_date": "2025-11-07", "currency": "USD", "amount": 373041.61, "text": "CRC for ESN 21294", "assignment": "5005825334", "days_late": 166, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 31, "reference": "0099540447", "doc_date": "2025-10-08", "net_due_date": "2025-11-07", "currency": "USD", "amount": 885351.01, "text": "CRC for ESN 10517", "assignment": "5005562860", "days_late": 166, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 32, "reference": "0099540442", "doc_date": "2025-10-08", "net_due_date": "2025-11-07", "currency": "USD", "amount": 985508.72, "text": "CRC for ESN 10410", "assignment": "5005662777", "days_late": 166, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 33, "reference": "0099542646", "doc_date": "2025-10-09", "net_due_date": "2025-11-08", "currency": "USD", "amount": 38452.28, "text": "CRC for ESN 21405", "assignment": "5005304476", "days_late": 165, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 34, "reference": "0099542625", "doc_date": "2025-10-09", "net_due_date": "2025-11-08", "currency": "USD", "amount": 586645.78, "text": "CRC for ESN 21942", "assignment": "5005687522", "days_late": 165, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 35, "reference": "0099542665", "doc_date": "2025-10-09", "net_due_date": "2025-11-08", "currency": "USD", "amount": 717919.91, "text": "", "assignment": "CRC for ESN 10599", "days_late": 165, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 36, "reference": "0099542661", "doc_date": "2025-10-09", "net_due_date": "2025-11-08", "currency": "USD", "amount": 880035.72, "text": "", "assignment": "CRC for ESN 10418", "days_late": 165, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 37, "reference": "0099542659", "doc_date": "2025-10-09", "net_due_date": "2025-11-08", "currency": "USD", "amount": 1063163.23, "text": "", "assignment": "CRC for ESN 10590", "days_late": 165, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 38, "reference": "0099571242", "doc_date": "2025-10-27", "net_due_date": "2025-11-26", "currency": "USD", "amount": 11974.0, "text": "", "assignment": "4E-P0532463", "days_late": 147, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 39, "reference": "0099571244", "doc_date": "2025-10-27", "net_due_date": "2025-11-26", "currency": "USD", "amount": 14703.0, "text": "", "assignment": "4E-P0533310", "days_late": 147, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 40, "reference": "0099571243", "doc_date": "2025-10-27", "net_due_date": "2025-11-26", "currency": "USD", "amount": 19112.0, "text": "", "assignment": "4E-P0533425", "days_late": 147, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 41, "reference": "0099571241", "doc_date": "2025-10-27", "net_due_date": "2025-11-26", "currency": "USD", "amount": 19548.0, "text": "", "assignment": "P0532981", "days_late": 147, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 42, "reference": "0099573546", "doc_date": "2025-10-28", "net_due_date": "2025-11-27", "currency": "USD", "amount": 1104.0, "text": "", "assignment": "4E-P0533425", "days_late": 146, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 43, "reference": "0099573547", "doc_date": "2025-10-28", "net_due_date": "2025-11-27", "currency": "USD", "amount": 5731.0, "text": "", "assignment": "4E-P0533310", "days_late": 146, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 44, "reference": "0099579230", "doc_date": "2025-10-31", "net_due_date": "2025-11-30", "currency": "USD", "amount": 69880.0, "text": "", "assignment": "4E-P0534144", "days_late": 143, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 45, "reference": "0099580888", "doc_date": "2025-11-01", "net_due_date": "2025-12-01", "currency": "USD", "amount": 20896.0, "text": "", "assignment": "4E-P0534027", "days_late": 142, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 46, "reference": "0099580892", "doc_date": "2025-11-01", "net_due_date": "2025-12-01", "currency": "USD", "amount": 20896.0, "text": "", "assignment": "4E-P0534030", "days_late": 142, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 47, "reference": "0099598804", "doc_date": "2025-11-12", "net_due_date": "2025-12-12", "currency": "USD", "amount": 10448.0, "text": "", "assignment": "4E-P0534045", "days_late": 131, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 48, "reference": "0099617565", "doc_date": "2025-11-24", "net_due_date": "2025-12-24", "currency": "USD", "amount": 11308.0, "text": "", "assignment": "4E-P0533342-03", "days_late": 119, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 49, "reference": "0099617564", "doc_date": "2025-11-24", "net_due_date": "2025-12-24", "currency": "USD", "amount": 12554.0, "text": "", "assignment": "4E-P0533342-04", "days_late": 119, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 50, "reference": "0099617566", "doc_date": "2025-11-24", "net_due_date": "2025-12-24", "currency": "USD", "amount": 22911.0, "text": "", "assignment": "P0537320", "days_late": 119, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 51, "reference": "0099619409", "doc_date": "2025-11-25", "net_due_date": "2025-12-25", "currency": "USD", "amount": 9240.0, "text": "", "assignment": "4E-P0533432-01", "days_late": 118, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 52, "reference": "0099619408", "doc_date": "2025-11-25", "net_due_date": "2025-12-25", "currency": "USD", "amount": 70028.0, "text": "", "assignment": "4E-P0534145", "days_late": 118, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 53, "reference": "0099622980", "doc_date": "2025-11-27", "net_due_date": "2025-12-27", "currency": "USD", "amount": 1104.0, "text": "", "assignment": "5A-P0536057", "days_late": 116, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 54, "reference": "0099624304", "doc_date": "2025-11-28", "net_due_date": "2025-12-28", "currency": "USD", "amount": 17507.0, "text": "", "assignment": "4E-P0534145", "days_late": 115, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 55, "reference": "0099645961", "doc_date": "2025-12-11", "net_due_date": "2026-01-10", "currency": "USD", "amount": 2425.1, "text": "CRC for ESN 21599", "assignment": "5005468914", "days_late": 102, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 56, "reference": "0099645943", "doc_date": "2025-12-11", "net_due_date": "2026-01-10", "currency": "USD", "amount": 45036.04, "text": "CRC for ESN 21376", "assignment": "5005012239", "days_late": 102, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 57, "reference": "0099645931", "doc_date": "2025-12-11", "net_due_date": "2026-01-10", "currency": "USD", "amount": 287462.67, "text": "CRC for ESN 21602", "assignment": "5005876681", "days_late": 102, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 58, "reference": "0099661057", "doc_date": "2026-01-21", "net_due_date": "2026-01-21", "currency": "USD", "amount": 1950523.69, "text": "offset 99661057 agreed with cust 20.01", "assignment": "5006001085", "days_late": 91, "aging_bucket": "91-180", "status": "Overdue"}, {"row": 59, "reference": "0099678291", "doc_date": "2026-01-06", "net_due_date": "2026-02-05", "currency": "USD", "amount": 245.0, "text": "", "assignment": "4E-P0533310", "days_late": 76, "aging_bucket": "61-90", "status": "Overdue"}, {"row": 60, "reference": "0099692879", "doc_date": "2026-01-14", "net_due_date": "2026-02-13", "currency": "USD", "amount": 46206.0, "text": "", "assignment": "P0541472-01", "days_late": 68, "aging_bucket": "61-90", "status": "Overdue"}, {"row": 62, "reference": "0099713816", "doc_date": "2026-01-26", "net_due_date": "2026-02-25", "currency": "USD", "amount": 13700.0, "text": "", "assignment": "4T-P0544676", "days_late": 56, "aging_bucket": "31-60", "status": "Overdue"}, {"row": 63, "reference": "0099715279", "doc_date": "2026-01-27", "net_due_date": "2026-02-26", "currency": "USD", "amount": 19150.0, "text": "", "assignment": "4E-P0545142", "days_late": 55, "aging_bucket": "31-60", "status": "Overdue"}, {"row": 64, "reference": "0099719113", "doc_date": "2026-01-29", "net_due_date": "2026-02-28", "currency": "USD", "amount": 8082.0, "text": "", "assignment": "3D-P0545504", "days_late": 53, "aging_bucket": "31-60", "status": "Overdue"}, {"row": 65, "reference": "0099719114", "doc_date": "2026-01-29", "net_due_date": "2026-02-28", "currency": "USD", "amount": 8922.0, "text": "", "assignment": "4E-P0533430-05", "days_late": 53, "aging_bucket": "31-60", "status": "Overdue"}, {"row": 66, "reference": "0099719111", "doc_date": "2026-01-29", "net_due_date": "2026-02-28", "currency": "USD", "amount": 11430.0, "text": "", "assignment": "4E-P0545142", "days_late": 53, "aging_bucket": "31-60", "status": "Overdue"}, {"row": 67, "reference": "0099719112", "doc_date": "2026-01-29", "net_due_date": "2026-02-28", "currency": "USD", "amount": 44112.0, "text": "", "assignment": "4E-P0534295-02", "days_late": 53, "aging_bucket": "31-60", "status": "Overdue"}, {"row": 68, "reference": "0099720927", "doc_date": "2026-01-30", "net_due_date": "2026-03-01", "currency": "USD", "amount": 34142.0, "text": "", "assignment": "4E-P0533318-05", "days_late": 52, "aging_bucket": "31-60", "status": "Overdue"}, {"row": 69, "reference": "0099720926", "doc_date": "2026-01-30", "net_due_date": "2026-03-01", "currency": "USD", "amount": 35600.0, "text": "", "assignment": "4E-P0544596", "days_late": 52, "aging_bucket": "31-60", "status": "Overdue"}, {"row": 70, "reference": "0099720925", "doc_date": "2026-01-30", "net_due_date": "2026-03-01", "currency": "USD", "amount": 35600.0, "text": "", "assignment": "4E-P0544937", "days_late": 52, "aging_bucket": "31-60", "status": "Overdue"}, {"row": 71, "reference": "0099648080", "doc_date": "2025-12-12", "net_due_date": "2026-03-01", "currency": "USD", "amount": 1701900.66, "text": "", "assignment": "DEG 9054", "days_late": 52, "aging_bucket": "31-60", "status": "Overdue"}, {"row": 72, "reference": "0099648075", "doc_date": "2025-12-12", "net_due_date": "2026-03-01", "currency": "USD", "amount": 1859754.69, "text": "", "assignment": "DEG 9054", "days_late": 52, "aging_bucket": "31-60", "status": "Overdue"}, {"row": 73, "reference": "0099648090", "doc_date": "2025-12-12", "net_due_date": "2026-03-01", "currency": "USD", "amount": 2183708.79, "text": "", "assignment": "DEG 10215", "days_late": 52, "aging_bucket": "31-60", "status": "Overdue"}, {"row": 74, "reference": "0099648085", "doc_date": "2025-12-12", "net_due_date": "2026-03-01", "currency": "USD", "amount": 7491732.34, "text": "", "assignment": "DEG 10215", "days_late": 52, "aging_bucket": "31-60", "status": "Overdue"}, {"row": 75, "reference": "0099727860", "doc_date": "2026-02-03", "net_due_date": "2026-03-05", "currency": "USD", "amount": 7931181.95, "text": "CRC FOR ESN 21950", "assignment": "5006056914 / DEG10", "days_late": 48, "aging_bucket": "31-60", "status": "Overdue"}, {"row": 76, "reference": "0099733456", "doc_date": "2026-02-06", "net_due_date": "2026-03-08", "currency": "USD", "amount": 13410.0, "text": "", "assignment": "5K-P0546605", "days_late": 45, "aging_bucket": "31-60", "status": "Overdue"}, {"row": 77, "reference": "0099739024", "doc_date": "2026-02-09", "net_due_date": "2026-03-11", "currency": "USD", "amount": 35600.0, "text": "", "assignment": "4E-P0546414", "days_late": 42, "aging_bucket": "31-60", "status": "Overdue"}, {"row": 78, "reference": "0099739025", "doc_date": "2026-02-09", "net_due_date": "2026-03-11", "currency": "USD", "amount": 140056.0, "text": "", "assignment": "4E-P0543926", "days_late": 42, "aging_bucket": "31-60", "status": "Overdue"}, {"row": 79, "reference": "0099741018", "doc_date": "2026-02-10", "net_due_date": "2026-03-12", "currency": "USD", "amount": 15816.0, "text": "", "assignment": "4E-P0547125", "days_late": 41, "aging_bucket": "31-60", "status": "Overdue"}, {"row": 80, "reference": "0099648081", "doc_date": "2025-12-12", "net_due_date": "2026-04-01", "currency": "USD", "amount": 1701900.66, "text": "", "assignment": "DEG 9054", "days_late": 21, "aging_bucket": "0-30", "status": "Overdue"}, {"row": 81, "reference": "0099648076", "doc_date": "2025-12-12", "net_due_date": "2026-04-01", "currency": "USD", "amount": 1859754.69, "text": "", "assignment": "DEG 9054", "days_late": 21, "aging_bucket": "0-30", "status": "Overdue"}, {"row": 82, "reference": "0099648091", "doc_date": "2025-12-12", "net_due_date": "2026-04-01", "currency": "USD", "amount": 2183708.79, "text": "", "assignment": "DEG 10215", "days_late": 21, "aging_bucket": "0-30", "status": "Overdue"}, {"row": 83, "reference": "0099648086", "doc_date": "2025-12-12", "net_due_date": "2026-04-01", "currency": "USD", "amount": 7491732.34, "text": "", "assignment": "DEG 10215", "days_late": 21, "aging_bucket": "0-30", "status": "Overdue"}, {"row": 84, "reference": "0099648082", "doc_date": "2025-12-12", "net_due_date": "2026-05-01", "currency": "USD", "amount": 1701900.66, "text": "", "assignment": "DEG 9054", "days_late": -9, "aging_bucket": "Not due", "status": "Outstanding"}, {"row": 85, "reference": "0099648077", "doc_date": "2025-12-12", "net_due_date": "2026-05-01", "currency": "USD", "amount": 1859754.69, "text": "", "assignment": "DEG 9054", "days_late": -9, "aging_bucket": "Not due", "status": "Outstanding"}, {"row": 86, "reference": "0099648092", "doc_date": "2025-12-12", "net_due_date": "2026-05-01", "currency": "USD", "amount": 2183708.79, "text": "", "assignment": "DEG 10215", "days_late": -9, "aging_bucket": "Not due", "status": "Outstanding"}, {"row": 87, "reference": "0099648087", "doc_date": "2025-12-12", "net_due_date": "2026-05-01", "currency": "USD", "amount": 7491732.34, "text": "", "assignment": "DEG 10215", "days_late": -9, "aging_bucket": "Not due", "status": "Outstanding"}, {"row": 88, "reference": "0099648083", "doc_date": "2025-12-12", "net_due_date": "2026-06-01", "currency": "USD", "amount": 1701900.66, "text": "", "assignment": "DEG 9054", "days_late": -40, "aging_bucket": "Not due", "status": "Outstanding"}, {"row": 89, "reference": "0099648078", "doc_date": "2025-12-12", "net_due_date": "2026-06-01", "currency": "USD", "amount": 1859754.69, "text": "", "assignment": "DEG 9054", "days_late": -40, "aging_bucket": "Not due", "status": "Outstanding"}, {"row": 90, "reference": "0099648093", "doc_date": "2025-12-12", "net_due_date": "2026-06-01", "currency": "USD", "amount": 2183708.79, "text": "", "assignment": "DEG 10215", "days_late": -40, "aging_bucket": "Not due", "status": "Outstanding"}, {"row": 91, "reference": "0099648088", "doc_date": "2025-12-12", "net_due_date": "2026-06-01", "currency": "USD", "amount": 7491732.34, "text": "", "assignment": "DEG 10215", "days_late": -40, "aging_bucket": "Not due", "status": "Outstanding"}, {"row": 95, "reference": "", "doc_date": "2025-12-26", "net_due_date": "2025-05-29", "currency": "USD", "amount": -28217714.96, "text": "1620061217", "assignment": "DEG9054", "days_late": 328, "aging_bucket": "181-365", "status": "Credit"}, {"row": 96, "reference": "1620062565", "doc_date": "2025-12-24", "net_due_date": "2025-12-24", "currency": "USD", "amount": -7085775.83, "text": "DCN004803  CA-09492 DEG6272 ESN21376", "assignment": "25ULW21376", "days_late": 119, "aging_bucket": "91-180", "status": "Credit"}, {"row": 97, "reference": "1620062187", "doc_date": "2025-11-06", "net_due_date": "2025-11-06", "currency": "USD", "amount": -5562918.83, "text": "DCN004532 CA-09492 DEG6272 ESN 21950", "assignment": "25ULW21950", "days_late": 167, "aging_bucket": "91-180", "status": "Credit"}, {"row": 98, "reference": "1620062625", "doc_date": "2026-01-14", "net_due_date": "2026-01-14", "currency": "USD", "amount": -5479868.69, "text": "DCN004861 CA-09492 DEG6272 ESN 21771", "assignment": "26ULW21771", "days_late": 98, "aging_bucket": "91-180", "status": "Credit"}, {"row": 99, "reference": "1620062566", "doc_date": "2025-12-24", "net_due_date": "2025-12-24", "currency": "USD", "amount": -5470072.14, "text": "DCN004802 CA-09492 DEG6272 ESN 21608", "assignment": "25ULW21608", "days_late": 119, "aging_bucket": "91-180", "status": "Credit"}, {"row": 100, "reference": "1620062188", "doc_date": "2025-11-06", "net_due_date": "2025-11-06", "currency": "USD", "amount": -5424371.98, "text": "DCN004526 CA-09492 DEG6272  ESN 21428", "assignment": "25ULW21428", "days_late": 167, "aging_bucket": "91-180", "status": "Credit"}, {"row": 101, "reference": "", "doc_date": "2025-12-12", "net_due_date": "2025-10-09", "currency": "USD", "amount": -1242581.28, "text": "epi payment after inv & cn CRC ESN 21185", "assignment": "CRC ESN 21185", "days_late": 195, "aging_bucket": "181-365", "status": "Credit"}, {"row": 102, "reference": "1620059837", "doc_date": "2024-09-27", "net_due_date": "2024-09-27", "currency": "USD", "amount": -1042434.08, "text": "DCN002938 CA-08564 DEG6272 ESN 21104", "assignment": "24ULW21104-2", "days_late": 572, "aging_bucket": "365+", "status": "Credit"}, {"row": 103, "reference": "1620061761", "doc_date": "2025-09-03", "net_due_date": "2025-09-03", "currency": "USD", "amount": -355313.63, "text": "DCN004226 CA-09951 DEG9054", "assignment": "DEG9054", "days_late": 231, "aging_bucket": "181-365", "status": "Credit"}, {"row": 104, "reference": "1620062818", "doc_date": "2026-02-16", "net_due_date": "2026-02-16", "currency": "USD", "amount": -222519.4, "text": "DCN004958 CA-09492 DEG6272 ESN 21950", "assignment": "26ULW21950", "days_late": 65, "aging_bucket": "61-90", "status": "Credit"}, {"row": 105, "reference": "2000638764", "doc_date": "2025-08-15", "net_due_date": "2025-08-15", "currency": "USD", "amount": -168000.0, "text": "", "assignment": "DEG 9054", "days_late": 250, "aging_bucket": "181-365", "status": "Credit"}, {"row": 106, "reference": "2000638769", "doc_date": "2025-08-15", "net_due_date": "2025-08-15", "currency": "USD", "amount": -123153.0, "text": "", "assignment": "DEG 9054", "days_late": 250, "aging_bucket": "181-365", "status": "Credit"}, {"row": 107, "reference": "", "doc_date": "2025-09-16", "net_due_date": "2024-12-12", "currency": "USD", "amount": -60991.0, "text": "100069213", "assignment": "", "days_late": 496, "aging_bucket": "365+", "status": "Credit"}, {"row": 108, "reference": "", "doc_date": "2025-12-26", "net_due_date": "2025-12-30", "currency": "USD", "amount": -10332.37, "text": "cash balance on $1.9m payment", "assignment": "", "days_late": 113, "aging_bucket": "91-180", "status": "Credit"}, {"row": 109, "reference": "2000640682", "doc_date": "2025-09-18", "net_due_date": "2025-09-18", "currency": "USD", "amount": -720.0, "text": "", "assignment": "DEG 9054", "days_late": 216, "aging_bucket": "181-365", "status": "Credit"}, {"row": 110, "reference": "", "doc_date": "2023-04-03", "net_due_date": "2022-01-27", "currency": "USD", "amount": -564.9, "text": "Balance of C/N 2000544961 after invoice offset.", "assignment": "DEG 10215", "days_late": 1546, "aging_bucket": "365+", "status": "Credit"}, {"row": 111, "reference": "1620057143", "doc_date": "2023-07-07", "net_due_date": "2023-07-07", "currency": "USD", "amount": -553.0, "text": "DCN001141 CA-08105 DEG9054", "assignment": "DEG9054", "days_late": 1020, "aging_bucket": "365+", "status": "Credit"}], "subtotals": [{"row": 61, "formula": "=SUM(E2:E60)", "value": 10834287.249999998}, {"row": 92, "formula": "=SUM(E62:E91)", "value": 61295187.869999975}, {"row": 112, "formula": "=SUM(E95:E111)", "value": -60467885.08999999}], "groups": [{"label": "Rows 2-60", "count": 59, "amount": 10834287.249999998, "subtotal_row": 61, "subtotal_value": 10834287.249999998, "formula": "=SUM(E2:E60)"}, {"label": "Rows 62-91", "count": 30, "amount": 61295187.869999975, "subtotal_row": 92, "subtotal_value": 61295187.869999975, "formula": "=SUM(E62:E91)"}, {"label": "Rows 95-111", "count": 17, "amount": -60467885.08999999, "subtotal_row": 112, "subtotal_value": -60467885.08999999, "formula": "=SUM(E95:E111)"}]}</script>
+<script>
+(function(){
+  const D = JSON.parse(document.getElementById('epi-data').textContent);
+  const fmtMoney = (v) => {
+    const n = Number(v || 0);
+    const sign = n < 0 ? '-' : '';
+    return sign + '$' + Math.abs(n).toLocaleString(undefined, {maximumFractionDigits: 2});
+  };
+  const fmtInt = (v) => Number(v || 0).toLocaleString();
+
+  // Meta
+  document.getElementById('meta-file').textContent = D.meta.source_path;
+  document.getElementById('meta-sheet').textContent = 'Sheet1';
+  document.getElementById('meta-rows').textContent = D.meta.row_count;
+  const currencies = Object.keys(D.currency_counts);
+  document.getElementById('meta-currency').textContent = currencies.join(', ') || '-';
+  document.getElementById('gen-ts').textContent = D.meta.generated_at;
+  document.getElementById('f-src').textContent = D.meta.source_path;
+  document.getElementById('f-today').textContent = D.meta.today;
+
+  // KPIs
+  const kpis = [
+    {label:'Invoices', val:fmtInt(D.kpis.total_count)},
+    {label:'Net Total', val:fmtMoney(D.kpis.total_amount), cls:'small'},
+    {label:'Outstanding', val:fmtMoney(D.kpis.total_outstanding), cls:'ok'},
+    {label:'Overdue', val:fmtMoney(D.kpis.total_overdue), cls:'bad'},
+    {label:'Disputed', val:fmtMoney(D.kpis.total_disputed), cls:'warn'},
+    {label:'Avg days late (overdue)', val:Math.round(D.kpis.avg_days_late_overdue) + 'd'},
+  ];
+  document.getElementById('kpis').innerHTML = kpis.map(k =>
+    `<div class="kpi ${k.cls||''}"><div class="label">${k.label}</div><div class="val ${k.cls==='small'?'small':''}">${k.val}</div></div>`
+  ).join('');
+
+  // Aging chart - horizontal bar
+  const agingOrder = ["Not due","0-30","31-60","61-90","91-180","181-365","365+"];
+  new ApexCharts(document.getElementById('chartAging'), {
+    chart: {type:'bar', height: 300, toolbar:{show:false}, background:'transparent', foreColor:'#cfd8ec'},
+    theme: {mode:'dark'},
+    series: [{name:'Invoices', data: agingOrder.map(b => D.aging_counts[b] || 0)}],
+    plotOptions: {bar: {horizontal: true, borderRadius: 3, distributed: true}},
+    colors: ['#4ade80','#60a5fa','#fbbf24','#f97316','#ef4444','#b91c1c','#7f1d1d'],
+    xaxis: {categories: agingOrder},
+    dataLabels: {enabled: true, style: {colors:['#fff']}},
+    legend: {show: false},
+    grid: {borderColor: '#24324f'},
+  }).render();
+
+  // Status donut
+  const statusLabels = Object.keys(D.status_counts);
+  const statusValues = statusLabels.map(l => D.status_counts[l]);
+  const statusColorMap = {
+    Paid:'#22c55e', Outstanding:'#60a5fa', Overdue:'#ef4444',
+    Disputed:'#f59e0b', Credit:'#a78bfa', Unknown:'#64748b'
+  };
+  new ApexCharts(document.getElementById('chartStatus'), {
+    chart: {type:'donut', height: 300, background:'transparent', foreColor:'#cfd8ec'},
+    theme: {mode:'dark'},
+    series: statusValues,
+    labels: statusLabels,
+    colors: statusLabels.map(l => statusColorMap[l] || '#64748b'),
+    legend: {position: 'bottom'},
+    dataLabels: {enabled: true},
+    plotOptions: {pie: {donut: {size:'60%'}}},
+  }).render();
+
+  // Monthly line
+  new ApexCharts(document.getElementById('chartMonthly'), {
+    chart: {type:'area', height: 300, toolbar:{show:false}, background:'transparent', foreColor:'#cfd8ec'},
+    theme: {mode:'dark'},
+    series: [{name: 'Invoices', data: D.monthly.map(([k,v]) => v.count)}],
+    xaxis: {categories: D.monthly.map(([k]) => k), labels: {rotate: -45}},
+    colors: ['#60a5fa'],
+    stroke: {curve:'smooth', width: 2},
+    fill: {type:'gradient', gradient:{shadeIntensity:1, opacityFrom:0.4, opacityTo:0.05}},
+    dataLabels: {enabled: false},
+    grid: {borderColor: '#24324f'},
+  }).render();
+
+  // Top10 horizontal bar
+  new ApexCharts(document.getElementById('chartTop10'), {
+    chart: {type:'bar', height: 360, toolbar:{show:false}, background:'transparent', foreColor:'#cfd8ec'},
+    theme: {mode:'dark'},
+    series: [{name: 'Amount', data: D.top10.map(i => i.amount)}],
+    plotOptions: {bar: {horizontal: true, borderRadius: 2, distributed: true,
+                         colors: {ranges: [{from: -1e18, to: 0, color: '#ef4444'},
+                                           {from: 0, to: 1e18, color: '#60a5fa'}]}}},
+    xaxis: {categories: D.top10.map(i => (i.reference || '(blank)') + ' · r' + i.row),
+            labels: {formatter: (v) => fmtMoney(v)}},
+    dataLabels: {enabled: true, formatter: (v) => fmtMoney(v), style:{colors:['#fff']}},
+    legend: {show: false},
+    grid: {borderColor: '#24324f'},
+    tooltip: {y: {formatter: (v) => fmtMoney(v)}},
+  }).render();
+
+  // Groups / subtotals
+  document.getElementById('groups').innerHTML = D.groups.map(g => `
+    <div class="group">
+      <div class="lbl">${g.label} · ${g.count} rows</div>
+      <div class="amt">${fmtMoney(g.amount)}</div>
+      <div class="lbl" style="margin-top:6px">Source subtotal (row ${g.subtotal_row})</div>
+      <div class="amt">${fmtMoney(g.subtotal_value)}</div>
+      <div class="frm">${g.formula}</div>
+    </div>
+  `).join('');
+
+  // Table + filters
+  const tbody = document.getElementById('tbody');
+  const qEl = document.getElementById('q');
+  const sEl = document.getElementById('fStatus');
+  const cEl = document.getElementById('fCurrency');
+  const bEl = document.getElementById('fBucket');
+  const countEl = document.getElementById('tableCount');
+
+  // Populate selects
+  const uniq = (arr) => Array.from(new Set(arr)).filter(x => x !== undefined && x !== null);
+  uniq(D.invoices.map(i => i.status)).sort().forEach(s => {
+    const o = document.createElement('option'); o.value = s; o.textContent = s; sEl.appendChild(o);
+  });
+  uniq(D.invoices.map(i => i.currency)).sort().forEach(c => {
+    const o = document.createElement('option'); o.value = c; o.textContent = c || '(none)'; cEl.appendChild(o);
+  });
+  ["Not due","0-30","31-60","61-90","91-180","181-365","365+"].forEach(b => {
+    const o = document.createElement('option'); o.value = b; o.textContent = b; bEl.appendChild(o);
+  });
+
+  let sortKey = 'amount';
+  let sortDir = -1; // desc by default
+
+  function truncate(s, n) {
+    s = s || '';
+    return s.length > n ? s.slice(0, n-1) + '…' : s;
+  }
+
+  function render() {
+    const q = qEl.value.trim().toLowerCase();
+    const s = sEl.value;
+    const c = cEl.value;
+    const b = bEl.value;
+    let rows = D.invoices.filter(i => {
+      if (s && i.status !== s) return false;
+      if (c && i.currency !== c) return false;
+      if (b && i.aging_bucket !== b) return false;
+      if (q) {
+        const hay = (i.reference + ' ' + (i.text||'') + ' ' + (i.assignment||'') + ' ' + i.status).toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+    rows.sort((a, b2) => {
+      const va = a[sortKey], vb = b2[sortKey];
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * sortDir;
+      return String(va).localeCompare(String(vb)) * sortDir;
+    });
+    countEl.textContent = rows.length + ' of ' + D.invoices.length + ' invoices';
+    tbody.innerHTML = rows.map(i => `
+      <tr>
+        <td class="ref">${i.reference || '<span style="color:var(--muted)">(blank)</span>'}</td>
+        <td>${i.doc_date || ''}</td>
+        <td><span class="desc-trunc" title="${(i.text||'').replace(/"/g,'&quot;')}">${truncate(i.text || '', 60)}</span></td>
+        <td class="num">${fmtMoney(i.amount)}</td>
+        <td>${i.currency || ''}</td>
+        <td>${i.net_due_date || ''}</td>
+        <td class="num">${i.days_late}</td>
+        <td><span class="pill ${i.status}">${i.status}</span></td>
+        <td>${i.aging_bucket}</td>
+        <td>${i.assignment || ''}</td>
+      </tr>
+    `).join('');
+  }
+
+  document.querySelectorAll('thead th').forEach(th => {
+    th.addEventListener('click', () => {
+      const k = th.dataset.k;
+      if (!k) return;
+      if (sortKey === k) sortDir = -sortDir;
+      else { sortKey = k; sortDir = (k === 'amount' || k === 'days_late') ? -1 : 1; }
+      render();
+    });
+  });
+  [qEl, sEl, cEl, bEl].forEach(el => el.addEventListener('input', render));
+  render();
+})();
+</script>
+</body>
+</html>

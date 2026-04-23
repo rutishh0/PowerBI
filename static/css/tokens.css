@@ -1,0 +1,91 @@
+:root {
+    /* Brand */
+    --rr-navy: #10069F;
+    --rr-deep: #0C0033;
+    --rr-royal: #1A0FB5;
+    --rr-navy-rgb: 16, 6, 159;
+
+    /* Surfaces */
+    --surface-primary: #F6F7FB;
+    --surface-card: #FFFFFF;
+    --surface-elevated: #F0F1F7;
+    --surface-sidebar: #0C0033;
+    --surface-sidebar-hover: rgba(255, 255, 255, 0.06);
+
+    /* Borders */
+    --border-subtle: #E4E7F0;
+    --border-medium: #D0D4E0;
+
+    /* Text */
+    --text-primary: #0F172A;
+    --text-secondary: #475569;
+    --text-muted: #94A3B8;
+    --text-inverse: #FFFFFF;
+    --text-sidebar: #C8CAE0;
+
+    /* Semantic */
+    --success: #059669;
+    --success-light: #ECFDF5;
+    --success-soft: #D1FAE5;
+    --danger: #DC2626;
+    --danger-light: #FEF2F2;
+    --danger-soft: #FECACA;
+    --warning: #D97706;
+    --warning-light: #FFFBEB;
+    --info: #2563EB;
+    --info-light: #EFF6FF;
+
+    /* Chart Colors */
+    --chart-1: #10069F;
+    --chart-2: #1565C0;
+    --chart-3: #5E35B1;
+    --chart-4: #00838F;
+    --chart-5: #C62828;
+    --chart-6: #EF6C00;
+    --chart-7: #2E7D32;
+    --chart-8: #6A1B9A;
+
+    /* Shadows */
+    --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.03);
+    --shadow-sm: 0 1px 4px rgba(15, 23, 42, 0.05);
+    --shadow-md: 0 4px 16px rgba(15, 23, 42, 0.06);
+    --shadow-lg: 0 12px 40px rgba(15, 23, 42, 0.08);
+    --shadow-xl: 0 20px 60px rgba(15, 23, 42, 0.10);
+    --shadow-card: 0 1px 4px rgba(15, 23, 42, 0.04), 0 4px 16px rgba(15, 23, 42, 0.03);
+    --shadow-card-hover: 0 8px 30px rgba(15, 23, 42, 0.08), 0 2px 8px rgba(15, 23, 42, 0.04);
+
+    /* Spacing */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-10: 40px;
+    --space-12: 48px;
+    --space-16: 64px;
+
+    /* Radius */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --radius-2xl: 24px;
+    --radius-full: 9999px;
+
+    /* Typography */
+    --font-display: 'DM Sans', sans-serif;
+    --font-body: 'Plus Jakarta Sans', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+
+    /* Layout */
+    --sidebar-width: 280px;
+    --header-height: 140px;
+
+    /* Transitions */
+    --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-spring: 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}

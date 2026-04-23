@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>MEA Profit Opportunities Tracker — Ground Truth</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<script src="https://cdn.jsdelivr.net/npm/apexcharts@3.49.0/dist/apexcharts.min.js"></script>
+<style>
+  :root{
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2230;
+    --border: #2b3342;
+    --text: #e6edf3;
+    --muted: #8b96a6;
+    --accent: #5b8cff;
+    --accent-2: #7ed4b2;
+    --high: #ef476f;
+    --med:  #ffd166;
+    --low:  #06d6a0;
+    --alt1: #c77dff;
+    --alt2: #ffbe6a;
+    --alt3: #4cc9f0;
+  }
+  *{ box-sizing: border-box; }
+  html,body{ margin:0; padding:0; background:var(--bg); color:var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 14px; line-height:1.45;
+  }
+  header.top{
+    padding: 22px 28px 14px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #141a24 0%, #0d1117 100%);
+  }
+  header.top h1{ margin:0 0 4px; font-size: 22px; letter-spacing: .2px; }
+  header.top .sub{ color: var(--muted); font-size: 12.5px; }
+  main{ padding: 18px 28px 48px; max-width: 1680px; margin: 0 auto; }
+
+  .tabs{ display:flex; gap:6px; margin: 16px 0 10px; }
+  .tab{
+    padding: 8px 16px; border:1px solid var(--border); background: var(--panel);
+    color: var(--muted); border-radius: 6px; cursor: pointer; font-weight: 500;
+    transition: all .15s ease;
+  }
+  .tab:hover{ color:var(--text); border-color:#3b475c; }
+  .tab.active{ background: var(--accent); color:#fff; border-color:var(--accent); }
+
+  .kpi-row{ display:grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap:12px; margin: 12px 0 18px; }
+  .kpi{
+    background: var(--panel); border:1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; position:relative; overflow:hidden;
+  }
+  .kpi .label{ font-size: 11px; color:var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  .kpi .value{ font-size: 22px; font-weight: 700; margin-top:4px; color:var(--text); }
+  .kpi .unit{ font-size: 11px; color: var(--muted); margin-left: 4px; font-weight: 400; }
+  .kpi.accent .value{ color: var(--accent-2); }
+
+  .grid{ display:grid; gap:14px; }
+  .grid.g2{ grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .grid.g3{ grid-template-columns: repeat(3, minmax(0,1fr)); }
+  @media (max-width: 1100px){ .grid.g2, .grid.g3{ grid-template-columns: 1fr; } }
+
+  .card{
+    background: var(--panel); border:1px solid var(--border); border-radius: 8px;
+    padding: 14px 16px 10px;
+  }
+  .card h3{ margin:0 0 8px; font-size: 13px; color:var(--muted); text-transform: uppercase; letter-spacing:.4px; font-weight: 600;}
+  .card.chart{ min-height: 310px; }
+  .card.chart.tall{ min-height: 420px; }
+  .card.chart.xtall{ min-height: 520px; }
+
+  .filter-bar{
+    display:flex; flex-wrap: wrap; gap: 10px; margin: 10px 0 12px; align-items: flex-end;
+    background: var(--panel); border:1px solid var(--border); border-radius: 8px; padding: 12px;
+  }
+  .filter-bar .fld{ display:flex; flex-direction:column; gap:4px; }
+  .filter-bar label{ font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing:.4px; }
+  .filter-bar select, .filter-bar input[type="text"]{
+    background: var(--panel-2); border:1px solid var(--border); color: var(--text);
+    padding: 6px 10px; border-radius: 5px; font-size: 13px; min-width: 160px;
+  }
+  .filter-bar button{
+    background: var(--accent-2); border:none; color:#0d1117; font-weight:600;
+    padding: 7px 14px; border-radius: 5px; cursor:pointer;
+  }
+  .filter-bar button.ghost{ background: transparent; color: var(--muted); border:1px solid var(--border); }
+
+  table.dt{
+    width: 100%; border-collapse: collapse; font-size: 12.5px;
+  }
+  table.dt th, table.dt td{
+    border-bottom: 1px solid var(--border);
+    padding: 7px 9px; text-align: left; vertical-align: top;
+  }
+  table.dt th{
+    position: sticky; top: 0; background: var(--panel-2); color: var(--muted);
+    text-transform: uppercase; font-size: 11px; letter-spacing:.3px;
+    cursor: pointer; user-select:none;
+  }
+  table.dt tbody tr:hover{ background: rgba(91,140,255,0.06); }
+  table.dt td.num{ text-align: right; font-variant-numeric: tabular-nums; }
+  .pri-badge{ display:inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .pri-1{ background: rgba(239,71,111,.18); color: #ff6b8b; }
+  .pri-2{ background: rgba(255,209,102,.18); color: #ffd166; }
+  .pri-3{ background: rgba(6,214,160,.18); color: #4be3b2; }
+  .prob-badge{ display:inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+  .prob-High{ background: rgba(6,214,160,.15); color:#4be3b2; }
+  .prob-Med{  background: rgba(255,209,102,.15); color:#ffd166; }
+  .prob-Low{  background: rgba(239,71,111,.15); color:#ff6b8b; }
+
+  .table-wrap{
+    background: var(--panel); border:1px solid var(--border); border-radius: 8px;
+    max-height: 620px; overflow:auto;
+  }
+  .section-head{ display:flex; align-items:center; justify-content:space-between; margin: 22px 0 6px; }
+  .section-head h2{ margin:0; font-size: 15px; letter-spacing:.3px; }
+  .section-head .hint{ font-size: 12px; color: var(--muted); }
+
+  .opps-table th, .opps-table td{ font-size: 12px; }
+  .footer{ margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11.5px; display:flex; justify-content:space-between; flex-wrap: wrap; gap: 8px;}
+
+  .unmapped{ color: var(--high); font-size: 11.5px; }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>MEA Profit Opportunities Tracker</h1>
+  <div class="sub" id="subtitle">loading…</div>
+</header>
+<main>
+
+  <div class="tabs" id="tabs"></div>
+
+  <div class="kpi-row" id="kpiRow"></div>
+
+  <div class="grid g3">
+    <div class="card chart"><h3>Priority Distribution</h3><div id="chPriority"></div></div>
+    <div class="card chart"><h3>External Probability</h3><div id="chProb"></div></div>
+    <div class="card chart"><h3>Status Funnel</h3><div id="chFunnel"></div></div>
+  </div>
+
+  <div class="grid g2" style="margin-top:14px;">
+    <div class="card chart tall"><h3>Benefit 2026 vs 2027 — Top 10 Customers (£m)</h3><div id="chBenefitCust"></div></div>
+    <div class="card chart tall"><h3>Benefit by Programme × Priority (stacked)</h3><div id="chBenefitProg"></div></div>
+  </div>
+
+  <div class="grid g2" style="margin-top:14px;">
+    <div class="card chart tall"><h3>Top 10 Customers — Leaderboard (Sum 26+27 £m)</h3><div id="chLeader"></div></div>
+    <div class="card chart tall"><h3>Project Milestones Timeline</h3><div id="chTimeline"></div></div>
+  </div>
+
+  <div class="section-head"><h2>Opportunities</h2><span class="hint" id="rowcountHint"></span></div>
+  <div class="filter-bar">
+    <div class="fld"><label>Priority</label>
+      <select id="fPriority" multiple size="3" style="min-height:70px"></select>
+    </div>
+    <div class="fld"><label>Status</label><select id="fStatus"></select></div>
+    <div class="fld"><label>Programme</label><select id="fProgramme"></select></div>
+    <div class="fld"><label>Probability</label><select id="fProb"></select></div>
+    <div class="fld" style="flex:1; min-width:220px"><label>Search</label><input type="text" id="fSearch" placeholder="customer / project / ask…"/></div>
+    <button id="btnClear" class="ghost">Clear</button>
+  </div>
+  <div class="table-wrap">
+    <table class="dt" id="mainTable">
+      <thead><tr id="mainHead"></tr></thead>
+      <tbody id="mainBody"></tbody>
+    </table>
+  </div>
+
+  <div class="section-head"><h2>Opps &amp; Threats</h2><span class="hint" id="otHint"></span></div>
+  <div class="table-wrap">
+    <table class="dt opps-table" id="otTable">
+      <thead><tr id="otHead"></tr></thead>
+      <tbody id="otBody"></tbody>
+    </table>
+  </div>
+
+  <div class="footer">
+    <div id="footLeft"></div>
+    <div id="footRight"></div>
+  </div>
+
+</main>
+
+<script id="dataPayload" type="application/json">{"meta": {"source_file": "C:\\Users\\Rutishkrishna\\Desktop\\RR\\RR Powerbi\\V6\\New info\\MEA Profit Opportunities Tracker 21.04.xlsx", "source_basename": "MEA Profit Opportunities Tracker 21.04.xlsx", "generated_at": "2026-04-23T00:08:58.458168", "away_day_date": "2025-04-21T00:00:00", "today_value": "2026-02-16T00:00:00", "sheet_names": ["L2", "L3", "Summary", "Opps and Threats", "INPUT", "User Guide", "COVER", "MEA LOG", "Timeline", "Date Input", "COUNT", "SUM", "Sheet1"]}, "sheets": {"MEA LOG": {"header_row": 14, "mapped_columns": {"num": "C(3)", "project": "D(4)", "programme": "E(5)", "customer": "F(6)", "region": "G(7)", "asks": "H(8)", "type_of_opportunity": "I(9)", "levers": "J(10)", "priority": "K(11)", "spe_related": "L(12)", "no_of_spe": "M(13)", "crp_pct": "N(14)", "external_probability": "O(15)", "internal_complexity": "P(16)", "status": "Q(17)", "evaluation_level": "R(18)", "term_benefit": "S(19)", "benefit_2026": "T(20)", "benefit_2027": "U(21)", "sum_26_27": "V(22)"}, "all_headers": [{"col": 3, "letter": "C", "name": "#"}, {"col": 4, "letter": "D", "name": "Project"}, {"col": 5, "letter": "E", "name": "Programme"}, {"col": 6, "letter": "F", "name": "Customer"}, {"col": 7, "letter": "G", "name": "Region"}, {"col": 8, "letter": "H", "name": "Asks"}, {"col": 9, "letter": "I", "name": "Type of Opportunity"}, {"col": 10, "letter": "J", "name": "Levers"}, {"col": 11, "letter": "K", "name": "Priority"}, {"col": 12, "letter": "L", "name": "SPE related"}, {"col": 13, "letter": "M", "name": "No,of SPE"}, {"col": 14, "letter": "N", "name": "CRP%"}, {"col": 15, "letter": "O", "name": "External Probability"}, {"col": 16, "letter": "P", "name": "Internal Complexity"}, {"col": 17, "letter": "Q", "name": "Status"}, {"col": 18, "letter": "R", "name": "Evaluation Level"}, {"col": 19, "letter": "S", "name": "Term Benefit"}, {"col": 20, "letter": "T", "name": "2026"}, {"col": 21, "letter": "U", "name": "2027"}, {"col": 22, "letter": "V", "name": "Sum of 26/27"}, {"col": 26, "letter": "Z", "name": "2025"}, {"col": 27, "letter": "AA", "name": "2026"}, {"col": 28, "letter": "AB", "name": "2027"}, {"col": 29, "letter": "AC", "name": "2028"}, {"col": 30, "letter": "AD", "name": "2029"}, {"col": 31, "letter": "AE", "name": "2030"}, {"col": 32, "letter": "AF", "name": "2025"}, {"col": 33, "letter": "AG", "name": "2026"}, {"col": 34, "letter": "AH", "name": "2027"}, {"col": 35, "letter": "AI", "name": "2028"}, {"col": 36, "letter": "AJ", "name": "2029"}, {"col": 37, "letter": "AK", "name": "2030"}, {"col": 39, "letter": "AM", "name": "2025"}, {"col": 40, "letter": "AN", "name": "2026"}, {"col": 41, "letter": "AO", "name": "2027"}, {"col": 42, "letter": "AP", "name": "2028"}, {"col": 43, "letter": "AQ", "name": "2029"}, {"col": 44, "letter": "AR", "name": "2030"}, {"col": 45, "letter": "AS", "name": "2025"}, {"col": 46, "letter": "AT", "name": "2026"}, {"col": 47, "letter": "AU", "name": "2027"}, {"col": 48, "letter": "AV", "name": "2028"}, {"col": 49, "letter": "AW", "name": "2029"}, {"col": 50, "letter": "AX", "name": "2030"}, {"col": 52, "letter": "AZ", "name": "Deal Benefits"}, {"col": 53, "letter": "BA", "name": "Expected Deal Costs"}, {"col": 54, "letter": "BB", "name": "In-year Profit Impact"}, {"col": 55, "letter": "BC", "name": "5YP Profit Improvement"}, {"col": 56, "letter": "BD", "name": "Term Profit Imprvement"}, {"col": 57, "letter": "BE", "name": "Total CRP Term Revnue"}, {"col": 58, "letter": "BF", "name": "Total CRP Term Margin"}, {"col": 59, "letter": "BG", "name": "CRP Margin %"}, {"col": 61, "letter": "BI", "name": "Term Revenue"}, {"col": 62, "letter": "BJ", "name": "Term Cost"}, {"col": 63, "letter": "BK", "name": "Term Profit"}, {"col": 67, "letter": "BO", "name": "Account Management"}, {"col": 68, "letter": "BP", "name": "Contract Management"}, {"col": 69, "letter": "BQ", "name": "Service Business"}, {"col": 70, "letter": "BR", "name": "Business Evalautaion"}, {"col": 71, "letter": "BS", "name": "Sales & Contracting"}, {"col": 72, "letter": "BT", "name": "Customer Operations"}], "hidden_columns": ["L", "M", "N", "R", "S", "T", "U"], "hidden_rows_count": 13, "row_count_nonblank": 45, "sum_benefit_2026": 156.7461, "sum_benefit_2027": 183.9927, "rows": [{"row": 15, "num": 1, "project": "FiniQ II", "programme": "Trent XWB-84", "customer": "Emirates", "region": "MEA", "asks": "3 year-extension + LRU Management + 23 a/c", "type_of_opportunity": "TCA Amendments", "levers": "XWB MRO -  OWS Support - 97k & EP Pricing\n", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0, "external_probability": "High", "internal_complexity": "Low", "status": "Completed", "evaluation_level": null, "term_benefit": 341.88, "benefit_2026": null, "benefit_2027": null, "sum_26_27": 0}, {"row": 16, "num": 2, "project": "FiniQ III", "programme": "Trent XWB-84", "customer": "Emirates", "region": "MEA", "asks": "OWS - eliminate $20k remedy", "type_of_opportunity": "Cost Reduction", "levers": "New Campaign", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0, "external_probability": "High", "internal_complexity": "Low", "status": "Contracting", "evaluation_level": null, "term_benefit": 11.4, "benefit_2026": null, "benefit_2027": null, "sum_26_27": 0}, {"row": 17, "num": 3, "project": "IDK", "programme": "Trent XWB-84", "customer": "Emirates", "region": "MEA", "asks": "Additional 3 x SPE (10 %to 12%)", "type_of_opportunity": "SPE increase", "levers": "New Campaign", "priority": 2, "spe_related": "yes", "no_of_spe": 3, "crp_pct": 0, "external_probability": "Low", "internal_complexity": "Med", "status": "Hopper", "evaluation_level": null, "term_benefit": 54, "benefit_2026": 20.8, "benefit_2027": 20.8, "sum_26_27": 41.6}, {"row": 18, "num": 4, "project": "IDK", "programme": "Trent XWB-84", "customer": "Emirates", "region": "MEA", "asks": "Eliminate NDSES Cost via DAT", "type_of_opportunity": "Cost Reduction", "levers": "New Campaign/Settlement", "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": 0, "external_probability": "Med", "internal_complexity": "Med", "status": "ICT", "evaluation_level": null, "term_benefit": 50, "benefit_2026": null, "benefit_2027": null, "sum_26_27": 0}, {"row": 19, "num": 5, "project": "IDK", "programme": "Trent XWB-84", "customer": "Emirates", "region": "MEA", "asks": "Increase in escalation from 2% to 3%", "type_of_opportunity": "TCA Amendments", "levers": "XWB MRO -  OWS Support - 97k & EP Pricing\n", "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": 0, "external_probability": "Low", "internal_complexity": "Low", "status": "Hopper", "evaluation_level": null, "term_benefit": 170, "benefit_2026": null, "benefit_2027": null, "sum_26_27": 0}, {"row": 20, "num": 6, "project": "IDK", "programme": "Trent XWB-84", "customer": "Emirates", "region": "MEA", "asks": "Introduce Precedent Matrix", "type_of_opportunity": "TCA Amendments", "levers": "XWB MRO -  OWS Support - 97k & EP Pricing\n", "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": 0, "external_probability": "Low", "internal_complexity": "Med", "status": "Hopper", "evaluation_level": null, "term_benefit": 50, "benefit_2026": null, "benefit_2027": null, "sum_26_27": 0}, {"row": 21, "num": 7, "project": "Selassi", "programme": "Trent XWB-84", "customer": "Ethiopia", "region": "MEA", "asks": "SPE Pull forward ", "type_of_opportunity": "TCA Amendments", "levers": "AOG Risk", "priority": 1, "spe_related": "yes", "no_of_spe": 1, "crp_pct": 0.49, "external_probability": "Low", "internal_complexity": "Low", "status": "Completed", "evaluation_level": null, "term_benefit": 43, "benefit_2026": 5.92, "benefit_2027": 0, "sum_26_27": 5.92}, {"row": 22, "num": 8, "project": "Selassi", "programme": "Trent XWB-84", "customer": "Ethiopia", "region": "MEA", "asks": "Incremental SPE ", "type_of_opportunity": "SPE increase", "levers": "2 Addition a/c", "priority": 1, "spe_related": "yes", "no_of_spe": 1, "crp_pct": 0, "external_probability": "High", "internal_complexity": "Low", "status": "Negotiations", "evaluation_level": null, "term_benefit": 30, "benefit_2026": 0, "benefit_2027": 30, "sum_26_27": 30}, {"row": 23, "num": 9, "project": "Selassi", "programme": "Trent 1000", "customer": "Ethiopia", "region": "MEA", "asks": "Incremental SPE ", "type_of_opportunity": "SPE increase", "levers": "Campaign", "priority": 1, "spe_related": "yes", "no_of_spe": null, "crp_pct": 0.54, "external_probability": "Med", "internal_complexity": "Low", "status": "Hopper", "evaluation_level": null, "term_benefit": 11.84, "benefit_2026": 2.368, "benefit_2027": 2.368, "sum_26_27": 4.736}, {"row": 24, "num": 10, "project": "Selassi", "programme": "Trent 1000", "customer": "Ethiopia", "region": "MEA", "asks": "Min Term Extension (life)", "type_of_opportunity": "Term Extension", "levers": "Campaign", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.54, "external_probability": "Med", "internal_complexity": "Med", "status": "Hopper", "evaluation_level": null, "term_benefit": 4.44, "benefit_2026": 1.48, "benefit_2027": 1.48, "sum_26_27": 2.96}, {"row": 25, "num": 11, "project": "Selassi II", "programme": "Trent XWB-84", "customer": "Ethiopia", "region": "MEA", "asks": "Min Term Extension", "type_of_opportunity": "Term Extension", "levers": "Campaign", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.49, "external_probability": "Med", "internal_complexity": "Med", "status": "Hopper", "evaluation_level": null, "term_benefit": 10, "benefit_2026": 1, "benefit_2027": 1, "sum_26_27": 2}, {"row": 26, "num": 12, "project": "Selassi II", "programme": "Trent XWB-84", "customer": "Ethiopia", "region": "MEA", "asks": "Increase escalation", "type_of_opportunity": "TCA Amendments", "levers": "Campaign", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.49, "external_probability": "Low", "internal_complexity": "Low", "status": "Hopper", "evaluation_level": null, "term_benefit": 0, "benefit_2026": 0, "benefit_2027": 0, "sum_26_27": 0}, {"row": 27, "num": 13, "project": "Selassi II", "programme": "Trent XWB-84", "customer": "Ethiopia", "region": "MEA", "asks": "Credit Back Removal", "type_of_opportunity": "TCA Amendments", "levers": "Campaign", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.49, "external_probability": "Med", "internal_complexity": "Med", "status": "Hopper", "evaluation_level": null, "term_benefit": 33, "benefit_2026": 2.75, "benefit_2027": 2.75, "sum_26_27": 5.5}, {"row": 28, "num": 14, "project": "Burgundy", "programme": "Trent XWB-97", "customer": "Qatar", "region": "MEA", "asks": "SPE Pull-forward", "type_of_opportunity": "TCA Amendments", "levers": "Increased SPE Discount", "priority": 1, "spe_related": "yes", "no_of_spe": null, "crp_pct": 0.87, "external_probability": "High", "internal_complexity": "Low", "status": "Completed", "evaluation_level": null, "term_benefit": 90, "benefit_2026": 0, "benefit_2027": 0, "sum_26_27": 0}, {"row": 29, "num": 15, "project": "Burgundy II", "programme": "Trent XWB-84", "customer": "Qatar", "region": "MEA", "asks": "Exit for convenience removal -84", "type_of_opportunity": "TCA Amendments", "levers": "Term Extension ", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.77, "external_probability": "High", "internal_complexity": "High", "status": "Contracting", "evaluation_level": null, "term_benefit": 68.08, "benefit_2026": 68.08, "benefit_2027": 0, "sum_26_27": 68.08}, {"row": 30, "num": 16, "project": "Burgundy III", "programme": "Trent XWB-97", "customer": "Qatar", "region": "MEA", "asks": "Exit for convenience removal -97", "type_of_opportunity": "TCA Amendments", "levers": "Term Extension ", "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": 0.87, "external_probability": "Low", "internal_complexity": "High", "status": "Hopper", "evaluation_level": null, "term_benefit": 45.88, "benefit_2026": 0, "benefit_2027": 45.88, "sum_26_27": 45.88}, {"row": 31, "num": 17, "project": "QA", "programme": "Trent 500", "customer": "Qatar Amiri", "region": "MEA", "asks": "Sell 1 x SPE", "type_of_opportunity": "SPE increase", "levers": "Upsell", "priority": 1, "spe_related": "yes", "no_of_spe": 1, "crp_pct": 0, "external_probability": "Med", "internal_complexity": "Med", "status": "Contracting", "evaluation_level": null, "term_benefit": 2.7, "benefit_2026": 2.7, "benefit_2027": 0, "sum_26_27": 2.7}, {"row": 32, "num": 18, "project": "Horus", "programme": "Trent 1000", "customer": "Egypt", "region": "MEA", "asks": "Correct the CRP!!", "type_of_opportunity": "TCA Amendments", "levers": "Min Term extension", "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": 0.18, "external_probability": "Med", "internal_complexity": "Low", "status": "ICT", "evaluation_level": null, "term_benefit": 0, "benefit_2026": 0, "benefit_2027": 0, "sum_26_27": 0}, {"row": 33, "num": 19, "project": "Horus II", "programme": "Trent 700", "customer": "Egypt", "region": "MEA", "asks": "Term Extension ", "type_of_opportunity": "Term Extension", "levers": "Existing Pricing", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.11, "external_probability": "High", "internal_complexity": "Med", "status": "ICT", "evaluation_level": null, "term_benefit": 138.24, "benefit_2026": 0, "benefit_2027": 20, "sum_26_27": 20}, {"row": 34, "num": 20, "project": "Horus III", "programme": "Trent 1000", "customer": "Egypt", "region": "MEA", "asks": "Transportation Service Buy Out", "type_of_opportunity": "TCA Amendments", "levers": null, "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": 0.18, "external_probability": "Low", "internal_complexity": "Med", "status": "Cancelled ", "evaluation_level": null, "term_benefit": 7.4, "benefit_2026": 0, "benefit_2027": 0, "sum_26_27": 0}, {"row": 35, "num": 21, "project": "Horus IV", "programme": "Trent XWB-84", "customer": "Egypt", "region": "MEA", "asks": "PAS Upsell", "type_of_opportunity": "Service Upsells", "levers": null, "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": null, "external_probability": "Low", "internal_complexity": "Low", "status": "Cancelled ", "evaluation_level": null, "term_benefit": 7.2, "benefit_2026": 0.6, "benefit_2027": 0.6, "sum_26_27": 1.2}, {"row": 36, "num": 22, "project": "Turk", "programme": "Trent 700", "customer": "Turkmenistan", "region": "MEA", "asks": "SelectCare Upsell", "type_of_opportunity": "Service Upsells", "levers": null, "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": null, "external_probability": "Low", "internal_complexity": "Med", "status": "Cancelled ", "evaluation_level": null, "term_benefit": 30, "benefit_2026": 0, "benefit_2027": 7.5, "sum_26_27": 7.5}, {"row": 37, "num": 23, "project": "Qanot", "programme": "Trent 700", "customer": "Qanot Sharq", "region": "MEA", "asks": "TCA Life Upsell 2 x A330CEO", "type_of_opportunity": "New a/c", "levers": null, "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": null, "external_probability": "Low", "internal_complexity": "Med", "status": "Cancelled ", "evaluation_level": null, "term_benefit": 36, "benefit_2026": 0, "benefit_2027": 0, "sum_26_27": 0}, {"row": 38, "num": 24, "project": "SW", "programme": "RB211-524", "customer": "Silkway", "region": "MEA", "asks": "Increase in Green Time by 12k cycles", "type_of_opportunity": "TCA Amendments", "levers": null, "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0, "external_probability": "Low", "internal_complexity": "High", "status": "Cancelled ", "evaluation_level": null, "term_benefit": 25.2, "benefit_2026": 12.6, "benefit_2027": 12.6, "sum_26_27": 25.2}, {"row": 39, "num": 25, "project": "Sen", "programme": "Trent 7000", "customer": "Senegal", "region": "MEA", "asks": "Collect debt ", "type_of_opportunity": "Other", "levers": null, "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": 0.54, "external_probability": "Low", "internal_complexity": "Med", "status": "Cancelled ", "evaluation_level": null, "term_benefit": 10, "benefit_2026": 0, "benefit_2027": 10, "sum_26_27": 10}, {"row": 40, "num": 26, "project": "Viva Algeria", "programme": "Trent 7000", "customer": "Air Algerie", "region": "MEA", "asks": "Additional SPE", "type_of_opportunity": "SPE increase", "levers": null, "priority": 1, "spe_related": "yes", "no_of_spe": null, "crp_pct": null, "external_probability": "High", "internal_complexity": "Low", "status": "Completed", "evaluation_level": null, "term_benefit": 20, "benefit_2026": 0, "benefit_2027": 20, "sum_26_27": 20}, {"row": 41, "num": 27, "project": "Dhabi I", "programme": "Trent XWB-97", "customer": "Etihad", "region": "MEA", "asks": "TCA Reconciliation (CRP Improvement)", "type_of_opportunity": "TCA Amendments", "levers": null, "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.09, "external_probability": "High", "internal_complexity": "Med", "status": "Completed", "evaluation_level": null, "term_benefit": 60, "benefit_2026": 5, "benefit_2027": 1, "sum_26_27": 6}, {"row": 42, "num": 28, "project": "Dhabi II", "programme": "Trent XWB-97", "customer": "Etihad", "region": "MEA", "asks": "Transportation Service Buy Out for first 12", "type_of_opportunity": "TCA Amendments", "levers": null, "priority": 3, "spe_related": null, "no_of_spe": null, "crp_pct": 0.09, "external_probability": "Low", "internal_complexity": "High", "status": "Hopper", "evaluation_level": null, "term_benefit": 17.76, "benefit_2026": 1.48, "benefit_2027": 1.48, "sum_26_27": 2.96}, {"row": 43, "num": 29, "project": "Saud", "programme": "Trent 700", "customer": "Saudia", "region": "MEA", "asks": "Regional Fleet NDSES improvement", "type_of_opportunity": "Cost Reduction", "levers": null, "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.31, "external_probability": "High", "internal_complexity": "Med", "status": "Completed", "evaluation_level": null, "term_benefit": 21.46, "benefit_2026": 1.788333, "benefit_2027": 1.78833, "sum_26_27": 3.576663}, {"row": 44, "num": 30, "project": "Saud II", "programme": "Trent 700", "customer": "Saudia", "region": "MEA", "asks": "Extend Classic", "type_of_opportunity": "Term Extension", "levers": "Term Extension ", "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": 0.29, "external_probability": "Low", "internal_complexity": "Med", "status": "Hopper", "evaluation_level": null, "term_benefit": null, "benefit_2026": 0, "benefit_2027": 0, "sum_26_27": 0}, {"row": 45, "num": 31, "project": "Tanz", "programme": "Trent 1000", "customer": "Tanzania", "region": "MEA", "asks": "Additional SPE", "type_of_opportunity": "SPE increase", "levers": null, "priority": 1, "spe_related": "yes", "no_of_spe": null, "crp_pct": 0.28, "external_probability": "Med", "internal_complexity": "Low", "status": "Completed", "evaluation_level": null, "term_benefit": 25, "benefit_2026": 25, "benefit_2027": null, "sum_26_27": 25}, {"row": 46, "num": 32, "project": "Tanz", "programme": "Trent 1000", "customer": "Tanzania", "region": "MEA", "asks": "NDSES CRP", "type_of_opportunity": "Cost Reduction", "levers": null, "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.28, "external_probability": "Med", "internal_complexity": "Med", "status": "Completed", "evaluation_level": null, "term_benefit": 3.552, "benefit_2026": 0.7104, "benefit_2027": 0.7104, "sum_26_27": 1.4208}, {"row": 47, "num": 33, "project": "Falcon", "programme": "Trent 1000", "customer": "Gulf", "region": "MEA", "asks": "NDSES improvement through SPE sales ", "type_of_opportunity": "Cost Reduction", "levers": "Resolution of Claims", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.38, "external_probability": "Low", "internal_complexity": "Med", "status": "Negotiations", "evaluation_level": null, "term_benefit": 5.88, "benefit_2026": 0.84, "benefit_2027": 0.84, "sum_26_27": 1.68}, {"row": 48, "num": 34, "project": "Falcon", "programme": "Trent 1000", "customer": "Gulf", "region": "MEA", "asks": "3 Year Extension", "type_of_opportunity": "Term Extension", "levers": "Resolution of Claims", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.38, "external_probability": "Med", "internal_complexity": "Med", "status": "Negotiations", "evaluation_level": null, "term_benefit": 12, "benefit_2026": 1.2, "benefit_2027": 1.2, "sum_26_27": 2.4}, {"row": 49, "num": 35, "project": "Falcon", "programme": "Trent 1000", "customer": "Gulf", "region": "MEA", "asks": "Additional 2 x A/C", "type_of_opportunity": "New a/c", "levers": "Resolution of Claims", "priority": 2, "spe_related": "yes", "no_of_spe": 2, "crp_pct": 0.38, "external_probability": "Low", "internal_complexity": "Med", "status": "Cancelled ", "evaluation_level": null, "term_benefit": 23.04, "benefit_2026": 1.92, "benefit_2027": 1.92, "sum_26_27": 3.84}, {"row": 50, "num": 36, "project": "Star", "programme": "Trent 1000", "customer": "Austral", "region": "MEA", "asks": "TCA Extension/Exit credit trade", "type_of_opportunity": "Term Extension", "levers": "Blended TCA Rate", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.61, "external_probability": "Med", "internal_complexity": "Med", "status": "Hopper", "evaluation_level": null, "term_benefit": 4.8, "benefit_2026": 0, "benefit_2027": 0, "sum_26_27": 0}, {"row": 51, "num": 37, "project": "Q8", "programme": "Trent 7000", "customer": "Kuwait", "region": "MEA", "asks": "Maintain SPE % ", "type_of_opportunity": "SPE increase", "levers": "Early Exit of a330-800", "priority": 3, "spe_related": "yes", "no_of_spe": null, "crp_pct": 0.04, "external_probability": "Low", "internal_complexity": "Med", "status": "Hopper", "evaluation_level": null, "term_benefit": 0, "benefit_2026": 0, "benefit_2027": 0, "sum_26_27": 0}, {"row": 52, "num": 38, "project": "Mau", "programme": "Trent XWB-84", "customer": "Mauritus", "region": "MEA", "asks": "Escalation increase", "type_of_opportunity": "TCA Amendments", "levers": null, "priority": 3, "spe_related": null, "no_of_spe": null, "crp_pct": 0.31, "external_probability": "High", "internal_complexity": "Low", "status": "Completed", "evaluation_level": null, "term_benefit": 1.3, "benefit_2026": 0.43333333333333335, "benefit_2027": 0, "sum_26_27": 0.43333333333333335}, {"row": 53, "num": 39, "project": "Dodo", "programme": "Trent 7000", "customer": "Mauritus", "region": "MEA", "asks": "Reduce NDSES Cost", "type_of_opportunity": "Cost Reduction", "levers": "Termination", "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": 0.54, "external_probability": "Med", "internal_complexity": "Med", "status": "ICT", "evaluation_level": null, "term_benefit": 0.38, "benefit_2026": 0.076, "benefit_2027": 0.076, "sum_26_27": 0.152}, {"row": 54, "num": 40, "project": "RW", "programme": "Trent 700", "customer": "Rwanda", "region": "MEA", "asks": "Min Term Extension", "type_of_opportunity": "Term Extension", "levers": null, "priority": 3, "spe_related": null, "no_of_spe": null, "crp_pct": 0.19, "external_probability": "Low", "internal_complexity": "Med", "status": "Hopper", "evaluation_level": null, "term_benefit": 12, "benefit_2026": 0, "benefit_2027": 0, "sum_26_27": 0}, {"row": 55, "num": 41, "project": "SAA", "programme": "Trent 700", "customer": "SAA", "region": "MEA", "asks": "Additional 7 X A/C", "type_of_opportunity": "New a/c", "levers": null, "priority": 3, "spe_related": null, "no_of_spe": null, "crp_pct": null, "external_probability": "Med", "internal_complexity": "Med", "status": "Cancelled ", "evaluation_level": null, "term_benefit": 54, "benefit_2026": 0, "benefit_2027": 0, "sum_26_27": 0}, {"row": 56, "num": 42, "project": "Star", "programme": "Trent 1000", "customer": "Austral", "region": "MEA", "asks": "Used SPE", "type_of_opportunity": "SPE increase", "levers": "Min-term extension", "priority": 1, "spe_related": "Med", "no_of_spe": "Med", "crp_pct": "ICT", "external_probability": "Low", "internal_complexity": "Low", "status": "Hopper", "evaluation_level": null, "term_benefit": null, "benefit_2026": null, "benefit_2027": null, "sum_26_27": 0}, {"row": 57, "num": 43, "project": "Horus V", "programme": "Trent XWB-84", "customer": "Egypt", "region": "MEA", "asks": "EP Upsell", "type_of_opportunity": "Last 6 aircraft", "levers": "Upsell", "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": null, "external_probability": "Med", "internal_complexity": "Med", "status": "Hopper", "evaluation_level": null, "term_benefit": null, "benefit_2026": null, "benefit_2027": null, "sum_26_27": 0}, {"row": 58, "num": 44, "project": "Pantheon", "programme": "Trent 900", "customer": "Emirates", "region": "MEA", "asks": "Retire SLA1", "type_of_opportunity": "TCA Amendments", "levers": "MRO trade", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": null, "external_probability": "Med", "internal_complexity": "High", "status": "Hopper", "evaluation_level": null, "term_benefit": null, "benefit_2026": null, "benefit_2027": null, "sum_26_27": 0}, {"row": 59, "num": 45, "project": "Cotton", "programme": "RB211-524", "customer": "Silkway", "region": "MEA", "asks": "Extend Greentime agreement by 12 months", "type_of_opportunity": "TCA Amendments", "levers": "Expiry", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": null, "external_probability": "High", "internal_complexity": "Med", "status": "ICT", "evaluation_level": null, "term_benefit": null, "benefit_2026": null, "benefit_2027": null, "sum_26_27": 0}]}, "L2": {"header_row": 14, "mapped_columns": {"num": "C(3)", "project": "D(4)", "programme": "E(5)", "customer": "F(6)", "region": "G(7)", "asks": "H(8)", "type_of_opportunity": "I(9)", "levers": "J(10)", "priority": "K(11)", "spe_related": "L(12)", "no_of_spe": "M(13)", "crp_pct": "N(14)", "external_probability": "O(15)", "internal_complexity": "P(16)", "status": "Q(17)", "evaluation_level": "R(18)", "term_benefit": "S(19)", "benefit_2026": "T(20)", "benefit_2027": "U(21)", "sum_26_27": "V(22)"}, "all_headers": [{"col": 3, "letter": "C", "name": "#"}, {"col": 4, "letter": "D", "name": "Project"}, {"col": 5, "letter": "E", "name": "Programme"}, {"col": 6, "letter": "F", "name": "Customer"}, {"col": 7, "letter": "G", "name": "Region"}, {"col": 8, "letter": "H", "name": "Asks"}, {"col": 9, "letter": "I", "name": "Type of Opportunity"}, {"col": 10, "letter": "J", "name": "Levers"}, {"col": 11, "letter": "K", "name": "Priority"}, {"col": 12, "letter": "L", "name": "SPE related"}, {"col": 13, "letter": "M", "name": "No,of SPE"}, {"col": 14, "letter": "N", "name": "CRP%"}, {"col": 15, "letter": "O", "name": "External Probability"}, {"col": 16, "letter": "P", "name": "Internal Complexity"}, {"col": 17, "letter": "Q", "name": "Status"}, {"col": 18, "letter": "R", "name": "Evaluation Level"}, {"col": 19, "letter": "S", "name": "Term Benefit"}, {"col": 20, "letter": "T", "name": "2026"}, {"col": 21, "letter": "U", "name": "2027"}, {"col": 22, "letter": "V", "name": "Sum of 26/27"}, {"col": 26, "letter": "Z", "name": "2025"}, {"col": 27, "letter": "AA", "name": "2026"}, {"col": 28, "letter": "AB", "name": "2027"}, {"col": 29, "letter": "AC", "name": "2028"}, {"col": 30, "letter": "AD", "name": "2029"}, {"col": 31, "letter": "AE", "name": "2030"}, {"col": 32, "letter": "AF", "name": "2025"}, {"col": 33, "letter": "AG", "name": "2026"}, {"col": 34, "letter": "AH", "name": "2027"}, {"col": 35, "letter": "AI", "name": "2028"}, {"col": 36, "letter": "AJ", "name": "2029"}, {"col": 37, "letter": "AK", "name": "2030"}, {"col": 39, "letter": "AM", "name": "2025"}, {"col": 40, "letter": "AN", "name": "2026"}, {"col": 41, "letter": "AO", "name": "2027"}, {"col": 42, "letter": "AP", "name": "2028"}, {"col": 43, "letter": "AQ", "name": "2029"}, {"col": 44, "letter": "AR", "name": "2030"}, {"col": 45, "letter": "AS", "name": "2025"}, {"col": 46, "letter": "AT", "name": "2026"}, {"col": 47, "letter": "AU", "name": "2027"}, {"col": 48, "letter": "AV", "name": "2028"}, {"col": 49, "letter": "AW", "name": "2029"}, {"col": 50, "letter": "AX", "name": "2030"}, {"col": 52, "letter": "AZ", "name": "Deal Benefits"}, {"col": 53, "letter": "BA", "name": "Expected Deal Costs"}, {"col": 54, "letter": "BB", "name": "In-year Profit Impact"}, {"col": 55, "letter": "BC", "name": "5YP Profit Improvement"}, {"col": 56, "letter": "BD", "name": "Term Profit Imprvement"}, {"col": 57, "letter": "BE", "name": "Total CRP Term Revnue"}, {"col": 58, "letter": "BF", "name": "Total CRP Term Margin"}, {"col": 59, "letter": "BG", "name": "CRP Margin %"}, {"col": 61, "letter": "BI", "name": "Term Revenue"}, {"col": 62, "letter": "BJ", "name": "Term Cost"}, {"col": 63, "letter": "BK", "name": "Term Profit"}, {"col": 67, "letter": "BO", "name": "Account Management"}, {"col": 68, "letter": "BP", "name": "Contract Management"}, {"col": 69, "letter": "BQ", "name": "Service Business"}, {"col": 70, "letter": "BR", "name": "Business Evalautaion"}, {"col": 71, "letter": "BS", "name": "Sales & Contracting"}, {"col": 72, "letter": "BT", "name": "Customer Operations"}], "hidden_columns": [], "hidden_rows_count": 493, "row_count_nonblank": 45, "sum_benefit_2026": 151.8537, "sum_benefit_2027": 218.2044, "rows": [{"row": 15, "num": 1, "project": "FiniQ II", "programme": "Trent XWB-84", "customer": "Emirates", "region": "MEA", "asks": "3 year-extension + LRU Management + 23 a/c", "type_of_opportunity": "TCA Amendments", "levers": "XWB MRO -  OWS Support - 97k & EP Pricing\n", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0, "external_probability": "High", "internal_complexity": "Low", "status": "Completed", "evaluation_level": null, "term_benefit": 341.88, "benefit_2026": null, "benefit_2027": null, "sum_26_27": 0}, {"row": 16, "num": 2, "project": "FiniQ III", "programme": "Trent XWB-84", "customer": "Emirates", "region": "MEA", "asks": "OWS - eliminate $20k remedy", "type_of_opportunity": "Cost Reduction", "levers": "New Campaign", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0, "external_probability": "High", "internal_complexity": "Low", "status": "Contracting", "evaluation_level": null, "term_benefit": 54, "benefit_2026": 0, "benefit_2027": 3, "sum_26_27": 3}, {"row": 17, "num": 3, "project": "IDK", "programme": "Trent XWB-84", "customer": "Emirates", "region": "MEA", "asks": "Additional 3 x SPE (10 %to 12%)", "type_of_opportunity": "SPE increase", "levers": "New Campaign", "priority": 2, "spe_related": "yes", "no_of_spe": 3, "crp_pct": 0, "external_probability": "Low", "internal_complexity": "Med", "status": "Hopper", "evaluation_level": null, "term_benefit": 50, "benefit_2026": null, "benefit_2027": null, "sum_26_27": 0}, {"row": 18, "num": 4, "project": "IDK", "programme": "Trent XWB-84", "customer": "Emirates", "region": "MEA", "asks": "Eliminate NDSES Cost via DAT", "type_of_opportunity": "Cost Reduction", "levers": "New Campaign/Settlement", "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": 0, "external_probability": "Med", "internal_complexity": "Med", "status": "ICT", "evaluation_level": null, "term_benefit": 11.4, "benefit_2026": null, "benefit_2027": null, "sum_26_27": 0}, {"row": 19, "num": 5, "project": "IDK", "programme": "Trent XWB-84", "customer": "Emirates", "region": "MEA", "asks": "Increase in escalation from 2% to 3%", "type_of_opportunity": "TCA Amendments", "levers": "XWB MRO -  OWS Support - 97k & EP Pricing\n", "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": 0, "external_probability": "Low", "internal_complexity": "Low", "status": "Hopper", "evaluation_level": null, "term_benefit": 170, "benefit_2026": null, "benefit_2027": null, "sum_26_27": 0}, {"row": 20, "num": 6, "project": "IDK", "programme": "Trent XWB-84", "customer": "Emirates", "region": "MEA", "asks": "Introduce Precedent Matrix", "type_of_opportunity": "TCA Amendments", "levers": "XWB MRO -  OWS Support - 97k & EP Pricing\n", "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": 0, "external_probability": "Low", "internal_complexity": "Med", "status": "Hopper", "evaluation_level": null, "term_benefit": 50, "benefit_2026": null, "benefit_2027": null, "sum_26_27": 0}, {"row": 21, "num": 7, "project": "Selassi", "programme": "Trent XWB-84", "customer": "Ethiopia", "region": "MEA", "asks": "SPE Pull forward ", "type_of_opportunity": "TCA Amendments", "levers": "AOG Risk", "priority": 1, "spe_related": "yes", "no_of_spe": 1, "crp_pct": 0.49, "external_probability": "Low", "internal_complexity": "Low", "status": "Completed", "evaluation_level": null, "term_benefit": 10, "benefit_2026": 1, "benefit_2027": 1, "sum_26_27": 2}, {"row": 22, "num": 8, "project": "Selassi", "programme": "Trent XWB-84", "customer": "Ethiopia", "region": "MEA", "asks": "Incremental SPE ", "type_of_opportunity": "SPE increase", "levers": "2 Addition a/c", "priority": 1, "spe_related": "yes", "no_of_spe": 1, "crp_pct": 0, "external_probability": "High", "internal_complexity": "Low", "status": "Negotiations", "evaluation_level": null, "term_benefit": 3, "benefit_2026": 0, "benefit_2027": 3, "sum_26_27": 3}, {"row": 23, "num": 9, "project": "Selassi", "programme": "Trent 1000", "customer": "Ethiopia", "region": "MEA", "asks": "Incremental SPE ", "type_of_opportunity": "SPE increase", "levers": "Campaign", "priority": 1, "spe_related": "yes", "no_of_spe": null, "crp_pct": 0.54, "external_probability": "Med", "internal_complexity": "Low", "status": "Hopper", "evaluation_level": null, "term_benefit": 33, "benefit_2026": 2.75, "benefit_2027": 2.75, "sum_26_27": 5.5}, {"row": 24, "num": 10, "project": "Selassi", "programme": "Trent 1000", "customer": "Ethiopia", "region": "MEA", "asks": "Min Term Extension (life)", "type_of_opportunity": "Term Extension", "levers": "Campaign", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.54, "external_probability": "Med", "internal_complexity": "Med", "status": "Hopper", "evaluation_level": null, "term_benefit": 43, "benefit_2026": 5.92, "benefit_2027": 0, "sum_26_27": 5.92}, {"row": 25, "num": 11, "project": "Selassi II", "programme": "Trent XWB-84", "customer": "Ethiopia", "region": "MEA", "asks": "Min Term Extension", "type_of_opportunity": "Term Extension", "levers": "Campaign", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.49, "external_probability": "Med", "internal_complexity": "Med", "status": "Hopper", "evaluation_level": null, "term_benefit": 30, "benefit_2026": 0, "benefit_2027": 30, "sum_26_27": 30}, {"row": 26, "num": 12, "project": "Selassi II", "programme": "Trent XWB-84", "customer": "Ethiopia", "region": "MEA", "asks": "Increase escalation", "type_of_opportunity": "TCA Amendments", "levers": "Campaign", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.49, "external_probability": "Low", "internal_complexity": "Low", "status": "Hopper", "evaluation_level": null, "term_benefit": 11.84, "benefit_2026": 0, "benefit_2027": 2.368, "sum_26_27": 2.368}, {"row": 27, "num": 13, "project": "Selassi II", "programme": "Trent XWB-84", "customer": "Ethiopia", "region": "MEA", "asks": "Credit Back Removal", "type_of_opportunity": "TCA Amendments", "levers": "Campaign", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.49, "external_probability": "Med", "internal_complexity": "Med", "status": "Hopper", "evaluation_level": null, "term_benefit": 4.44, "benefit_2026": 0, "benefit_2027": 1.48, "sum_26_27": 1.48}, {"row": 28, "num": 14, "project": "Burgundy", "programme": "Trent XWB-97", "customer": "Qatar", "region": "MEA", "asks": "SPE Pull-forward", "type_of_opportunity": "TCA Amendments", "levers": "Increased SPE Discount", "priority": 1, "spe_related": "yes", "no_of_spe": null, "crp_pct": 0.87, "external_probability": "High", "internal_complexity": "Low", "status": "Completed", "evaluation_level": null, "term_benefit": 90, "benefit_2026": 0, "benefit_2027": 0, "sum_26_27": 0}, {"row": 29, "num": 15, "project": "Burgundy II", "programme": "Trent XWB-84", "customer": "Qatar", "region": "MEA", "asks": "Exit for convenience removal -84", "type_of_opportunity": "TCA Amendments", "levers": "Term Extension ", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.77, "external_probability": "High", "internal_complexity": "High", "status": "Contracting", "evaluation_level": null, "term_benefit": 68.08, "benefit_2026": 68.08, "benefit_2027": 0, "sum_26_27": 68.08}, {"row": 30, "num": 16, "project": "Burgundy III", "programme": "Trent XWB-97", "customer": "Qatar", "region": "MEA", "asks": "Exit for convenience removal -97", "type_of_opportunity": "TCA Amendments", "levers": "Term Extension ", "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": 0.87, "external_probability": "Low", "internal_complexity": "High", "status": "Hopper", "evaluation_level": null, "term_benefit": 45.88, "benefit_2026": 0, "benefit_2027": 45.88, "sum_26_27": 45.88}, {"row": 31, "num": 17, "project": "QA", "programme": "Trent 500", "customer": "Qatar Amiri", "region": "MEA", "asks": "Sell 1 x SPE", "type_of_opportunity": "SPE increase", "levers": "Upsell", "priority": 1, "spe_related": "yes", "no_of_spe": 1, "crp_pct": 0, "external_probability": "Med", "internal_complexity": "Med", "status": "Contracting", "evaluation_level": null, "term_benefit": 7.5, "benefit_2026": 5, "benefit_2027": 0, "sum_26_27": 5}, {"row": 32, "num": 18, "project": "Horus", "programme": "Trent 1000", "customer": "Egypt", "region": "MEA", "asks": "Correct the CRP!!", "type_of_opportunity": "TCA Amendments", "levers": "Min Term extension", "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": 0.18, "external_probability": "Med", "internal_complexity": "Low", "status": "ICT", "evaluation_level": null, "term_benefit": null, "benefit_2026": 0, "benefit_2027": 0, "sum_26_27": 0}, {"row": 33, "num": 19, "project": "Horus II", "programme": "Trent 700", "customer": "Egypt", "region": "MEA", "asks": "Term Extension ", "type_of_opportunity": "Term Extension", "levers": "Existing Pricing", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.11, "external_probability": "High", "internal_complexity": "Med", "status": "ICT", "evaluation_level": null, "term_benefit": 120, "benefit_2026": 3, "benefit_2027": 14, "sum_26_27": 17}, {"row": 34, "num": 20, "project": "Horus III", "programme": "Trent 1000", "customer": "Egypt", "region": "MEA", "asks": "Transportation Service Buy Out", "type_of_opportunity": "TCA Amendments", "levers": null, "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": 0.18, "external_probability": "Low", "internal_complexity": "Med", "status": "Cancelled ", "evaluation_level": null, "term_benefit": 138.24, "benefit_2026": 0, "benefit_2027": 20, "sum_26_27": 20}, {"row": 35, "num": 21, "project": "Horus IV", "programme": "Trent XWB-84", "customer": "Egypt", "region": "MEA", "asks": "PAS Upsell", "type_of_opportunity": "Service Upsells", "levers": null, "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": null, "external_probability": "Low", "internal_complexity": "Low", "status": "Cancelled ", "evaluation_level": null, "term_benefit": 7.2, "benefit_2026": 0.6, "benefit_2027": 0.6, "sum_26_27": 1.2}, {"row": 36, "num": 22, "project": "Turk", "programme": "Trent 700", "customer": "Turkmenistan", "region": "MEA", "asks": "SelectCare Upsell", "type_of_opportunity": "Service Upsells", "levers": null, "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": null, "external_probability": "Low", "internal_complexity": "Med", "status": "Cancelled ", "evaluation_level": null, "term_benefit": 30, "benefit_2026": 0, "benefit_2027": 7.5, "sum_26_27": 7.5}, {"row": 37, "num": 23, "project": "Qanot", "programme": "Trent 700", "customer": "Qanot Sharq", "region": "MEA", "asks": "TCA Life Upsell 2 x A330CEO", "type_of_opportunity": "New a/c", "levers": null, "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": null, "external_probability": "Low", "internal_complexity": "Med", "status": "Cancelled ", "evaluation_level": null, "term_benefit": 36, "benefit_2026": 0, "benefit_2027": 0, "sum_26_27": 0}, {"row": 38, "num": 24, "project": "SW", "programme": "RB211-524", "customer": "Silkway", "region": "MEA", "asks": "Increase in Green Time by 12k cycles", "type_of_opportunity": "TCA Amendments", "levers": null, "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0, "external_probability": "Low", "internal_complexity": "High", "status": "Cancelled ", "evaluation_level": null, "term_benefit": 25.2, "benefit_2026": 12.6, "benefit_2027": 12.6, "sum_26_27": 25.2}, {"row": 39, "num": 25, "project": "Sen", "programme": "Trent 7000", "customer": "Senegal", "region": "MEA", "asks": "Collect debt ", "type_of_opportunity": "Other", "levers": null, "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": 0.54, "external_probability": "Low", "internal_complexity": "Med", "status": "Cancelled ", "evaluation_level": null, "term_benefit": 10, "benefit_2026": 0, "benefit_2027": 10, "sum_26_27": 10}, {"row": 40, "num": 26, "project": "Viva Algeria", "programme": "Trent 7000", "customer": "Air Algerie", "region": "MEA", "asks": "Additional SPE", "type_of_opportunity": "SPE increase", "levers": null, "priority": 1, "spe_related": "yes", "no_of_spe": null, "crp_pct": null, "external_probability": "High", "internal_complexity": "Low", "status": "Completed", "evaluation_level": null, "term_benefit": 20, "benefit_2026": 0, "benefit_2027": 20, "sum_26_27": 20}, {"row": 41, "num": 27, "project": "Dhabi I", "programme": "Trent XWB-97", "customer": "Etihad", "region": "MEA", "asks": "TCA Reconciliation (CRP Improvement)", "type_of_opportunity": "TCA Amendments", "levers": null, "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.09, "external_probability": "High", "internal_complexity": "Med", "status": "Completed", "evaluation_level": null, "term_benefit": 60, "benefit_2026": 5, "benefit_2027": 1, "sum_26_27": 6}, {"row": 42, "num": 28, "project": "Dhabi II", "programme": "Trent XWB-97", "customer": "Etihad", "region": "MEA", "asks": "Transportation Service Buy Out for first 12", "type_of_opportunity": "TCA Amendments", "levers": null, "priority": 3, "spe_related": null, "no_of_spe": null, "crp_pct": 0.09, "external_probability": "Low", "internal_complexity": "High", "status": "Hopper", "evaluation_level": null, "term_benefit": 17.76, "benefit_2026": 0, "benefit_2027": 1.48, "sum_26_27": 1.48}, {"row": 43, "num": 29, "project": "Saud", "programme": "Trent 700", "customer": "Saudia", "region": "MEA", "asks": "Regional Fleet NDSES improvement", "type_of_opportunity": "Cost Reduction", "levers": null, "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.31, "external_probability": "High", "internal_complexity": "Med", "status": "Completed", "evaluation_level": null, "term_benefit": null, "benefit_2026": 0, "benefit_2027": 0, "sum_26_27": 0}, {"row": 44, "num": 30, "project": "Saud II", "programme": "Trent 700", "customer": "Saudia", "region": "MEA", "asks": "Extend Classic", "type_of_opportunity": "Term Extension", "levers": "Term Extension ", "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": 0.29, "external_probability": "Low", "internal_complexity": "Med", "status": "Hopper", "evaluation_level": null, "term_benefit": 21.46, "benefit_2026": 0, "benefit_2027": 0, "sum_26_27": 0}, {"row": 45, "num": 31, "project": "Tanz", "programme": "Trent 1000", "customer": "Tanzania", "region": "MEA", "asks": "Additional SPE", "type_of_opportunity": "SPE increase", "levers": null, "priority": 1, "spe_related": "yes", "no_of_spe": null, "crp_pct": 0.28, "external_probability": "Med", "internal_complexity": "Low", "status": "Completed", "evaluation_level": null, "term_benefit": 25, "benefit_2026": 25, "benefit_2027": null, "sum_26_27": 25}, {"row": 46, "num": 32, "project": "Tanz", "programme": "Trent 1000", "customer": "Tanzania", "region": "MEA", "asks": "NDSES CRP", "type_of_opportunity": "Cost Reduction", "levers": null, "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.28, "external_probability": "Med", "internal_complexity": "Med", "status": "Completed", "evaluation_level": null, "term_benefit": 3.552, "benefit_2026": 0.7104, "benefit_2027": 0.7104, "sum_26_27": 1.4208}, {"row": 47, "num": 33, "project": "Falcon", "programme": "Trent 1000", "customer": "Gulf", "region": "MEA", "asks": "NDSES improvement through SPE sales ", "type_of_opportunity": "Cost Reduction", "levers": "Resolution of Claims", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.38, "external_probability": "Low", "internal_complexity": "Med", "status": "Negotiations", "evaluation_level": null, "term_benefit": 5.88, "benefit_2026": 0.84, "benefit_2027": 0.84, "sum_26_27": 1.68}, {"row": 48, "num": 34, "project": "Falcon", "programme": "Trent 1000", "customer": "Gulf", "region": "MEA", "asks": "3 Year Extension", "type_of_opportunity": "Term Extension", "levers": "Resolution of Claims", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.38, "external_probability": "Med", "internal_complexity": "Med", "status": "Negotiations", "evaluation_level": null, "term_benefit": 50, "benefit_2026": 0, "benefit_2027": 0, "sum_26_27": 0}, {"row": 49, "num": 35, "project": "Falcon", "programme": "Trent 1000", "customer": "Gulf", "region": "MEA", "asks": "Additional 2 x A/C", "type_of_opportunity": "New a/c", "levers": "Resolution of Claims", "priority": 2, "spe_related": "yes", "no_of_spe": 2, "crp_pct": 0.38, "external_probability": "Low", "internal_complexity": "Med", "status": "Cancelled ", "evaluation_level": null, "term_benefit": 23.04, "benefit_2026": 1.92, "benefit_2027": 1.92, "sum_26_27": 3.84}, {"row": 50, "num": 36, "project": "Star", "programme": "Trent 1000", "customer": "Austral", "region": "MEA", "asks": "TCA Extension/Exit credit trade", "type_of_opportunity": "Term Extension", "levers": "Blended TCA Rate", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.61, "external_probability": "Med", "internal_complexity": "Med", "status": "Hopper", "evaluation_level": null, "term_benefit": 10, "benefit_2026": 2, "benefit_2027": 6, "sum_26_27": 8}, {"row": 51, "num": 37, "project": "Q8", "programme": "Trent 7000", "customer": "Kuwait", "region": "MEA", "asks": "Maintain SPE % ", "type_of_opportunity": "SPE increase", "levers": "Early Exit of a330-800", "priority": 3, "spe_related": "yes", "no_of_spe": null, "crp_pct": 0.04, "external_probability": "Low", "internal_complexity": "Med", "status": "Hopper", "evaluation_level": null, "term_benefit": 0, "benefit_2026": 0, "benefit_2027": 0, "sum_26_27": 0}, {"row": 52, "num": 38, "project": "Mau", "programme": "Trent XWB-84", "customer": "Mauritus", "region": "MEA", "asks": "Escalation increase", "type_of_opportunity": "TCA Amendments", "levers": null, "priority": 3, "spe_related": null, "no_of_spe": null, "crp_pct": 0.31, "external_probability": "High", "internal_complexity": "Low", "status": "Completed", "evaluation_level": null, "term_benefit": 1.3, "benefit_2026": 0.43333333333333335, "benefit_2027": 0, "sum_26_27": 0.43333333333333335}, {"row": 53, "num": 39, "project": "Dodo", "programme": "Trent 7000", "customer": "Mauritus", "region": "MEA", "asks": "Reduce NDSES Cost", "type_of_opportunity": "Cost Reduction", "levers": "Termination", "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": 0.54, "external_probability": "Med", "internal_complexity": "Med", "status": "ICT", "evaluation_level": null, "term_benefit": 0.38, "benefit_2026": 0, "benefit_2027": 0.076, "sum_26_27": 0.076}, {"row": 54, "num": 40, "project": "RW", "programme": "Trent 700", "customer": "Rwanda", "region": "MEA", "asks": "Min Term Extension", "type_of_opportunity": "Term Extension", "levers": null, "priority": 3, "spe_related": null, "no_of_spe": null, "crp_pct": 0.19, "external_probability": "Low", "internal_complexity": "Med", "status": "Hopper", "evaluation_level": null, "term_benefit": 12, "benefit_2026": 0, "benefit_2027": 0, "sum_26_27": 0}, {"row": 55, "num": 41, "project": "SAA", "programme": "Trent 700", "customer": "SAA", "region": "MEA", "asks": "Additional 7 X A/C", "type_of_opportunity": "New a/c", "levers": null, "priority": 3, "spe_related": null, "no_of_spe": null, "crp_pct": null, "external_probability": "Med", "internal_complexity": "Med", "status": "Cancelled ", "evaluation_level": null, "term_benefit": 54, "benefit_2026": 0, "benefit_2027": 0, "sum_26_27": 0}, {"row": 56, "num": 42, "project": "Star", "programme": "Trent 1000", "customer": "Austral", "region": "MEA", "asks": "Used SPE", "type_of_opportunity": "SPE increase", "levers": "Min-term extension", "priority": 1, "spe_related": "Med", "no_of_spe": "Med", "crp_pct": "ICT", "external_probability": "Low", "internal_complexity": "Low", "status": "Hopper", "evaluation_level": null, "term_benefit": 2, "benefit_2026": 0, "benefit_2027": 0, "sum_26_27": 0}, {"row": 57, "num": 43, "project": "Horus V", "programme": "Trent XWB-84", "customer": "Egypt", "region": "MEA", "asks": "EP Upsell", "type_of_opportunity": "Last 6 aircraft", "levers": "Upsell", "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": null, "external_probability": "Med", "internal_complexity": "Med", "status": "Hopper", "evaluation_level": null, "term_benefit": 23, "benefit_2026": null, "benefit_2027": null, "sum_26_27": 0}, {"row": 58, "num": 44, "project": "Pantheon", "programme": "Trent 900", "customer": "Emirates", "region": "MEA", "asks": "Retire SLA1", "type_of_opportunity": "TCA Amendments", "levers": "MRO trade", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": null, "external_probability": "Med", "internal_complexity": "High", "status": "Hopper", "evaluation_level": null, "term_benefit": 95, "benefit_2026": 0, "benefit_2027": 30, "sum_26_27": 30}, {"row": 59, "num": 45, "project": "Cotton", "programme": "RB211-524", "customer": "Silkway", "region": "MEA", "asks": "Extend Greentime agreement by 12 months", "type_of_opportunity": "TCA Amendments", "levers": "Expiry", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": null, "external_probability": "High", "internal_complexity": "Med", "status": "ICT", "evaluation_level": null, "term_benefit": 19, "benefit_2026": 17, "benefit_2027": 2, "sum_26_27": 19}]}, "L3": {"header_row": 14, "mapped_columns": {"num": "C(3)", "project": "D(4)", "programme": "E(5)", "customer": "F(6)", "region": "G(7)", "asks": "H(8)", "type_of_opportunity": "I(9)", "levers": "J(10)", "priority": "K(11)", "spe_related": "L(12)", "no_of_spe": "M(13)", "crp_pct": "N(14)", "external_probability": "O(15)", "internal_complexity": "P(16)", "status": "Q(17)", "evaluation_level": "R(18)", "term_benefit": "S(19)", "benefit_2026": "T(20)", "benefit_2027": "U(21)", "sum_26_27": "V(22)"}, "all_headers": [{"col": 3, "letter": "C", "name": "#"}, {"col": 4, "letter": "D", "name": "Project"}, {"col": 5, "letter": "E", "name": "Programme"}, {"col": 6, "letter": "F", "name": "Customer"}, {"col": 7, "letter": "G", "name": "Region"}, {"col": 8, "letter": "H", "name": "Asks"}, {"col": 9, "letter": "I", "name": "Type of Opportunity"}, {"col": 10, "letter": "J", "name": "Levers"}, {"col": 11, "letter": "K", "name": "Priority"}, {"col": 12, "letter": "L", "name": "SPE related"}, {"col": 13, "letter": "M", "name": "No,of SPE"}, {"col": 14, "letter": "N", "name": "CRP%"}, {"col": 15, "letter": "O", "name": "External Probability"}, {"col": 16, "letter": "P", "name": "Internal Complexity"}, {"col": 17, "letter": "Q", "name": "Status"}, {"col": 18, "letter": "R", "name": "Evaluation Level"}, {"col": 19, "letter": "S", "name": "Term Benefit"}, {"col": 20, "letter": "T", "name": "2026"}, {"col": 21, "letter": "U", "name": "2027"}, {"col": 22, "letter": "V", "name": "Sum of 26/27"}, {"col": 26, "letter": "Z", "name": "2025"}, {"col": 27, "letter": "AA", "name": "2026"}, {"col": 28, "letter": "AB", "name": "2027"}, {"col": 29, "letter": "AC", "name": "2028"}, {"col": 30, "letter": "AD", "name": "2029"}, {"col": 31, "letter": "AE", "name": "2030"}, {"col": 32, "letter": "AF", "name": "2025"}, {"col": 33, "letter": "AG", "name": "2026"}, {"col": 34, "letter": "AH", "name": "2027"}, {"col": 35, "letter": "AI", "name": "2028"}, {"col": 36, "letter": "AJ", "name": "2029"}, {"col": 37, "letter": "AK", "name": "2030"}, {"col": 39, "letter": "AM", "name": "2025"}, {"col": 40, "letter": "AN", "name": "2026"}, {"col": 41, "letter": "AO", "name": "2027"}, {"col": 42, "letter": "AP", "name": "2028"}, {"col": 43, "letter": "AQ", "name": "2029"}, {"col": 44, "letter": "AR", "name": "2030"}, {"col": 45, "letter": "AS", "name": "2025"}, {"col": 46, "letter": "AT", "name": "2026"}, {"col": 47, "letter": "AU", "name": "2027"}, {"col": 48, "letter": "AV", "name": "2028"}, {"col": 49, "letter": "AW", "name": "2029"}, {"col": 50, "letter": "AX", "name": "2030"}, {"col": 52, "letter": "AZ", "name": "Deal Benefits"}, {"col": 53, "letter": "BA", "name": "Expected Deal Costs"}, {"col": 54, "letter": "BB", "name": "In-year Profit Impact"}, {"col": 55, "letter": "BC", "name": "5YP Profit Improvement"}, {"col": 56, "letter": "BD", "name": "Term Profit Imprvement"}, {"col": 57, "letter": "BE", "name": "Total CRP Term Revnue"}, {"col": 58, "letter": "BF", "name": "Total CRP Term Margin"}, {"col": 59, "letter": "BG", "name": "CRP Margin %"}, {"col": 61, "letter": "BI", "name": "Term Revenue"}, {"col": 62, "letter": "BJ", "name": "Term Cost"}, {"col": 63, "letter": "BK", "name": "Term Profit"}, {"col": 67, "letter": "BO", "name": "Account Management"}, {"col": 68, "letter": "BP", "name": "Contract Management"}, {"col": 69, "letter": "BQ", "name": "Service Business"}, {"col": 70, "letter": "BR", "name": "Business Evalautaion"}, {"col": 71, "letter": "BS", "name": "Sales & Contracting"}, {"col": 72, "letter": "BT", "name": "Customer Operations"}], "hidden_columns": [], "hidden_rows_count": 0, "row_count_nonblank": 45, "sum_benefit_2026": 159.0461, "sum_benefit_2027": 183.9927, "rows": [{"row": 15, "num": 1, "project": "FiniQ II", "programme": "Trent XWB-84", "customer": "Emirates", "region": "MEA", "asks": "3 year-extension + LRU Management + 23 a/c", "type_of_opportunity": "TCA Amendments", "levers": "XWB MRO -  OWS Support - 97k & EP Pricing\n", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0, "external_probability": "High", "internal_complexity": "Low", "status": "Completed", "evaluation_level": null, "term_benefit": 341.88, "benefit_2026": null, "benefit_2027": null, "sum_26_27": 0}, {"row": 16, "num": 2, "project": "FiniQ III", "programme": "Trent XWB-84", "customer": "Emirates", "region": "MEA", "asks": "OWS - eliminate $20k remedy", "type_of_opportunity": "Cost Reduction", "levers": "New Campaign", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0, "external_probability": "High", "internal_complexity": "Low", "status": "Contracting", "evaluation_level": null, "term_benefit": 54, "benefit_2026": 20.8, "benefit_2027": 20.8, "sum_26_27": 41.6}, {"row": 17, "num": 3, "project": "IDK", "programme": "Trent XWB-84", "customer": "Emirates", "region": "MEA", "asks": "Additional 3 x SPE (10 %to 12%)", "type_of_opportunity": "SPE increase", "levers": "New Campaign", "priority": 2, "spe_related": "yes", "no_of_spe": 3, "crp_pct": 0, "external_probability": "Low", "internal_complexity": "Med", "status": "Hopper", "evaluation_level": null, "term_benefit": 50, "benefit_2026": null, "benefit_2027": null, "sum_26_27": 0}, {"row": 18, "num": 4, "project": "IDK", "programme": "Trent XWB-84", "customer": "Emirates", "region": "MEA", "asks": "Eliminate NDSES Cost via DAT", "type_of_opportunity": "Cost Reduction", "levers": "New Campaign/Settlement", "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": 0, "external_probability": "Med", "internal_complexity": "Med", "status": "ICT", "evaluation_level": null, "term_benefit": 11.4, "benefit_2026": null, "benefit_2027": null, "sum_26_27": 0}, {"row": 19, "num": 5, "project": "IDK", "programme": "Trent XWB-84", "customer": "Emirates", "region": "MEA", "asks": "Increase in escalation from 2% to 3%", "type_of_opportunity": "TCA Amendments", "levers": "XWB MRO -  OWS Support - 97k & EP Pricing\n", "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": 0, "external_probability": "Low", "internal_complexity": "Low", "status": "Hopper", "evaluation_level": null, "term_benefit": 170, "benefit_2026": null, "benefit_2027": null, "sum_26_27": 0}, {"row": 20, "num": 6, "project": "IDK", "programme": "Trent XWB-84", "customer": "Emirates", "region": "MEA", "asks": "Introduce Precedent Matrix", "type_of_opportunity": "TCA Amendments", "levers": "XWB MRO -  OWS Support - 97k & EP Pricing\n", "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": 0, "external_probability": "Low", "internal_complexity": "Med", "status": "Hopper", "evaluation_level": null, "term_benefit": 50, "benefit_2026": null, "benefit_2027": null, "sum_26_27": 0}, {"row": 21, "num": 7, "project": "Selassi", "programme": "Trent XWB-84", "customer": "Ethiopia", "region": "MEA", "asks": "SPE Pull forward ", "type_of_opportunity": "TCA Amendments", "levers": "AOG Risk", "priority": 1, "spe_related": "yes", "no_of_spe": 1, "crp_pct": 0.49, "external_probability": "Low", "internal_complexity": "Low", "status": "Completed", "evaluation_level": null, "term_benefit": 10, "benefit_2026": 1, "benefit_2027": 1, "sum_26_27": 2}, {"row": 22, "num": 8, "project": "Selassi", "programme": "Trent XWB-84", "customer": "Ethiopia", "region": "MEA", "asks": "Incremental SPE ", "type_of_opportunity": "SPE increase", "levers": "2 Addition a/c", "priority": 1, "spe_related": "yes", "no_of_spe": 1, "crp_pct": 0, "external_probability": "High", "internal_complexity": "Low", "status": "Negotiations", "evaluation_level": null, "term_benefit": 0, "benefit_2026": 0, "benefit_2027": 0, "sum_26_27": 0}, {"row": 23, "num": 9, "project": "Selassi", "programme": "Trent 1000", "customer": "Ethiopia", "region": "MEA", "asks": "Incremental SPE ", "type_of_opportunity": "SPE increase", "levers": "Campaign", "priority": 1, "spe_related": "yes", "no_of_spe": null, "crp_pct": 0.54, "external_probability": "Med", "internal_complexity": "Low", "status": "Hopper", "evaluation_level": null, "term_benefit": 33, "benefit_2026": 2.75, "benefit_2027": 2.75, "sum_26_27": 5.5}, {"row": 24, "num": 10, "project": "Selassi", "programme": "Trent 1000", "customer": "Ethiopia", "region": "MEA", "asks": "Min Term Extension (life)", "type_of_opportunity": "Term Extension", "levers": "Campaign", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.54, "external_probability": "Med", "internal_complexity": "Med", "status": "Hopper", "evaluation_level": null, "term_benefit": 43, "benefit_2026": 5.92, "benefit_2027": 0, "sum_26_27": 5.92}, {"row": 25, "num": 11, "project": "Selassi II", "programme": "Trent XWB-84", "customer": "Ethiopia", "region": "MEA", "asks": "Min Term Extension", "type_of_opportunity": "Term Extension", "levers": "Campaign", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.49, "external_probability": "Med", "internal_complexity": "Med", "status": "Hopper", "evaluation_level": null, "term_benefit": 30, "benefit_2026": 0, "benefit_2027": 30, "sum_26_27": 30}, {"row": 26, "num": 12, "project": "Selassi II", "programme": "Trent XWB-84", "customer": "Ethiopia", "region": "MEA", "asks": "Increase escalation", "type_of_opportunity": "TCA Amendments", "levers": "Campaign", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.49, "external_probability": "Low", "internal_complexity": "Low", "status": "Hopper", "evaluation_level": null, "term_benefit": 11.84, "benefit_2026": 2.368, "benefit_2027": 2.368, "sum_26_27": 4.736}, {"row": 27, "num": 13, "project": "Selassi II", "programme": "Trent XWB-84", "customer": "Ethiopia", "region": "MEA", "asks": "Credit Back Removal", "type_of_opportunity": "TCA Amendments", "levers": "Campaign", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.49, "external_probability": "Med", "internal_complexity": "Med", "status": "Hopper", "evaluation_level": null, "term_benefit": 4.44, "benefit_2026": 1.48, "benefit_2027": 1.48, "sum_26_27": 2.96}, {"row": 28, "num": 14, "project": "Burgundy", "programme": "Trent XWB-97", "customer": "Qatar", "region": "MEA", "asks": "SPE Pull-forward", "type_of_opportunity": "TCA Amendments", "levers": "Increased SPE Discount", "priority": 1, "spe_related": "yes", "no_of_spe": null, "crp_pct": 0.87, "external_probability": "High", "internal_complexity": "Low", "status": "Completed", "evaluation_level": null, "term_benefit": 90, "benefit_2026": 0, "benefit_2027": 0, "sum_26_27": 0}, {"row": 29, "num": 15, "project": "Burgundy II", "programme": "Trent XWB-84", "customer": "Qatar", "region": "MEA", "asks": "Exit for convenience removal -84", "type_of_opportunity": "TCA Amendments", "levers": "Term Extension ", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.77, "external_probability": "High", "internal_complexity": "High", "status": "Contracting", "evaluation_level": null, "term_benefit": 68.08, "benefit_2026": 68.08, "benefit_2027": 0, "sum_26_27": 68.08}, {"row": 30, "num": 16, "project": "Burgundy III", "programme": "Trent XWB-97", "customer": "Qatar", "region": "MEA", "asks": "Exit for convenience removal -97", "type_of_opportunity": "TCA Amendments", "levers": "Term Extension ", "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": 0.87, "external_probability": "Low", "internal_complexity": "High", "status": "Hopper", "evaluation_level": null, "term_benefit": 45.88, "benefit_2026": 0, "benefit_2027": 45.88, "sum_26_27": 45.88}, {"row": 31, "num": 17, "project": "QA", "programme": "Trent 500", "customer": "Qatar Amiri", "region": "MEA", "asks": "Sell 1 x SPE", "type_of_opportunity": "SPE increase", "levers": "Upsell", "priority": 1, "spe_related": "yes", "no_of_spe": 1, "crp_pct": 0, "external_probability": "Med", "internal_complexity": "Med", "status": "Contracting", "evaluation_level": null, "term_benefit": 7.5, "benefit_2026": 5, "benefit_2027": 0, "sum_26_27": 5}, {"row": 32, "num": 18, "project": "Horus", "programme": "Trent 1000", "customer": "Egypt", "region": "MEA", "asks": "Correct the CRP!!", "type_of_opportunity": "TCA Amendments", "levers": "Min Term extension", "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": 0.18, "external_probability": "Med", "internal_complexity": "Low", "status": "ICT", "evaluation_level": null, "term_benefit": 0, "benefit_2026": 0, "benefit_2027": 0, "sum_26_27": 0}, {"row": 33, "num": 19, "project": "Horus II", "programme": "Trent 700", "customer": "Egypt", "region": "MEA", "asks": "Term Extension ", "type_of_opportunity": "Term Extension", "levers": "Existing Pricing", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.11, "external_probability": "High", "internal_complexity": "Med", "status": "ICT", "evaluation_level": null, "term_benefit": 7.4, "benefit_2026": 0, "benefit_2027": 0, "sum_26_27": 0}, {"row": 34, "num": 20, "project": "Horus III", "programme": "Trent 1000", "customer": "Egypt", "region": "MEA", "asks": "Transportation Service Buy Out", "type_of_opportunity": "TCA Amendments", "levers": null, "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": 0.18, "external_probability": "Low", "internal_complexity": "Med", "status": "Cancelled ", "evaluation_level": null, "term_benefit": 138.24, "benefit_2026": 0, "benefit_2027": 20, "sum_26_27": 20}, {"row": 35, "num": 21, "project": "Horus IV", "programme": "Trent XWB-84", "customer": "Egypt", "region": "MEA", "asks": "PAS Upsell", "type_of_opportunity": "Service Upsells", "levers": null, "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": null, "external_probability": "Low", "internal_complexity": "Low", "status": "Cancelled ", "evaluation_level": null, "term_benefit": 7.2, "benefit_2026": 0.6, "benefit_2027": 0.6, "sum_26_27": 1.2}, {"row": 36, "num": 22, "project": "Turk", "programme": "Trent 700", "customer": "Turkmenistan", "region": "MEA", "asks": "SelectCare Upsell", "type_of_opportunity": "Service Upsells", "levers": null, "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": null, "external_probability": "Low", "internal_complexity": "Med", "status": "Cancelled ", "evaluation_level": null, "term_benefit": 30, "benefit_2026": 0, "benefit_2027": 7.5, "sum_26_27": 7.5}, {"row": 37, "num": 23, "project": "Qanot", "programme": "Trent 700", "customer": "Qanot Sharq", "region": "MEA", "asks": "TCA Life Upsell 2 x A330CEO", "type_of_opportunity": "New a/c", "levers": null, "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": null, "external_probability": "Low", "internal_complexity": "Med", "status": "Cancelled ", "evaluation_level": null, "term_benefit": 36, "benefit_2026": 0, "benefit_2027": 0, "sum_26_27": 0}, {"row": 38, "num": 24, "project": "SW", "programme": "RB211-524", "customer": "Silkway", "region": "MEA", "asks": "Increase in Green Time by 12k cycles", "type_of_opportunity": "TCA Amendments", "levers": null, "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0, "external_probability": "Low", "internal_complexity": "High", "status": "Cancelled ", "evaluation_level": null, "term_benefit": 25.2, "benefit_2026": 12.6, "benefit_2027": 12.6, "sum_26_27": 25.2}, {"row": 39, "num": 25, "project": "Sen", "programme": "Trent 7000", "customer": "Senegal", "region": "MEA", "asks": "Collect debt ", "type_of_opportunity": "Other", "levers": null, "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": 0.54, "external_probability": "Low", "internal_complexity": "Med", "status": "Cancelled ", "evaluation_level": null, "term_benefit": 10, "benefit_2026": 0, "benefit_2027": 10, "sum_26_27": 10}, {"row": 40, "num": 26, "project": "Viva Algeria", "programme": "Trent 7000", "customer": "Air Algerie", "region": "MEA", "asks": "Additional SPE", "type_of_opportunity": "SPE increase", "levers": null, "priority": 1, "spe_related": "yes", "no_of_spe": null, "crp_pct": null, "external_probability": "High", "internal_complexity": "Low", "status": "Completed", "evaluation_level": null, "term_benefit": 20, "benefit_2026": 0, "benefit_2027": 20, "sum_26_27": 20}, {"row": 41, "num": 27, "project": "Dhabi I", "programme": "Trent XWB-97", "customer": "Etihad", "region": "MEA", "asks": "TCA Reconciliation (CRP Improvement)", "type_of_opportunity": "TCA Amendments", "levers": null, "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.09, "external_probability": "High", "internal_complexity": "Med", "status": "Completed", "evaluation_level": null, "term_benefit": 60, "benefit_2026": 5, "benefit_2027": 1, "sum_26_27": 6}, {"row": 42, "num": 28, "project": "Dhabi II", "programme": "Trent XWB-97", "customer": "Etihad", "region": "MEA", "asks": "Transportation Service Buy Out for first 12", "type_of_opportunity": "TCA Amendments", "levers": null, "priority": 3, "spe_related": null, "no_of_spe": null, "crp_pct": 0.09, "external_probability": "Low", "internal_complexity": "High", "status": "Hopper", "evaluation_level": null, "term_benefit": 17.76, "benefit_2026": 1.48, "benefit_2027": 1.48, "sum_26_27": 2.96}, {"row": 43, "num": 29, "project": "Saud", "programme": "Trent 700", "customer": "Saudia", "region": "MEA", "asks": "Regional Fleet NDSES improvement", "type_of_opportunity": "Cost Reduction", "levers": null, "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.31, "external_probability": "High", "internal_complexity": "Med", "status": "Completed", "evaluation_level": null, "term_benefit": null, "benefit_2026": 0, "benefit_2027": 0, "sum_26_27": 0}, {"row": 44, "num": 30, "project": "Saud II", "programme": "Trent 700", "customer": "Saudia", "region": "MEA", "asks": "Extend Classic", "type_of_opportunity": "Term Extension", "levers": "Term Extension ", "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": 0.29, "external_probability": "Low", "internal_complexity": "Med", "status": "Hopper", "evaluation_level": null, "term_benefit": 21.46, "benefit_2026": 1.788333, "benefit_2027": 1.78833, "sum_26_27": 3.576663}, {"row": 45, "num": 31, "project": "Tanz", "programme": "Trent 1000", "customer": "Tanzania", "region": "MEA", "asks": "Additional SPE", "type_of_opportunity": "SPE increase", "levers": null, "priority": 1, "spe_related": "yes", "no_of_spe": null, "crp_pct": 0.28, "external_probability": "Med", "internal_complexity": "Low", "status": "Completed", "evaluation_level": null, "term_benefit": 25, "benefit_2026": 25, "benefit_2027": null, "sum_26_27": 25}, {"row": 46, "num": 32, "project": "Tanz", "programme": "Trent 1000", "customer": "Tanzania", "region": "MEA", "asks": "NDSES CRP", "type_of_opportunity": "Cost Reduction", "levers": null, "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.28, "external_probability": "Med", "internal_complexity": "Med", "status": "Completed", "evaluation_level": null, "term_benefit": 3.552, "benefit_2026": 0.7104, "benefit_2027": 0.7104, "sum_26_27": 1.4208}, {"row": 47, "num": 33, "project": "Falcon", "programme": "Trent 1000", "customer": "Gulf", "region": "MEA", "asks": "NDSES improvement through SPE sales ", "type_of_opportunity": "Cost Reduction", "levers": "Resolution of Claims", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.38, "external_probability": "Low", "internal_complexity": "Med", "status": "Negotiations", "evaluation_level": null, "term_benefit": 5.88, "benefit_2026": 0.84, "benefit_2027": 0.84, "sum_26_27": 1.68}, {"row": 48, "num": 34, "project": "Falcon", "programme": "Trent 1000", "customer": "Gulf", "region": "MEA", "asks": "3 Year Extension", "type_of_opportunity": "Term Extension", "levers": "Resolution of Claims", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.38, "external_probability": "Med", "internal_complexity": "Med", "status": "Negotiations", "evaluation_level": null, "term_benefit": 12, "benefit_2026": 1.2, "benefit_2027": 1.2, "sum_26_27": 2.4}, {"row": 49, "num": 35, "project": "Falcon", "programme": "Trent 1000", "customer": "Gulf", "region": "MEA", "asks": "Additional 2 x A/C", "type_of_opportunity": "New a/c", "levers": "Resolution of Claims", "priority": 2, "spe_related": "yes", "no_of_spe": 2, "crp_pct": 0.38, "external_probability": "Low", "internal_complexity": "Med", "status": "Cancelled ", "evaluation_level": null, "term_benefit": 23.04, "benefit_2026": 1.92, "benefit_2027": 1.92, "sum_26_27": 3.84}, {"row": 50, "num": 36, "project": "Star", "programme": "Trent 1000", "customer": "Austral", "region": "MEA", "asks": "TCA Extension/Exit credit trade", "type_of_opportunity": "Term Extension", "levers": "Blended TCA Rate", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": 0.61, "external_probability": "Med", "internal_complexity": "Med", "status": "Hopper", "evaluation_level": null, "term_benefit": 4.8, "benefit_2026": 0, "benefit_2027": 0, "sum_26_27": 0}, {"row": 51, "num": 37, "project": "Q8", "programme": "Trent 7000", "customer": "Kuwait", "region": "MEA", "asks": "Maintain SPE % ", "type_of_opportunity": "SPE increase", "levers": "Early Exit of a330-800", "priority": 3, "spe_related": "yes", "no_of_spe": null, "crp_pct": 0.04, "external_probability": "Low", "internal_complexity": "Med", "status": "Hopper", "evaluation_level": null, "term_benefit": 0, "benefit_2026": 0, "benefit_2027": 0, "sum_26_27": 0}, {"row": 52, "num": 38, "project": "Mau", "programme": "Trent XWB-84", "customer": "Mauritus", "region": "MEA", "asks": "Escalation increase", "type_of_opportunity": "TCA Amendments", "levers": null, "priority": 3, "spe_related": null, "no_of_spe": null, "crp_pct": 0.31, "external_probability": "High", "internal_complexity": "Low", "status": "Completed", "evaluation_level": null, "term_benefit": 1.3, "benefit_2026": 0.43333333333333335, "benefit_2027": 0, "sum_26_27": 0.43333333333333335}, {"row": 53, "num": 39, "project": "Dodo", "programme": "Trent 7000", "customer": "Mauritus", "region": "MEA", "asks": "Reduce NDSES Cost", "type_of_opportunity": "Cost Reduction", "levers": "Termination", "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": 0.54, "external_probability": "Med", "internal_complexity": "Med", "status": "ICT", "evaluation_level": null, "term_benefit": 0.38, "benefit_2026": 0.076, "benefit_2027": 0.076, "sum_26_27": 0.152}, {"row": 54, "num": 40, "project": "RW", "programme": "Trent 700", "customer": "Rwanda", "region": "MEA", "asks": "Min Term Extension", "type_of_opportunity": "Term Extension", "levers": null, "priority": 3, "spe_related": null, "no_of_spe": null, "crp_pct": 0.19, "external_probability": "Low", "internal_complexity": "Med", "status": "Hopper", "evaluation_level": null, "term_benefit": 12, "benefit_2026": 0, "benefit_2027": 0, "sum_26_27": 0}, {"row": 55, "num": 41, "project": "SAA", "programme": "Trent 700", "customer": "SAA", "region": "MEA", "asks": "Additional 7 X A/C", "type_of_opportunity": "New a/c", "levers": null, "priority": 3, "spe_related": null, "no_of_spe": null, "crp_pct": null, "external_probability": "Med", "internal_complexity": "Med", "status": "Cancelled ", "evaluation_level": null, "term_benefit": 54, "benefit_2026": 0, "benefit_2027": 0, "sum_26_27": 0}, {"row": 56, "num": 42, "project": "Star", "programme": "Trent 1000", "customer": "Austral", "region": "MEA", "asks": "Used SPE", "type_of_opportunity": "SPE increase", "levers": "Min-term extension", "priority": 1, "spe_related": "Med", "no_of_spe": "Med", "crp_pct": "ICT", "external_probability": "Low", "internal_complexity": "Low", "status": "Hopper", "evaluation_level": null, "term_benefit": null, "benefit_2026": null, "benefit_2027": null, "sum_26_27": 0}, {"row": 57, "num": 43, "project": "Horus V", "programme": "Trent XWB-84", "customer": "Egypt", "region": "MEA", "asks": "EP Upsell", "type_of_opportunity": "Last 6 aircraft", "levers": "Upsell", "priority": 2, "spe_related": null, "no_of_spe": null, "crp_pct": null, "external_probability": "Med", "internal_complexity": "Med", "status": "Hopper", "evaluation_level": null, "term_benefit": null, "benefit_2026": null, "benefit_2027": null, "sum_26_27": 0}, {"row": 58, "num": 44, "project": "Pantheon", "programme": "Trent 900", "customer": "Emirates", "region": "MEA", "asks": "Retire SLA1", "type_of_opportunity": "TCA Amendments", "levers": "MRO trade", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": null, "external_probability": "Med", "internal_complexity": "High", "status": "Hopper", "evaluation_level": null, "term_benefit": null, "benefit_2026": null, "benefit_2027": null, "sum_26_27": 0}, {"row": 59, "num": 45, "project": "Cotton", "programme": "RB211-524", "customer": "Silkway", "region": "MEA", "asks": "Extend Greentime agreement by 12 months", "type_of_opportunity": "TCA Amendments", "levers": "Expiry", "priority": 1, "spe_related": null, "no_of_spe": null, "crp_pct": null, "external_probability": "High", "internal_complexity": "Med", "status": "ICT", "evaluation_level": null, "term_benefit": null, "benefit_2026": null, "benefit_2027": null, "sum_26_27": 0}]}}, "timeline": {"project_count": 28, "milestone_type_counts": {"Idea Generation": 28, "Approval to Launch": 28, "Strategy Approval": 28, "BE Generated": 27, "Approval": 28, "Negotiation Strategy": 28, "Proposal Submitted": 28, "Proposal Signed": 26}, "projects": [{"project": "FiniQ II", "customer": "Emirates", "milestones": [{"date": "2025-01-06", "milestone": "Idea Generation"}, {"date": "2025-05-26", "milestone": "Approval to Launch"}, {"date": "2025-06-16", "milestone": "Strategy Approval"}, {"date": "2025-07-21", "milestone": "BE Generated"}, {"date": "2025-08-25", "milestone": "Approval"}, {"date": "2025-09-08", "milestone": "Negotiation Strategy"}, {"date": "2025-09-22", "milestone": "Proposal Submitted"}, {"date": "2025-12-22", "milestone": "Proposal Signed"}]}, {"project": "FiniQ III", "customer": "Emirates", "milestones": [{"date": "2024-12-30", "milestone": "Idea Generation"}, {"date": "2025-05-19", "milestone": "Approval to Launch"}, {"date": "2025-06-16", "milestone": "Strategy Approval"}, {"date": "2025-07-21", "milestone": "BE Generated"}, {"date": "2025-08-25", "milestone": "Approval"}, {"date": "2025-09-08", "milestone": "Negotiation Strategy"}, {"date": "2025-09-22", "milestone": "Proposal Submitted"}, {"date": "2025-12-22", "milestone": "Proposal Signed"}]}, {"project": "IDK", "customer": "Emirates", "milestones": [{"date": "2025-01-06", "milestone": "Idea Generation"}, {"date": "2025-05-19", "milestone": "Approval to Launch"}, {"date": "2025-06-16", "milestone": "Strategy Approval"}, {"date": "2025-07-21", "milestone": "BE Generated"}, {"date": "2025-08-18", "milestone": "Approval"}, {"date": "2025-09-15", "milestone": "Negotiation Strategy"}, {"date": "2025-10-20", "milestone": "Proposal Submitted"}, {"date": "2025-11-17", "milestone": "Proposal Signed"}]}, {"project": "Selassi", "customer": "Ethiopia", "milestones": [{"date": "2025-04-21", "milestone": "Idea Generation"}, {"date": "2025-09-29", "milestone": "Approval to Launch"}, {"date": "2025-10-27", "milestone": "Strategy Approval"}, {"date": "2026-01-26", "milestone": "Approval"}, {"date": "2026-02-23", "milestone": "Negotiation Strategy"}, {"date": "2026-03-30", "milestone": "Proposal Submitted"}, {"date": "2026-06-01", "milestone": "Proposal Signed"}]}, {"project": "Selassi II", "customer": "Ethiopia", "milestones": [{"date": "2024-12-30", "milestone": "Idea Generation"}, {"date": "2025-03-17", "milestone": "Approval to Launch"}, {"date": "2025-04-14", "milestone": "Strategy Approval"}, {"date": "2025-07-21", "milestone": "BE Generated"}, {"date": "2025-08-18", "milestone": "Approval"}, {"date": "2025-08-25", "milestone": "Negotiation Strategy"}, {"date": "2025-09-08", "milestone": "Proposal Submitted"}, {"date": "2025-09-29", "milestone": "Proposal Signed"}]}, {"project": "Burgundy", "customer": "Qatar", "milestones": [{"date": "2025-04-21", "milestone": "Idea Generation"}, {"date": "2025-05-19", "milestone": "Approval to Launch"}, {"date": "2025-06-16", "milestone": "Strategy Approval"}, {"date": "2025-07-21", "milestone": "BE Generated"}, {"date": "2025-08-18", "milestone": "Approval"}, {"date": "2025-09-15", "milestone": "Negotiation Strategy"}, {"date": "2025-10-20", "milestone": "Proposal Submitted"}]}, {"project": "Burgundy II", "customer": "Qatar", "milestones": [{"date": "2025-04-21", "milestone": "Idea Generation"}, {"date": "2025-05-19", "milestone": "Approval to Launch"}, {"date": "2025-06-16", "milestone": "Strategy Approval"}, {"date": "2025-07-21", "milestone": "BE Generated"}, {"date": "2025-07-28", "milestone": "Proposal Submitted"}, {"date": "2025-08-18", "milestone": "Approval"}, {"date": "2025-09-15", "milestone": "Negotiation Strategy"}]}, {"project": "Burgundy III", "customer": "Qatar", "milestones": [{"date": "2025-04-21", "milestone": "Idea Generation"}, {"date": "2025-05-19", "milestone": "Approval to Launch"}, {"date": "2025-06-16", "milestone": "Strategy Approval"}, {"date": "2025-07-21", "milestone": "BE Generated"}, {"date": "2025-08-18", "milestone": "Approval"}, {"date": "2025-09-15", "milestone": "Negotiation Strategy"}, {"date": "2025-10-20", "milestone": "Proposal Submitted"}, {"date": "2025-11-17", "milestone": "Proposal Signed"}]}, {"project": "QA", "customer": "Qatar Amiri", "milestones": [{"date": "2025-02-17", "milestone": "Idea Generation"}, {"date": "2025-03-17", "milestone": "Approval to Launch"}, {"date": "2025-04-21", "milestone": "Strategy Approval"}, {"date": "2025-05-19", "milestone": "BE Generated"}, {"date": "2025-06-16", "milestone": "Approval"}, {"date": "2025-06-30", "milestone": "Negotiation Strategy"}, {"date": "2025-07-28", "milestone": "Proposal Submitted"}, {"date": "2025-09-01", "milestone": "Proposal Signed"}]}, {"project": "Horus", "customer": "Egypt", "milestones": [{"date": "2025-04-21", "milestone": "Idea Generation"}, {"date": "2025-05-19", "milestone": "Approval to Launch"}, {"date": "2025-06-16", "milestone": "Strategy Approval"}, {"date": "2025-07-21", "milestone": "BE Generated"}, {"date": "2025-08-18", "milestone": "Approval"}, {"date": "2025-09-15", "milestone": "Negotiation Strategy"}, {"date": "2025-10-20", "milestone": "Proposal Submitted"}, {"date": "2025-11-17", "milestone": "Proposal Signed"}]}, {"project": "Horus II", "customer": "Egypt", "milestones": [{"date": "2025-04-21", "milestone": "Idea Generation"}, {"date": "2025-05-19", "milestone": "Approval to Launch"}, {"date": "2025-06-16", "milestone": "Strategy Approval"}, {"date": "2025-07-21", "milestone": "BE Generated"}, {"date": "2025-08-18", "milestone": "Approval"}, {"date": "2025-09-15", "milestone": "Negotiation Strategy"}, {"date": "2025-10-20", "milestone": "Proposal Submitted"}, {"date": "2025-11-17", "milestone": "Proposal Signed"}]}, {"project": "Horus III", "customer": "Egypt", "milestones": [{"date": "2025-04-21", "milestone": "Idea Generation"}, {"date": "2025-05-19", "milestone": "Approval to Launch"}, {"date": "2025-06-16", "milestone": "Strategy Approval"}, {"date": "2025-07-21", "milestone": "BE Generated"}, {"date": "2025-08-18", "milestone": "Approval"}, {"date": "2025-09-15", "milestone": "Negotiation Strategy"}, {"date": "2025-10-20", "milestone": "Proposal Submitted"}, {"date": "2025-11-17", "milestone": "Proposal Signed"}]}, {"project": "Horus IV", "customer": "Egypt", "milestones": [{"date": "2025-04-21", "milestone": "Idea Generation"}, {"date": "2025-05-19", "milestone": "Approval to Launch"}, {"date": "2025-06-16", "milestone": "Strategy Approval"}, {"date": "2025-07-21", "milestone": "BE Generated"}, {"date": "2025-08-18", "milestone": "Approval"}, {"date": "2025-09-15", "milestone": "Negotiation Strategy"}, {"date": "2025-10-20", "milestone": "Proposal Submitted"}, {"date": "2025-11-17", "milestone": "Proposal Signed"}]}, {"project": "Turk", "customer": "Turkmenistan", "milestones": [{"date": "2025-04-21", "milestone": "Idea Generation"}, {"date": "2025-05-19", "milestone": "Approval to Launch"}, {"date": "2025-06-16", "milestone": "Strategy Approval"}, {"date": "2025-07-21", "milestone": "BE Generated"}, {"date": "2025-08-18", "milestone": "Approval"}, {"date": "2025-09-15", "milestone": "Negotiation Strategy"}, {"date": "2025-10-20", "milestone": "Proposal Submitted"}, {"date": "2025-11-17", "milestone": "Proposal Signed"}]}, {"project": "Qanot", "customer": "Qanot Sharq", "milestones": [{"date": "2024-12-30", "milestone": "Idea Generation"}, {"date": "2025-05-19", "milestone": "Approval to Launch"}, {"date": "2025-06-16", "milestone": "Strategy Approval"}, {"date": "2025-07-21", "milestone": "BE Generated"}, {"date": "2025-08-18", "milestone": "Approval"}, {"date": "2025-09-15", "milestone": "Negotiation Strategy"}, {"date": "2025-10-20", "milestone": "Proposal Submitted"}, {"date": "2025-11-17", "milestone": "Proposal Signed"}]}, {"project": "SW", "customer": "Silkway", "milestones": [{"date": "2025-04-21", "milestone": "Idea Generation"}, {"date": "2025-05-19", "milestone": "Approval to Launch"}, {"date": "2025-06-16", "milestone": "Strategy Approval"}, {"date": "2025-07-21", "milestone": "BE Generated"}, {"date": "2025-08-18", "milestone": "Approval"}, {"date": "2025-09-15", "milestone": "Negotiation Strategy"}, {"date": "2025-10-20", "milestone": "Proposal Submitted"}, {"date": "2025-11-17", "milestone": "Proposal Signed"}]}, {"project": "Sen", "customer": "Senegal", "milestones": [{"date": "2025-03-10", "milestone": "Approval to Launch"}, {"date": "2025-06-16", "milestone": "Strategy Approval"}, {"date": "2025-07-28", "milestone": "BE Generated"}, {"date": "2025-08-25", "milestone": "Approval"}, {"date": "2025-09-15", "milestone": "Negotiation Strategy"}, {"date": "2025-10-20", "milestone": "Proposal Submitted"}, {"date": "2025-11-17", "milestone": "Proposal Signed"}, {"date": "2025-12-29", "milestone": "Idea Generation"}]}, {"project": "Viva Algeria", "customer": "Air Algerie", "milestones": [{"date": "2025-04-21", "milestone": "Idea Generation"}, {"date": "2025-05-19", "milestone": "Approval to Launch"}, {"date": "2025-06-16", "milestone": "Strategy Approval"}, {"date": "2025-07-21", "milestone": "BE Generated"}, {"date": "2025-08-18", "milestone": "Approval"}, {"date": "2025-09-15", "milestone": "Negotiation Strategy"}, {"date": "2025-10-20", "milestone": "Proposal Submitted"}, {"date": "2025-11-17", "milestone": "Proposal Signed"}]}, {"project": "Dhabi I", "customer": "Etihad", "milestones": [{"date": "2025-01-27", "milestone": "Approval to Launch"}, {"date": "2025-02-24", "milestone": "Strategy Approval"}, {"date": "2025-03-31", "milestone": "BE Generated"}, {"date": "2025-04-14", "milestone": "Approval"}, {"date": "2025-04-28", "milestone": "Negotiation Strategy"}, {"date": "2025-05-26", "milestone": "Proposal Submitted"}, {"date": "2025-08-25", "milestone": "Proposal Signed"}, {"date": "2025-12-29", "milestone": "Idea Generation"}]}, {"project": "Dhabi II", "customer": "Etihad", "milestones": [{"date": "2024-12-30", "milestone": "Idea Generation"}, {"date": "2025-05-19", "milestone": "Approval to Launch"}, {"date": "2025-06-16", "milestone": "Strategy Approval"}, {"date": "2025-07-21", "milestone": "BE Generated"}, {"date": "2025-08-18", "milestone": "Approval"}, {"date": "2025-09-15", "milestone": "Negotiation Strategy"}, {"date": "2025-10-20", "milestone": "Proposal Submitted"}, {"date": "2025-11-17", "milestone": "Proposal Signed"}]}, {"project": "Saud", "customer": "Saudia", "milestones": [{"date": "2025-04-21", "milestone": "Idea Generation"}, {"date": "2025-05-19", "milestone": "Approval to Launch"}, {"date": "2025-06-16", "milestone": "Strategy Approval"}, {"date": "2025-07-21", "milestone": "BE Generated"}, {"date": "2025-08-18", "milestone": "Approval"}, {"date": "2025-09-15", "milestone": "Negotiation Strategy"}, {"date": "2025-10-20", "milestone": "Proposal Submitted"}, {"date": "2025-11-17", "milestone": "Proposal Signed"}]}, {"project": "Tanz", "customer": "Tanzania", "milestones": [{"date": "2025-04-21", "milestone": "Idea Generation"}, {"date": "2025-05-19", "milestone": "Approval to Launch"}, {"date": "2025-06-16", "milestone": "Strategy Approval"}, {"date": "2025-07-21", "milestone": "BE Generated"}, {"date": "2025-08-18", "milestone": "Approval"}, {"date": "2025-09-15", "milestone": "Negotiation Strategy"}, {"date": "2025-10-20", "milestone": "Proposal Submitted"}, {"date": "2025-11-17", "milestone": "Proposal Signed"}]}, {"project": "Falcon", "customer": "Gulf", "milestones": [{"date": "2025-04-21", "milestone": "Idea Generation"}, {"date": "2025-05-19", "milestone": "Approval to Launch"}, {"date": "2025-06-16", "milestone": "Strategy Approval"}, {"date": "2025-07-21", "milestone": "BE Generated"}, {"date": "2025-08-18", "milestone": "Approval"}, {"date": "2025-09-15", "milestone": "Negotiation Strategy"}, {"date": "2025-10-20", "milestone": "Proposal Submitted"}, {"date": "2025-11-17", "milestone": "Proposal Signed"}]}, {"project": "Star", "customer": "Austral", "milestones": [{"date": "2025-04-21", "milestone": "Idea Generation"}, {"date": "2025-05-19", "milestone": "Approval to Launch"}, {"date": "2025-06-16", "milestone": "Strategy Approval"}, {"date": "2025-07-21", "milestone": "BE Generated"}, {"date": "2025-08-18", "milestone": "Approval"}, {"date": "2025-09-15", "milestone": "Negotiation Strategy"}, {"date": "2025-10-20", "milestone": "Proposal Submitted"}, {"date": "2025-11-17", "milestone": "Proposal Signed"}]}, {"project": "Q8", "customer": "Kuwait", "milestones": [{"date": "2025-04-21", "milestone": "Idea Generation"}, {"date": "2025-05-19", "milestone": "Approval to Launch"}, {"date": "2025-06-16", "milestone": "Strategy Approval"}, {"date": "2025-07-21", "milestone": "BE Generated"}, {"date": "2025-08-18", "milestone": "Approval"}, {"date": "2025-09-15", "milestone": "Negotiation Strategy"}, {"date": "2025-10-20", "milestone": "Proposal Submitted"}, {"date": "2025-11-17", "milestone": "Proposal Signed"}]}, {"project": "Mau", "customer": "Mauritus", "milestones": [{"date": "2025-04-21", "milestone": "Idea Generation"}, {"date": "2025-05-19", "milestone": "Approval to Launch"}, {"date": "2025-06-16", "milestone": "Strategy Approval"}, {"date": "2025-07-21", "milestone": "BE Generated"}, {"date": "2025-08-18", "milestone": "Approval"}, {"date": "2025-09-15", "milestone": "Negotiation Strategy"}, {"date": "2025-10-20", "milestone": "Proposal Submitted"}, {"date": "2025-11-17", "milestone": "Proposal Signed"}]}, {"project": "Dodo", "customer": "Mauritus", "milestones": [{"date": "2025-04-21", "milestone": "Idea Generation"}, {"date": "2025-05-19", "milestone": "Approval to Launch"}, {"date": "2025-06-16", "milestone": "Strategy Approval"}, {"date": "2025-07-21", "milestone": "BE Generated"}, {"date": "2025-08-18", "milestone": "Approval"}, {"date": "2025-09-15", "milestone": "Negotiation Strategy"}, {"date": "2025-10-20", "milestone": "Proposal Submitted"}, {"date": "2025-11-17", "milestone": "Proposal Signed"}]}, {"project": "RW", "customer": "Rwanda", "milestones": [{"date": "2025-04-21", "milestone": "Idea Generation"}, {"date": "2025-05-19", "milestone": "Approval to Launch"}, {"date": "2025-06-16", "milestone": "Strategy Approval"}, {"date": "2025-07-21", "milestone": "BE Generated"}, {"date": "2025-08-18", "milestone": "Approval"}, {"date": "2025-09-15", "milestone": "Negotiation Strategy"}, {"date": "2025-10-20", "milestone": "Proposal Submitted"}, {"date": "2025-11-17", "milestone": "Proposal Signed"}]}]}, "opps_threats": [{"Project": "Falcon", "Programme": "Trent 1000", "Customer": "Gulf", "Opportunity": "Transport reduction from $437k to $300k", "2024 Profit Release": 4.263513513513513, "2025 Profit Release": null, "2025": 0.30405405405405406, "2026": 0.3918918918918919, "2027": 0.41428571428571426, "2028": 0.42567567567567566, "2029": 0.35714285714285715, "Overall Pack improvement (term)": 11.84, "Window for forecast": "W3 2023", "Due date": "2024-12-01T00:00:00", "Owner": "Georgia Chapman", "Status": "On-track", "Comments": "Challenge transportation pack assumptions"}, {"Project": "Falcon", "Programme": "Trent 1000", "Customer": "Gulf", "Opportunity": "NDSES improvement through SPE sales ", "2024 Profit Release": 6.858108108108109, "2025 Profit Release": null, "2025": 0.4662162162162162, "2026": 0.43243243243243246, "2027": 0.41216216216216217, "2028": 0.4662162162162162, "2029": 0.3648648648648649, "Overall Pack improvement (term)": 2.2199999999999998, "Window for forecast": "W3 2023", "Due date": "2024-12-01T00:00:00", "Owner": "Georgia Chapman", "Status": "On-track", "Comments": null}, {"Project": "Burgundy", "Programme": "Trent XWB-97", "Customer": "Qatar", "Opportunity": "SPE Pull-forward", "2024 Profit Release": 4.7, "2025 Profit Release": null, "2025": null, "2026": null, "2027": null, "2028": null, "2029": null, "Overall Pack improvement (term)": 84.36, "Window for forecast": "W3 2023", "Due date": "2024-10-31T00:00:00", "Owner": "Matthew Whatley", "Status": "On-track", "Comments": null}, {"Project": "Burgundy", "Programme": "Multiple", "Customer": "Qatar", "Opportunity": "Transportation", "2024 Profit Release": null, "2025 Profit Release": null, "2025": null, "2026": null, "2027": null, "2028": null, "2029": null, "Overall Pack improvement (term)": 37, "Window for forecast": "W3 2023", "Due date": "2024-10-31T00:00:00", "Owner": "Matthew Whatley", "Status": "On-track", "Comments": null}, {"Project": "Burgundy", "Programme": "Trent XWB-84", "Customer": "Qatar", "Opportunity": "Exit for convenience removal", "2024 Profit Release": 88.8, "2025 Profit Release": null, "2025": null, "2026": null, "2027": null, "2028": null, "2029": null, "Overall Pack improvement (term)": 88.8, "Window for forecast": "W3 2023", "Due date": "2024-09-30T00:00:00", "Owner": "Matthew Whatley", "Status": "On-track", "Comments": null}, {"Project": "Burgundy", "Programme": "Trent XWB-97", "Customer": "Qatar", "Opportunity": "Exit for convenience removal", "2024 Profit Release": null, "2025 Profit Release": 187.96, "2025": null, "2026": null, "2027": null, "2028": null, "2029": null, "Overall Pack improvement (term)": 187.96, "Window for forecast": "W3 2023", "Due date": "2025-10-31T00:00:00", "Owner": "Matthew Whatley", "Status": "On-track", "Comments": null}, {"Project": "FiniQ", "Programme": "Trent 900", "Customer": "Emirates", "Opportunity": "Extension", "2024 Profit Release": null, "2025 Profit Release": 646.76, "2025": null, "2026": null, "2027": null, "2028": null, "2029": null, "Overall Pack improvement (term)": 888, "Window for forecast": "W3 2023", "Due date": "2025-05-01T00:00:00", "Owner": "Matthew Whatley", "Status": "On-track", "Comments": null}, {"Project": "FiniQ", "Programme": "Trent XWB-84", "Customer": "Emirates", "Opportunity": "3 year-extension + SPEs + LRU Management", "2024 Profit Release": null, "2025 Profit Release": null, "2025": null, "2026": null, "2027": null, "2028": null, "2029": null, "Overall Pack improvement (term)": null, "Window for forecast": "W3 2023", "Due date": "2024-09-30T00:00:00", "Owner": "Matthew Whatley", "Status": "On-track", "Comments": null}, {"Project": "N/A", "Programme": "Trent 900", "Customer": "Emirates", "Opportunity": "LRU Management optimisation", "2024 Profit Release": null, "2025 Profit Release": null, "2025": null, "2026": null, "2027": null, "2028": null, "2029": null, "Overall Pack improvement (term)": null, "Window for forecast": null, "Due date": "2025-05-01T00:00:00", "Owner": "Darren O'Neill", "Status": null, "Comments": null}, {"Project": "N/A", "Programme": "Trent 1000", "Customer": "Egypt", "Opportunity": "Time on wing improvements", "2024 Profit Release": null, "2025 Profit Release": null, "2025": null, "2026": null, "2027": null, "2028": null, "2029": null, "Overall Pack improvement (term)": null, "Window for forecast": null, "Due date": null, "Owner": "Tim Broadhead", "Status": null, "Comments": "Challenge ToW pack assumptions"}, {"Project": "N/A", "Programme": "Trent XWB-97", "Customer": "Uganda", "Opportunity": "Regional Engine washing", "2024 Profit Release": null, "2025 Profit Release": null, "2025": null, "2026": null, "2027": null, "2028": null, "2029": null, "Overall Pack improvement (term)": null, "Window for forecast": null, "Due date": null, "Owner": null, "Status": null, "Comments": null}, {"Project": "N/A", "Programme": "Trent 1000", "Customer": "Ethiopia", "Opportunity": "Contract extension/NDSES reduction", "2024 Profit Release": null, "2025 Profit Release": null, "2025": null, "2026": null, "2027": null, "2028": null, "2029": null, "Overall Pack improvement (term)": null, "Window for forecast": null, "Due date": null, "Owner": null, "Status": null, "Comments": null}, {"Project": "N/A", "Programme": "Multiple", "Customer": "Qatar", "Opportunity": "3 year extension", "2024 Profit Release": null, "2025 Profit Release": null, "2025": null, "2026": null, "2027": null, "2028": null, "2029": null, "Overall Pack improvement (term)": null, "Window for forecast": null, "Due date": null, "Owner": null, "Status": null, "Comments": null}]}</script>
+<script>
+const DATA = JSON.parse(document.getElementById('dataPayload').textContent);
+
+// -------------------- state --------------------
+const state = {
+  activeSheet: 'MEA LOG',
+  sortKey: null,
+  sortDir: 1,
+  filters: { priorities: [], status: '', programme: '', prob: '', search: '' },
+};
+
+// -------------------- header + subtitle --------------------
+(function initHeader(){
+  const m = DATA.meta;
+  const counts = Object.entries(DATA.sheets).map(([k,v])=>`${k}=${v.row_count_nonblank}`).join(', ');
+  document.getElementById('subtitle').textContent =
+    `${m.source_basename} · generated ${new Date(m.generated_at).toLocaleString()} · sheets parsed: ${counts} · away-day ${m.away_day_date||'-'}`;
+  document.getElementById('footLeft').textContent = `Source: ${m.source_basename}`;
+  document.getElementById('footRight').textContent = `Generated: ${new Date(m.generated_at).toLocaleString()} · Sheets: ${m.sheet_names.join(', ')}`;
+})();
+
+// -------------------- tabs --------------------
+(function initTabs(){
+  const el = document.getElementById('tabs');
+  Object.keys(DATA.sheets).forEach(name=>{
+    const b = document.createElement('button');
+    b.className = 'tab' + (name===state.activeSheet ? ' active':'');
+    b.textContent = `${name} (${DATA.sheets[name].row_count_nonblank})`;
+    b.dataset.sheet = name;
+    b.onclick = () => { state.activeSheet = name; render(); };
+    el.appendChild(b);
+  });
+})();
+
+// -------------------- helpers --------------------
+function fmtMoney(v){
+  if(v===null||v===undefined||v==='') return '';
+  const n = Number(v); if(!isFinite(n)) return '';
+  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function sumBy(rows, key){
+  let s = 0;
+  for(const r of rows){ const v = r[key]; if(typeof v === 'number' && isFinite(v)) s += v; }
+  return s;
+}
+function countBy(rows, key){
+  const c = {};
+  for(const r of rows){ const v = (r[key]===null||r[key]===undefined||r[key]==='') ? '(blank)' : String(r[key]).trim(); c[v]=(c[v]||0)+1; }
+  return c;
+}
+function priorityLabel(p){
+  const n = Number(p);
+  if(n===1) return 'High';
+  if(n===2) return 'Medium';
+  if(n===3) return 'Low';
+  return '(n/a)';
+}
+function cleanStatus(s){ return (s||'').toString().trim() || '(blank)'; }
+
+let charts = {};
+function renderChart(key, id, opts){
+  if(charts[key]){ charts[key].destroy(); }
+  const el = document.getElementById(id);
+  el.innerHTML = '';
+  charts[key] = new ApexCharts(el, opts);
+  charts[key].render();
+}
+function baseChart(extra){
+  return Object.assign({
+    chart: { fontFamily: 'inherit', toolbar: { show: false }, foreColor: '#c9d1d9', background: 'transparent' },
+    theme: { mode: 'dark' },
+    grid: { borderColor: '#2b3342', strokeDashArray: 3 },
+    dataLabels: { enabled: false },
+    tooltip: { theme: 'dark' },
+  }, extra);
+}
+
+// -------------------- filter options --------------------
+function rebuildFilters(rows){
+  // Priority multi
+  const pSel = document.getElementById('fPriority');
+  const priorities = Array.from(new Set(rows.map(r=>r.priority).filter(v=>v!==null&&v!==undefined))).sort();
+  pSel.innerHTML = priorities.map(p=>`<option value="${p}">${priorityLabel(p)} (${p})</option>`).join('');
+  // status
+  const stSel = document.getElementById('fStatus');
+  stSel.innerHTML = '<option value="">(all)</option>' +
+    Array.from(new Set(rows.map(r=>cleanStatus(r.status)))).sort().map(s=>`<option value="${s}">${s}</option>`).join('');
+  // programme
+  const pgSel = document.getElementById('fProgramme');
+  pgSel.innerHTML = '<option value="">(all)</option>' +
+    Array.from(new Set(rows.map(r=>r.programme||'(blank)'))).sort().map(s=>`<option value="${s}">${s}</option>`).join('');
+  // probability
+  const prSel = document.getElementById('fProb');
+  prSel.innerHTML = '<option value="">(all)</option>' +
+    Array.from(new Set(rows.map(r=>r.external_probability||'(blank)'))).sort().map(s=>`<option value="${s}">${s}</option>`).join('');
+}
+
+function applyFilters(rows){
+  const f = state.filters;
+  return rows.filter(r=>{
+    if(f.priorities.length && !f.priorities.includes(String(r.priority))) return false;
+    if(f.status && cleanStatus(r.status)!==f.status) return false;
+    if(f.programme && (r.programme||'(blank)')!==f.programme) return false;
+    if(f.prob && (r.external_probability||'(blank)')!==f.prob) return false;
+    if(f.search){
+      const s = f.search.toLowerCase();
+      const blob = [r.project, r.customer, r.programme, r.asks, r.levers, r.status, r.type_of_opportunity]
+        .filter(Boolean).map(x=>String(x).toLowerCase()).join(' | ');
+      if(!blob.includes(s)) return false;
+    }
+    return true;
+  });
+}
+
+function wireFilters(){
+  const f = state.filters;
+  document.getElementById('fPriority').onchange = (e)=>{
+    f.priorities = Array.from(e.target.selectedOptions).map(o=>o.value);
+    render();
+  };
+  document.getElementById('fStatus').onchange = (e)=>{ f.status = e.target.value; render(); };
+  document.getElementById('fProgramme').onchange = (e)=>{ f.programme = e.target.value; render(); };
+  document.getElementById('fProb').onchange = (e)=>{ f.prob = e.target.value; render(); };
+  document.getElementById('fSearch').oninput = (e)=>{ f.search = e.target.value.trim(); render(); };
+  document.getElementById('btnClear').onclick = ()=>{
+    f.priorities=[]; f.status=''; f.programme=''; f.prob=''; f.search='';
+    document.getElementById('fPriority').selectedIndex = -1;
+    document.getElementById('fStatus').value='';
+    document.getElementById('fProgramme').value='';
+    document.getElementById('fProb').value='';
+    document.getElementById('fSearch').value='';
+    render();
+  };
+}
+wireFilters();
+
+// -------------------- KPIs --------------------
+function renderKPIs(rows){
+  const totalOpps = rows.length;
+  const sum26 = sumBy(rows,'benefit_2026');
+  const sum27 = sumBy(rows,'benefit_2027');
+  const sumTotal = sum26 + sum27;
+  const probCounts = rows.reduce((a,r)=>{const k=(r.external_probability||'(blank)'); a[k]=(a[k]||0)+1; return a;},{});
+  const probScore = rows.reduce((a,r)=>{
+    const p = (r.external_probability||'').toString().toLowerCase();
+    if(p.startsWith('high')) a.push(0.9);
+    else if(p.startsWith('med')) a.push(0.5);
+    else if(p.startsWith('low')) a.push(0.2);
+    return a;
+  },[]);
+  const avgProb = probScore.length ? (probScore.reduce((a,b)=>a+b,0)/probScore.length) : 0;
+
+  const priCounts = rows.reduce((a,r)=>{const k=priorityLabel(r.priority); a[k]=(a[k]||0)+1; return a;},{});
+
+  const kpis = [
+    { label: 'Opportunities', value: totalOpps, unit: '' },
+    { label: 'Benefit 2026', value: fmtMoney(sum26), unit: '£m', accent: true },
+    { label: 'Benefit 2027', value: fmtMoney(sum27), unit: '£m', accent: true },
+    { label: 'Sum 26+27', value: fmtMoney(sumTotal), unit: '£m', accent: true },
+    { label: 'Avg Probability', value: (avgProb*100).toFixed(0), unit: '%' },
+    { label: 'High Priority', value: priCounts['High']||0, unit: '' },
+    { label: 'Medium Priority', value: priCounts['Medium']||0, unit: '' },
+    { label: 'Low Priority', value: priCounts['Low']||0, unit: '' },
+  ];
+  document.getElementById('kpiRow').innerHTML = kpis.map(k =>
+    `<div class="kpi ${k.accent?'accent':''}"><div class="label">${k.label}</div>
+     <div class="value">${k.value}<span class="unit">${k.unit}</span></div></div>`
+  ).join('');
+}
+
+// -------------------- Charts --------------------
+const PRIORITY_COLORS = { 'High':'#ef476f', 'Medium':'#ffd166', 'Low':'#06d6a0', '(n/a)':'#5d6b7e' };
+
+function renderPriorityDonut(rows){
+  const c = rows.reduce((a,r)=>{const k=priorityLabel(r.priority); a[k]=(a[k]||0)+1; return a;},{});
+  const labels = Object.keys(c);
+  const series = Object.values(c);
+  const colors = labels.map(l=>PRIORITY_COLORS[l]||'#5b8cff');
+  renderChart('priority','chPriority', baseChart({
+    series, labels, colors,
+    chart: { type:'donut', height: 280, toolbar:{show:false}, foreColor:'#c9d1d9' },
+    legend: { position: 'bottom' },
+    plotOptions: { pie: { donut: { size: '62%',
+      labels: { show: true, total: { show: true, label: 'Total', color: '#c9d1d9' }}}} },
+  }));
+}
+function renderProbBar(rows){
+  const order = ['High','Med','Low'];
+  const c = rows.reduce((a,r)=>{const k=(r.external_probability||'(blank)'); a[k]=(a[k]||0)+1; return a;},{});
+  const keys = [...order.filter(k=>c[k]), ...Object.keys(c).filter(k=>!order.includes(k))];
+  const series = [{ name:'Opportunities', data: keys.map(k=>c[k]||0) }];
+  const colors = keys.map(k=> k==='High'?'#06d6a0':k==='Med'?'#ffd166':k==='Low'?'#ef476f':'#5b8cff');
+  renderChart('prob','chProb', baseChart({
+    series,
+    chart: { type:'bar', height:280, toolbar:{show:false}, foreColor:'#c9d1d9' },
+    xaxis: { categories: keys },
+    colors: ['#5b8cff'],
+    plotOptions: { bar: { distributed: true, borderRadius: 4, columnWidth: '50%' } },
+    legend: { show: false },
+    dataLabels: { enabled: true, style: { colors:['#0d1117'] } },
+    fill: { colors },
+  }));
+}
+function renderStatusFunnel(rows){
+  // Known stages in rough order
+  const stageOrder = ['Idea','Hopper','ICT','Negotiations','Contracting','Completed','Cancelled'];
+  const c = rows.reduce((a,r)=>{const k=cleanStatus(r.status); a[k]=(a[k]||0)+1; return a;},{});
+  const keys = [...stageOrder.filter(s=>Object.keys(c).some(k=>k.toLowerCase().trim()===s.toLowerCase())), ...Object.keys(c).filter(k=>!stageOrder.some(s=>s.toLowerCase()===k.toLowerCase().trim()))];
+  // resolve actual matched keys
+  const resolved = keys.map(k=>{
+    const match = Object.keys(c).find(kk=>kk.toLowerCase().trim()===k.toLowerCase().trim());
+    return { name: match || k, count: c[match||k]||0 };
+  }).filter(x=>x.count>0);
+  const series = [{ name:'Opportunities', data: resolved.map(r=>r.count) }];
+  renderChart('funnel','chFunnel', baseChart({
+    series,
+    chart: { type:'bar', height:280, toolbar:{show:false}, foreColor:'#c9d1d9' },
+    plotOptions: { bar: { horizontal: true, distributed: true, borderRadius: 4, barHeight: '65%' } },
+    xaxis: { categories: resolved.map(r=>r.name) },
+    legend: { show: false },
+    dataLabels: { enabled: true, style:{ colors:['#0d1117']} },
+    colors: ['#5b8cff','#7ed4b2','#c77dff','#ffbe6a','#ef476f','#06d6a0','#4cc9f0','#8b96a6'],
+  }));
+}
+function renderBenefitCust(rows){
+  // Top 10 customers by sum26+sum27
+  const agg = {};
+  rows.forEach(r=>{
+    const k = r.customer || '(blank)';
+    if(!agg[k]) agg[k] = { b26:0, b27:0 };
+    if(typeof r.benefit_2026==='number') agg[k].b26 += r.benefit_2026;
+    if(typeof r.benefit_2027==='number') agg[k].b27 += r.benefit_2027;
+  });
+  const ranked = Object.entries(agg).map(([k,v])=>({k, total:v.b26+v.b27, b26:v.b26, b27:v.b27}))
+    .sort((a,b)=>b.total-a.total).slice(0,10);
+  renderChart('benefitCust','chBenefitCust', baseChart({
+    chart: { type:'bar', height:380, toolbar:{show:false}, stacked:false, foreColor:'#c9d1d9' },
+    series: [
+      { name:'2026', data: ranked.map(r=>+r.b26.toFixed(2)) },
+      { name:'2027', data: ranked.map(r=>+r.b27.toFixed(2)) },
+    ],
+    xaxis: { categories: ranked.map(r=>r.k) },
+    yaxis: { title:{ text:'£m', style:{color:'#8b96a6'} } },
+    colors: ['#5b8cff','#7ed4b2'],
+    plotOptions: { bar: { borderRadius: 3, columnWidth: '60%' } },
+    legend: { position: 'top' },
+  }));
+}
+function renderBenefitProg(rows){
+  const progSet = Array.from(new Set(rows.map(r=>r.programme||'(blank)')));
+  const prioLabels = ['High','Medium','Low'];
+  const data = prioLabels.map(lab=>{
+    return progSet.map(pg=>{
+      let s = 0;
+      rows.forEach(r=>{
+        if((r.programme||'(blank)')===pg && priorityLabel(r.priority)===lab){
+          if(typeof r.benefit_2026==='number') s += r.benefit_2026;
+          if(typeof r.benefit_2027==='number') s += r.benefit_2027;
+        }
+      });
+      return +s.toFixed(3);
+    });
+  });
+  renderChart('benefitProg','chBenefitProg', baseChart({
+    chart: { type:'bar', height:380, stacked:true, toolbar:{show:false}, foreColor:'#c9d1d9' },
+    series: prioLabels.map((lab,i)=>({ name: lab+' priority', data: data[i] })),
+    xaxis: { categories: progSet },
+    colors: ['#ef476f','#ffd166','#06d6a0'],
+    plotOptions: { bar: { borderRadius: 3, columnWidth: '55%' } },
+    legend: { position: 'top' },
+    yaxis: { title:{ text:'Sum 26+27 (£m)', style:{color:'#8b96a6'}} },
+  }));
+}
+function renderLeader(rows){
+  const agg = {};
+  rows.forEach(r=>{
+    const k = r.customer || '(blank)';
+    if(!agg[k]) agg[k] = 0;
+    if(typeof r.benefit_2026==='number') agg[k] += r.benefit_2026;
+    if(typeof r.benefit_2027==='number') agg[k] += r.benefit_2027;
+  });
+  const ranked = Object.entries(agg).map(([k,v])=>({k,v})).sort((a,b)=>b.v-a.v).slice(0,10);
+  renderChart('leader','chLeader', baseChart({
+    chart: { type:'bar', height:380, toolbar:{show:false}, foreColor:'#c9d1d9' },
+    series: [{ name:'Sum 26+27', data: ranked.map(r=>+r.v.toFixed(3)) }],
+    xaxis: { categories: ranked.map(r=>r.k) },
+    plotOptions: { bar: { horizontal:true, borderRadius:3, barHeight:'65%', distributed: true } },
+    legend: { show: false },
+    colors: ['#5b8cff','#7ed4b2','#c77dff','#ffbe6a','#ef476f','#06d6a0','#4cc9f0','#ffd166','#9d4edd','#ff6b6b'],
+    dataLabels: { enabled:true, style:{ colors:['#0d1117']}, formatter: v => v.toFixed(2) },
+    yaxis: { title:{ text:'£m', style:{color:'#8b96a6'}} },
+  }));
+}
+function renderTimeline(){
+  const tl = DATA.timeline || { projects: [] };
+  // Build range chart: one series per milestone type; each item = {x: project, y: [start, start+7 days]}
+  const typeColors = {
+    'Idea Generation':'#5b8cff',
+    'Approval to Launch':'#7ed4b2',
+    'Strategy Approval':'#c77dff',
+    'BE Generated':'#ffbe6a',
+    'Approval':'#ef476f',
+    'Negotiation Strategy':'#ffd166',
+    'Proposal Submitted':'#4cc9f0',
+    'Proposal Signed':'#06d6a0',
+  };
+  const byType = {};
+  tl.projects.forEach(p=>{
+    p.milestones.forEach(m=>{
+      if(!byType[m.milestone]) byType[m.milestone] = [];
+      const start = new Date(m.date).getTime();
+      byType[m.milestone].push({ x: `${p.project||''} / ${p.customer||''}`, y: [start, start + 7*86400000] });
+    });
+  });
+  const typeOrder = ['Idea Generation','Approval to Launch','Strategy Approval','BE Generated','Approval','Negotiation Strategy','Proposal Submitted','Proposal Signed'];
+  const series = typeOrder.filter(t=>byType[t]).map(t=>({ name:t, data: byType[t] }));
+  const colors = typeOrder.filter(t=>byType[t]).map(t=>typeColors[t]||'#5b8cff');
+  renderChart('timeline','chTimeline', baseChart({
+    chart: { type:'rangeBar', height: 480, toolbar:{show:false}, foreColor:'#c9d1d9' },
+    series,
+    plotOptions: { bar: { horizontal:true, distributed:false, rangeBarGroupRows:true, barHeight:'70%' } },
+    xaxis: { type: 'datetime', labels: { style: { colors: '#8b96a6' } } },
+    colors,
+    legend: { position:'top' },
+    tooltip: { theme:'dark', x: { format: 'dd MMM yyyy' } },
+  }));
+}
+
+// -------------------- Main table --------------------
+const COLS = [
+  { key:'num', label:'#', num:true },
+  { key:'project', label:'Project' },
+  { key:'customer', label:'Customer' },
+  { key:'programme', label:'Programme' },
+  { key:'priority', label:'Priority' },
+  { key:'external_probability', label:'Probability' },
+  { key:'status', label:'Status' },
+  { key:'type_of_opportunity', label:'Type' },
+  { key:'benefit_2026', label:'2026 £m', num:true },
+  { key:'benefit_2027', label:'2027 £m', num:true },
+  { key:'sum_26_27', label:'Sum £m', num:true },
+  { key:'term_benefit', label:'Term £m', num:true },
+  { key:'next_milestone', label:'Next Milestone' },
+];
+
+function nextMilestoneFor(project, customer){
+  const tl = DATA.timeline; if(!tl) return '';
+  const today = Date.now();
+  for(const p of tl.projects){
+    if((p.project||'')===(project||'') && (p.customer||'')===(customer||'')){
+      // find earliest milestone in future, else latest past
+      const future = p.milestones.map(m=>({...m, t: new Date(m.date).getTime()})).filter(m=>m.t>=today).sort((a,b)=>a.t-b.t);
+      if(future.length) return `${future[0].milestone} (${future[0].date.slice(0,10)})`;
+      const past = p.milestones.map(m=>({...m, t: new Date(m.date).getTime()})).sort((a,b)=>b.t-a.t);
+      if(past.length) return `${past[0].milestone} (${past[0].date.slice(0,10)})`;
+    }
+  }
+  return '';
+}
+
+function renderTable(rows){
+  const head = document.getElementById('mainHead');
+  head.innerHTML = COLS.map(c=>`<th data-key="${c.key}">${c.label}${state.sortKey===c.key?(state.sortDir>0?' ↑':' ↓'):''}</th>`).join('');
+  head.querySelectorAll('th').forEach(th=>{
+    th.onclick = ()=>{
+      const k = th.dataset.key;
+      if(state.sortKey===k) state.sortDir*=-1; else { state.sortKey=k; state.sortDir=1; }
+      render();
+    };
+  });
+
+  let display = rows.slice();
+  if(state.sortKey){
+    const dir = state.sortDir;
+    display.sort((a,b)=>{
+      let va = a[state.sortKey], vb = b[state.sortKey];
+      if(state.sortKey==='next_milestone'){ va = a._next_milestone||''; vb = b._next_milestone||''; }
+      const na = (va===null||va===undefined||va==='') ? -Infinity : va;
+      const nb = (vb===null||vb===undefined||vb==='') ? -Infinity : vb;
+      if(typeof na==='number' && typeof nb==='number') return (na-nb)*dir;
+      return String(na).localeCompare(String(nb))*dir;
+    });
+  }
+
+  const body = document.getElementById('mainBody');
+  body.innerHTML = display.map(r=>{
+    const nm = r._next_milestone || '';
+    return `<tr>
+      <td class="num">${r.num??''}</td>
+      <td>${r.project??''}</td>
+      <td>${r.customer??''}</td>
+      <td>${r.programme??''}</td>
+      <td>${r.priority!==null&&r.priority!==undefined ? `<span class="pri-badge pri-${r.priority}">${priorityLabel(r.priority)}</span>`:''}</td>
+      <td>${r.external_probability?`<span class="prob-badge prob-${r.external_probability}">${r.external_probability}</span>`:''}</td>
+      <td>${r.status??''}</td>
+      <td>${r.type_of_opportunity??''}</td>
+      <td class="num">${typeof r.benefit_2026==='number'?fmtMoney(r.benefit_2026):''}</td>
+      <td class="num">${typeof r.benefit_2027==='number'?fmtMoney(r.benefit_2027):''}</td>
+      <td class="num">${typeof r.sum_26_27==='number'?fmtMoney(r.sum_26_27):''}</td>
+      <td class="num">${typeof r.term_benefit==='number'?fmtMoney(r.term_benefit):''}</td>
+      <td>${nm}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('rowcountHint').textContent = `${display.length} / ${DATA.sheets[state.activeSheet].row_count_nonblank} rows · sheet: ${state.activeSheet}`;
+}
+
+// -------------------- Opps & Threats table --------------------
+function renderOT(){
+  const rows = DATA.opps_threats || [];
+  const keys = rows.length ? Object.keys(rows[0]) : [];
+  document.getElementById('otHead').innerHTML = keys.map(k=>`<th>${k}</th>`).join('');
+  document.getElementById('otBody').innerHTML = rows.map(r=>
+    `<tr>${keys.map(k=>{
+      const v=r[k];
+      if(v===null||v===undefined) return '<td></td>';
+      if(typeof v==='number') return `<td class="num">${fmtMoney(v)}</td>`;
+      if(typeof v==='string' && /^\d{4}-\d{2}-\d{2}T/.test(v)) return `<td>${v.slice(0,10)}</td>`;
+      return `<td>${v}</td>`;
+    }).join('')}</tr>`
+  ).join('');
+  document.getElementById('otHint').textContent = `${rows.length} rows (Owners, Due dates, Programme)`;
+}
+renderOT();
+
+// -------------------- Render --------------------
+function render(){
+  // tabs
+  document.querySelectorAll('.tab').forEach(t=>{
+    t.classList.toggle('active', t.dataset.sheet===state.activeSheet);
+  });
+  const rows = DATA.sheets[state.activeSheet].rows;
+  // attach computed next_milestone
+  rows.forEach(r=>{ r._next_milestone = nextMilestoneFor(r.project, r.customer); });
+
+  rebuildFilters(rows);
+  const filtered = applyFilters(rows);
+
+  renderKPIs(filtered);
+  renderPriorityDonut(filtered);
+  renderProbBar(filtered);
+  renderStatusFunnel(filtered);
+  renderBenefitCust(filtered);
+  renderBenefitProg(filtered);
+  renderLeader(filtered);
+  renderTimeline();  // timeline is not filtered by sheet
+  renderTable(filtered);
+}
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,202 @@
+[
+  [
+    "verify_eth_soa",
+    "RUN",
+    "exception",
+    "'list' object has no attribute 'items'",
+    "FAIL",
+    ""
+  ],
+  [
+    "EPI",
+    "invoice_rows(expected 106)",
+    106,
+    106,
+    "MATCH",
+    ""
+  ],
+  [
+    "EPI",
+    "subtotals(expected 3)",
+    3,
+    3,
+    "MATCH",
+    ""
+  ],
+  [
+    "EPI",
+    "aging_buckets_populated(>=7)",
+    ">=7",
+    7,
+    "MATCH",
+    ""
+  ],
+  [
+    "EPI",
+    "TRUTH vs HTML invoice rows",
+    0,
+    106,
+    "MISMATCH",
+    ""
+  ],
+  [
+    "MEA",
+    "sheet_MEA_LOG_rows(expected 45)",
+    45,
+    45,
+    "MATCH",
+    ""
+  ],
+  [
+    "MEA",
+    "sheet_L2_rows(expected 45)",
+    45,
+    45,
+    "MATCH",
+    ""
+  ],
+  [
+    "MEA",
+    "sheet_L3_rows(expected 45)",
+    45,
+    45,
+    "MATCH",
+    ""
+  ],
+  [
+    "SHOP_VISIT",
+    "shop_visits(expected 1332)",
+    1332,
+    1332,
+    "MATCH",
+    ""
+  ],
+  [
+    "SHOP_VISIT",
+    "current_status(expected 680)",
+    680,
+    680,
+    "MATCH",
+    ""
+  ],
+  [
+    "SHOP_VISIT",
+    "total(expected 2012)",
+    2012,
+    2012,
+    "MATCH",
+    ""
+  ],
+  [
+    "SVRG",
+    "engines(expected 151)",
+    151,
+    151,
+    "MATCH",
+    ""
+  ],
+  [
+    "SVRG",
+    "svs(expected 215)",
+    215,
+    215,
+    "MATCH",
+    ""
+  ],
+  [
+    "SVRG",
+    "total_fleet_EFH(~4,359,187)",
+    4359187,
+    "4359187",
+    "WITHIN_TOL",
+    ""
+  ],
+  [
+    "HOPPER_v2_1",
+    "opp_count(expected 109)",
+    109,
+    109,
+    "MATCH",
+    ""
+  ],
+  [
+    "HOPPER_v2_1",
+    "last_row_contains_Ugandan",
+    "Ugandan Airlines",
+    true,
+    "MATCH",
+    ""
+  ],
+  [
+    "HOPPER_v2_1",
+    "CRP_total(expected 3069.21m)",
+    3069.21,
+    "3069.21",
+    "MATCH",
+    ""
+  ],
+  [
+    "HOPPER_v2_1",
+    "sheets_parsed == [GLOBAL LOG]",
+    "GLOBAL LOG only",
+    [],
+    "CHECK",
+    ""
+  ],
+  [
+    "HOPPER_v2_orig",
+    "opp_count(expected 103)",
+    103,
+    103,
+    "MATCH",
+    ""
+  ],
+  [
+    "HOPPER_v2_orig",
+    "hidden_rows_flagged(expected 107)",
+    107,
+    null,
+    "CHECK",
+    ""
+  ],
+  [
+    "HOPPER_v2_orig",
+    "no_3+9 markers",
+    false,
+    true,
+    "MISMATCH",
+    ""
+  ],
+  [
+    "verify_rutish",
+    "RUN",
+    "exception",
+    "'list' object has no attribute 'keys'",
+    "FAIL",
+    ""
+  ],
+  [
+    "ETH_FAKE",
+    "line_items(expected 82)",
+    82,
+    82,
+    "MATCH",
+    ""
+  ],
+  [
+    "ETH_FAKE",
+    "sections(expected 5)",
+    5,
+    5,
+    "MATCH",
+    ""
+  ],
+  [
+    "ETH_FAKE",
+    "aging_buckets populated (expected 7)",
+    7,
+    7,
+    "MATCH",
+    ""
+  ]
+]

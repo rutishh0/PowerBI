@@ -5,6 +5,7 @@ Handles AI chat with GPT-oss-120b via OpenRouter.
 The AI is grounded in the uploaded Excel data and will not hallucinate.
 """
 
+import base64
 import json
 import requests
 from datetime import datetime
@@ -324,6 +325,8 @@ def call_openrouter(messages: list, system_prompt: str, model: str = None, file_
     if model and model.startswith("gemini/"):
         return call_gemini3pro(messages, system_prompt, model.replace("gemini/", ""), file_attachments)
 
+    return {"content": None, "error": "OpenRouter path not configured"}
+
 
 def call_gemini3pro(messages: list, system_prompt: str, model: str, file_attachments: list = None) -> dict:
     """
@@ -406,7 +409,6 @@ def call_gemini3pro(messages: list, system_prompt: str, model: str, file_attachm
             contents.append(types.Content(role=genai_role, parts=parts))
 
     # ─── Step 3: Attach Files (to the last user message) ───
-    import base64
     if file_attachments:
         # Find last user message
         last_user_idx = None
@@ -473,71 +475,11 @@ def call_gemini3pro(messages: list, system_prompt: str, model: str, file_attachm
         if not response.text:
              return {"content": None, "error": "Empty response from Gemini 3 Pro (SDK)"}
 
-        # Usage metadata might be available in response.usage_metadata
-        # print(f"[Gemini-3-Pro] Usage: {response.usage_metadata}")
-
         return parse_ai_response(response.text)
 
     except Exception as e:
         print(f"[Gemini-3-Pro] SDK Error: {e}")
         return {"content": None, "error": f"Gemini 3 Pro SDK Error: {str(e)}"}
-
-    # Add conversation history (limited)
-    for msg in messages[-MAX_HISTORY_MESSAGES:]:
-        api_messages.append({
-            "role": msg.get("role", "user"),
-            "content": msg.get("content", ""),
-        })
-
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json",
-        "HTTP-Referer": "http://localhost:5000",
-        "X-Title": "RR SOA Dashboard AI",
-    }
-
-    payload = {
-        "model": model if model else OPENROUTER_MODEL,
-        "messages": api_messages,
-        "max_tokens": 16384,
-        "temperature": 0.3,  # Low temperature for factual accuracy
-        "top_p": 0.9,
-    }
-
-    try:
-        response = requests.post(
-            OPENROUTER_URL,
-            headers=headers,
-            json=payload,
-            timeout=120,
-        )
-
-        if response.status_code != 200:
-            error_msg = f"OpenRouter API error ({response.status_code})"
-            try:
-                err_data = response.json()
-                error_msg += f": {err_data.get('error', {}).get('message', response.text[:200])}"
-            except Exception:
-                error_msg += f": {response.text[:200]}"
-            return {"content": None, "error": error_msg}
-
-        data = response.json()
-        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-
-        if not content:
-            return {"content": None, "error": "Empty response from AI model"}
-
-        # Parse the response for special blocks
-        result = parse_ai_response(content)
-        return result
-
-    except requests.exceptions.Timeout:
-        return {"content": None, "error": "AI request timed out. Please try again."}
-    except requests.exceptions.ConnectionError:
-        return {"content": None, "error": "Could not connect to AI service. Check internet connection."}
-    except Exception as e:
-        return {"content": None, "error": f"Unexpected error: {str(e)}"}
-
 
 
 def _flatten_content(content):
