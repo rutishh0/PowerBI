@@ -3548,9 +3548,13 @@ const RRApp = (() => {
     }
 
     function _bindFilterListeners() {
-        // Listen for filter changes
+        // Listen for filter changes on LEGACY sidebar filters only (checkboxes).
+        // Visualizer filters (Hopper, Commercial Plan, Whereabouts, etc.) use <select>
+        // elements with the same data-filter attribute — those are handled locally
+        // inside each renderer. Narrowing this selector to checkboxes prevents the
+        // global re-render from wiping visualizer filter state on every dropdown change.
         document.addEventListener('change', (e) => {
-            if (e.target.matches('[data-filter]')) {
+            if (e.target.matches('input[type="checkbox"][data-filter]')) {
                 _onFiltersChanged();
             }
         });
@@ -3559,7 +3563,7 @@ const RRApp = (() => {
         const resetBtn = $('filterResetBtn');
         if (resetBtn) {
             resetBtn.addEventListener('click', () => {
-                document.querySelectorAll('[data-filter]').forEach(cb => { cb.checked = true; });
+                document.querySelectorAll('input[type="checkbox"][data-filter]').forEach(cb => { cb.checked = true; });
                 _onFiltersChanged();
             });
         }
@@ -3568,8 +3572,8 @@ const RRApp = (() => {
     function _onFiltersChanged() {
         // Update filter badge
         const filters = RRComponents.getActiveFilters();
-        const total = document.querySelectorAll('[data-filter]').length;
-        const checked = document.querySelectorAll('[data-filter]:checked').length;
+        const total = document.querySelectorAll('input[type="checkbox"][data-filter]').length;
+        const checked = document.querySelectorAll('input[type="checkbox"][data-filter]:checked').length;
         const badge = $('filterBadge');
         if (badge) {
             const diff = total - checked;
