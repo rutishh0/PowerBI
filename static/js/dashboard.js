@@ -3414,10 +3414,24 @@
                 };
 
                 // ── Wire filter change handlers ONCE (filter bar never gets replaced) ──
+                //
+                // CRITICAL: app.js installs a document-level delegated 'change' listener
+                // (`_bindFilterListeners`, app.js:3550) that matches ANY `[data-filter]`
+                // element and calls `_onFiltersChanged()` → `_showDashboard()` → a FULL
+                // `RRVisualizer.renderVisualizer()` re-render. That document handler was
+                // written for the legacy sidebar checkbox filters (`input[data-filter="section"]`
+                // etc.) but its selector `[data-filter]` matches our <select data-filter="region">
+                // elements too — so every dropdown change was wiping the whole viz and
+                // resetting the dropdown back to "All" before the user could even see their
+                // selection applied. We use stopPropagation() on the change AND on the
+                // reset-button click so the legacy delegated handler never fires for
+                // Global Hopper filter interactions.
                 const bar = document.getElementById(filterBarId);
                 if (bar) {
                     bar.querySelectorAll('select[data-filter]').forEach(sel => {
-                        sel.addEventListener('change', () => {
+                        sel.addEventListener('change', (e) => {
+                            // Prevent bubbling to app.js:3552 document-level handler.
+                            e.stopPropagation();
                             const f = getFilters();
                             _registerFilterState('GLOBAL_HOPPER', f);
                             renderContent(f);
@@ -3425,7 +3439,16 @@
                     });
                 }
                 const resetBtn = document.getElementById(resetBtnId);
-                if (resetBtn) resetBtn.addEventListener('click', resetAll);
+                if (resetBtn) {
+                    resetBtn.addEventListener('click', (e) => {
+                        // Reset also synthesises 'change' events on selects via .value=''
+                        // assignment? No — setting .value programmatically does NOT fire
+                        // change events, so we're safe there. But stop the click anyway
+                        // in case some ancestor delegates on button clicks.
+                        e.stopPropagation();
+                        resetAll();
+                    });
+                }
 
                 // ── Initial render ──
                 _registerFilterState('GLOBAL_HOPPER', {});
@@ -4506,6 +4529,64 @@
             // EMPLOYEE_WHEREABOUTS RENDERER — Middle-East presence tracker
             // ═══════════════════════════════════════════════════
 
+            // Canonical event categories for Employee Whereabouts.
+            // Data is an exception log — blank = regular working day, non-blank = logged event.
+            const EW_CATEGORIES = [
+                { key: 'Eid Holiday',    color: '#0EA5E9', label: 'Eid Holiday' },
+                { key: 'Other Holidays', color: '#0369A1', label: 'Other Holidays' },
+                { key: 'Leave',          color: '#F59E0B', label: 'Leave' },
+                { key: 'Office',         color: '#10B981', label: 'Office' },
+                { key: 'Work From Home', color: '#6366F1', label: 'Work From Home' },
+                { key: 'Business',       color: '#8B5CF6', label: 'Business' },
+                { key: 'Cross Border',   color: '#14B8A6', label: 'Cross Border' },
+                { key: 'Sick',           color: '#EF4444', label: 'Sick' },
+                { key: 'Other',          color: '#94A3B8', label: 'Other' },
+            ];
+
+            // Map a raw status code + legend label into a canonical category.
+            // Handles: case, variants like "Eid Holiday 19 to 22", "Eid Holiday 19 t0 23" (typo),
+            // labels pulled from the parser legend (e.g. HOL → "Holiday"), and free text.
+            function _ewCategorize(code, legend) {
+                if (code == null) return null;
+                const raw = String(code).trim();
+                if (!raw || raw === '_blank') return null;
+                const up = raw.toUpperCase();
+                const lbl = legend && legend[raw] ? String(legend[raw]).toLowerCase() : '';
+                const hay = (raw + ' ' + lbl).toLowerCase();
+
+                // Eid Holiday variants (covers "Eid Holiday 19 to 22", "Eid Holiday 19 t0 23", etc.)
+                if (/\beid\b/.test(hay)) return 'Eid Holiday';
+
+                // Single-letter / acronym codes — check before generic "holiday" match
+                if (up === 'O') return 'Office';
+                if (up === 'H' || up === 'WFH') return 'Work From Home';
+                if (up === 'PL' || up === 'L') return 'Leave';
+                if (up === 'B') return 'Business';
+                if (up === 'CB') return 'Cross Border';
+                if (up === 'S') return 'Sick';
+                if (up === 'EB' || up === 'HOL') return 'Other Holidays';
+
+                // Phrase / label matching
+                if (/\b(public\s+)?holiday\b/.test(hay) || /easter\s+break/.test(hay)) return 'Other Holidays';
+                if (/personal\s+leave/.test(hay) || /\bleave\b/.test(hay)) return 'Leave';
+                if (/cross\s+border/.test(hay)) return 'Cross Border';
+                if (/work\s+from\s+home/.test(hay) || /\bwfh\b/.test(hay)) return 'Work From Home';
+                if (/business\s+trip/.test(hay) || /\bbusiness\b/.test(hay)) return 'Business';
+                if (/\bsick\b/.test(hay)) return 'Sick';
+                if (/\boffice\b/.test(hay)) return 'Office';
+
+                return 'Other';
+            }
+
+            // Format an ISO date (YYYY-MM-DD) as "Mar 19, 2026" — safe for bad input.
+            function _ewFmtDate(iso) {
+                if (!iso || typeof iso !== 'string') return '';
+                const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+                if (!m) return iso;
+                const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                return `${MON[parseInt(m[2], 10) - 1]} ${m[3]}, ${m[1]}`;
+            }
+
             function _renderEmployeeWhereabouts(el, data, fname, opts) {
                 opts = opts || {};
                 const esc = (window.RRUtil && window.RRUtil.escapeHtml) || (v => v == null ? '' : String(v));
@@ -4517,77 +4598,125 @@
                 const whereabouts = data.whereabouts || {};
                 const legend = data.legend || {};
                 const aggregates = data.aggregates || {};
-                const months = Array.isArray(meta.months) ? meta.months : [];
                 const sheetsParsed = Array.isArray(meta.sheets_parsed) ? meta.sheets_parsed : Object.keys(whereabouts);
 
-                const STATUS_COLORS = {
-                    'O': '#10B981',       // Office — green
-                    'H': '#3B82F6',       // Home / WFH — blue
-                    'L': '#F59E0B',       // Leave — amber
-                    'B': '#8B5CF6',       // Business trip — purple
-                    'S': '#EF4444',       // Sick — red
-                    '_blank': '#E5E7EB',  // Weekend / not logged — grey
-                };
-                const EW_PALETTE = ['#0EA5E9', '#0284C7', '#0369A1', '#38BDF8', '#7DD3FC', '#BAE6FD', '#6366F1', '#8B5CF6', '#EC4899', '#F43F5E'];
+                // Clean sheet names for display — source has trailing spaces, e.g. "Apr 2026 "
+                const sheetDisplay = (s) => String(s == null ? '' : s).trim();
+
+                // RR navy + sky/teal complement palette — no garish colors.
+                const EW_PALETTE = ['#0EA5E9', '#0369A1', '#14B8A6', '#6366F1', '#38BDF8', '#0284C7', '#7DD3FC', '#8B5CF6', '#F59E0B', '#EF4444'];
 
                 const uid = `ew-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+                // ─── Build aggregated event list across all months ───
+                // Each entry: { date, code, category, empNum, empName, country, sector, sheet }
+                const empIndex = {};
+                employees.forEach(e => { if (e && e.employee_number != null) empIndex[String(e.employee_number)] = e; });
+
+                const allEvents = [];
+                sheetsParsed.forEach(sheet => {
+                    const rows = whereabouts[sheet] || [];
+                    rows.forEach(row => {
+                        const ds = row.daily_status || {};
+                        const empMeta = (row.employee_number != null && empIndex[String(row.employee_number)]) || {};
+                        Object.keys(ds).forEach(date => {
+                            const raw = ds[date];
+                            if (raw == null || raw === '') return;
+                            const category = _ewCategorize(raw, legend);
+                            if (!category) return;
+                            allEvents.push({
+                                date,
+                                code: String(raw),
+                                category,
+                                empNum: row.employee_number != null ? String(row.employee_number) : '',
+                                empName: row.name || empMeta.name || '',
+                                country: row.country || empMeta.country || 'Unknown',
+                                sector: empMeta.business_sector || '',
+                                sheet,
+                            });
+                        });
+                    });
+                });
+
+                // Per-employee stats (events logged / primary category / last event date)
+                const empStats = {};
+                allEvents.forEach(ev => {
+                    const key = ev.empNum || ev.empName || '—';
+                    if (!empStats[key]) empStats[key] = { count: 0, byCategory: {}, lastDate: '' };
+                    empStats[key].count += 1;
+                    empStats[key].byCategory[ev.category] = (empStats[key].byCategory[ev.category] || 0) + 1;
+                    if (!empStats[key].lastDate || ev.date > empStats[key].lastDate) empStats[key].lastDate = ev.date;
+                });
 
                 // ─── KPI derivation ───
                 const totalEmployees = meta.total_employees != null ? meta.total_employees : employees.length;
                 const uniqueCountries = Array.isArray(meta.unique_countries) ? meta.unique_countries : [];
                 const uniqueSectors = Array.isArray(meta.unique_sectors) ? meta.unique_sectors : [];
 
-                // Average office days per employee per month (across all months)
-                let totalOfficeDays = 0;
-                let totalEmpMonths = 0;
-                Object.values(whereabouts).forEach(monthRows => {
-                    (monthRows || []).forEach(row => {
-                        const sc = row.status_counts || {};
-                        totalOfficeDays += (sc.O || 0);
-                        totalEmpMonths += 1;
-                    });
-                });
-                const avgOfficePerEmpMonth = totalEmpMonths > 0 ? (totalOfficeDays / totalEmpMonths) : 0;
+                // Top 3 countries by employee count (prefer aggregates.by_country)
+                const byCountryAgg = aggregates.by_country || {};
+                let topCountries;
+                if (Object.keys(byCountryAgg).length) {
+                    topCountries = Object.entries(byCountryAgg).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([c]) => c);
+                } else {
+                    const fallback = {};
+                    employees.forEach(e => { const c = e.country || 'Unknown'; fallback[c] = (fallback[c] || 0) + 1; });
+                    topCountries = Object.entries(fallback).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([c]) => c);
+                }
 
-                // Peak office day across all months
-                let peakDay = null;
-                let peakCount = 0;
-                const dailyByMonth = aggregates.daily_office_count_by_month || {};
-                Object.entries(dailyByMonth).forEach(([, daily]) => {
-                    Object.entries(daily || {}).forEach(([date, count]) => {
-                        if ((count || 0) > peakCount) { peakCount = count; peakDay = date; }
-                    });
-                });
+                const loggedEvents = allEvents.length;
+                const activeHolidays = allEvents.filter(e => e.category === 'Eid Holiday' || e.category === 'Other Holidays').length;
 
-                // ─── Hero + Filter + KPI HTML ───
+                // Coverage period — from meta.months, or derived from event dates
+                let coverageStr = '—';
+                const months = Array.isArray(meta.months) ? meta.months : [];
+                if (months.length) {
+                    const starts = months.map(m => m.start_date).filter(Boolean).sort();
+                    const ends = months.map(m => m.end_date).filter(Boolean).sort();
+                    if (starts.length && ends.length) {
+                        const s = _ewFmtDate(starts[0]);
+                        const e = _ewFmtDate(ends[ends.length - 1]);
+                        if (s && e) coverageStr = `${s} → ${e}`;
+                    }
+                } else if (allEvents.length) {
+                    const dates = allEvents.map(e => e.date).sort();
+                    coverageStr = `${_ewFmtDate(dates[0])} → ${_ewFmtDate(dates[dates.length - 1])}`;
+                }
+
+                // ─── Hero (slightly shorter) ───
                 let html = '';
-                html += `<div class="viz-ew-hero" style="background:linear-gradient(135deg,#0EA5E9 0%,#0369A1 100%);color:#fff;padding:22px 28px;border-radius:14px;margin-bottom:18px;box-shadow:0 6px 24px rgba(14,165,233,0.25)">
-                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+                html += `<div class="viz-ew-hero" style="background:linear-gradient(135deg,#0EA5E9 0%,#0369A1 100%);color:#fff;padding:16px 24px;border-radius:14px;margin-bottom:14px;box-shadow:0 4px 18px rgba(14,165,233,0.22)">
+                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
                         <div>
-                            <div style="font-size:12px;letter-spacing:0.12em;text-transform:uppercase;opacity:0.8;margin-bottom:4px">Middle East Regional</div>
-                            <div style="font-size:22px;font-weight:700;display:flex;align-items:center;gap:10px">
-                                <i data-lucide="map-pin" style="width:22px;height:22px"></i>
-                                Employee Whereabouts
+                            <div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;opacity:0.85;margin-bottom:3px">Middle East Regional</div>
+                            <div style="font-size:20px;font-weight:700;display:flex;align-items:center;gap:10px">
+                                <i data-lucide="map-pin" style="width:20px;height:20px"></i>
+                                Employee Activity Log
                             </div>
-                            <div style="font-size:12px;opacity:0.85;margin-top:6px">
-                                <b>${esc(meta.source_file || fname || '')}</b>${sheetsParsed.length ? ' · Months: ' + esc(sheetsParsed.join(', ')) : ''}
+                            <div style="font-size:11px;opacity:0.85;margin-top:4px">
+                                <b>${esc(meta.source_file || fname || '')}</b>${sheetsParsed.length ? ' · Months: ' + esc(sheetsParsed.map(sheetDisplay).join(', ')) : ''}
                             </div>
                         </div>
                         <div style="display:flex;align-items:center;gap:10px">
-                            <div style="padding:6px 12px;border-radius:999px;background:rgba(255,255,255,0.14);font-size:11px;font-weight:600;letter-spacing:0.08em">WHEREABOUTS</div>
-                            <div style="font-family:'Roobert',sans-serif;font-weight:700;font-size:13px;letter-spacing:0.1em;opacity:0.88">ROLLS-ROYCE</div>
+                            <div style="padding:5px 11px;border-radius:999px;background:rgba(255,255,255,0.14);font-size:10px;font-weight:600;letter-spacing:0.08em">ACTIVITY LOG</div>
+                            <div style="font-family:'Roobert',sans-serif;font-weight:700;font-size:12px;letter-spacing:0.1em;opacity:0.9">ROLLS-ROYCE</div>
                         </div>
                     </div>
                 </div>`;
 
+                // Explainer blurb
+                html += `<div style="margin-bottom:14px;padding:10px 14px;background:#F0F9FF;border-left:3px solid #0EA5E9;border-radius:8px;font-size:12.5px;color:#334155;line-height:1.5">
+                    <b style="color:#0369A1">Regional employee activity log.</b> Non-blank cells indicate status events (holidays, leave, business trips); blank cells represent standard working days.
+                </div>`;
+
                 // ─── 6-tile KPI row ───
-                html += `<div class="viz-kpi-grid viz-kpi-grid-5" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:18px">`;
+                html += `<div class="viz-kpi-grid viz-kpi-grid-6" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:18px">`;
                 html += _kpiCard('Total Employees', _fmtNumber(totalEmployees), { icon: 'users', colorClass: 'kpi-success' });
-                html += _kpiCard('Countries', _fmtNumber(uniqueCountries.length), { icon: 'globe', subtitle: uniqueCountries.slice(0, 3).join(', ') + (uniqueCountries.length > 3 ? '…' : '') });
+                html += _kpiCard('Countries', _fmtNumber(uniqueCountries.length), { icon: 'globe', subtitle: topCountries.length ? 'Top: ' + topCountries.join(', ') : '' });
                 html += _kpiCard('Sectors', _fmtNumber(uniqueSectors.length), { icon: 'briefcase', subtitle: uniqueSectors.join(', ') });
-                html += _kpiCard('Months Tracked', _fmtNumber(sheetsParsed.length), { icon: 'calendar' });
-                html += _kpiCard('Avg Office / Emp-Month', avgOfficePerEmpMonth.toFixed(1) + ' days', { icon: 'building', colorClass: 'kpi-warning' });
-                html += _kpiCard('Peak Office Day', peakDay ? `${peakCount}` : '—', { icon: 'trending-up', subtitle: peakDay || 'No data' });
+                html += _kpiCard('Logged Events', _fmtNumber(loggedEvents), { icon: 'activity', colorClass: 'kpi-warning', subtitle: 'Non-blank entries' });
+                html += _kpiCard('Active Holidays', _fmtNumber(activeHolidays), { icon: 'calendar-heart', subtitle: loggedEvents > 0 ? `${Math.round(100 * activeHolidays / loggedEvents)}% of events` : '' });
+                html += _kpiCard('Coverage Period', coverageStr, { icon: 'calendar-range' });
                 html += `</div>`;
 
                 // ─── Month tabs ───
@@ -4598,12 +4727,18 @@
                     sheetsParsed.forEach((sheet, i) => {
                         const active = i === 0;
                         html += `<button type="button" class="ew-tab-btn${active ? ' active' : ''}" data-month="${escA(sheet)}" style="display:inline-flex;align-items:center;gap:6px;padding:10px 18px;border:0;background:${active ? 'rgba(14,165,233,0.1)' : 'transparent'};color:${active ? '#0369A1' : '#6B6B8A'};border-bottom:2px solid ${active ? '#0EA5E9' : 'transparent'};margin-bottom:-2px;font-size:13px;font-weight:600;cursor:pointer;border-radius:8px 8px 0 0">
-                            <i data-lucide="calendar" style="width:14px;height:14px"></i> ${esc(sheet)}
+                            <i data-lucide="calendar" style="width:14px;height:14px"></i> ${esc(sheetDisplay(sheet))}
                         </button>`;
                     });
                     html += `</div>`;
                 }
                 html += `<div id="${panelId}"></div>`;
+
+                // ─── Top Employees by Logged Events (aggregated across all months) ───
+                const topEmpId = `${uid}-topemp`;
+                if (!isExec) {
+                    html += `<div class="viz-chart-card" style="margin-top:16px"><div class="viz-chart-header">Top Employees by Logged Events</div><div id="${topEmpId}" class="viz-chart-body" style="min-height:380px"></div></div>`;
+                }
 
                 // ─── Employees table (shared across months, filterable) ───
                 const empFilterBarId = `${uid}-emp-fb`;
@@ -4626,15 +4761,31 @@
                     html += `<div id="${empTableId}"></div>`;
                 }
 
-                // ─── Legend panel ───
-                html += `<div style="margin:24px 0 12px;padding:12px 16px;background:#F0F9FF;border:1px solid rgba(14,165,233,0.22);border-radius:10px">
-                    <div style="font-size:13px;font-weight:700;color:#0369A1;margin-bottom:8px;display:flex;align-items:center;gap:6px"><i data-lucide="key" style="width:14px;height:14px"></i>Status Legend</div>
-                    <div style="display:flex;flex-wrap:wrap;gap:10px;font-size:12px">`;
+                // ─── Category-grouped legend panel ───
+                const legendByCategory = {};
+                EW_CATEGORIES.forEach(c => { legendByCategory[c.key] = []; });
                 Object.entries(legend).forEach(([code, label]) => {
-                    const color = STATUS_COLORS[code] || '#94A3B8';
-                    html += `<div style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:#fff;border-radius:999px;border:1px solid rgba(0,0,0,0.06)"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${color}"></span><b>${esc(code)}</b> · ${esc(label)}</div>`;
+                    const cat = _ewCategorize(code, { [code]: label }) || 'Other';
+                    if (!legendByCategory[cat]) legendByCategory[cat] = [];
+                    legendByCategory[cat].push({ code, label });
                 });
-                html += `<div style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:#fff;border-radius:999px;border:1px solid rgba(0,0,0,0.06)"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${STATUS_COLORS._blank}"></span><b>—</b> · Weekend / not logged</div>`;
+                html += `<div style="margin:24px 0 12px;padding:14px 16px;background:#F0F9FF;border:1px solid rgba(14,165,233,0.22);border-radius:10px">
+                    <div style="font-size:13px;font-weight:700;color:#0369A1;margin-bottom:10px;display:flex;align-items:center;gap:6px"><i data-lucide="key" style="width:14px;height:14px"></i>Status Legend (grouped by category)</div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">`;
+                EW_CATEGORIES.forEach(cat => {
+                    const codes = legendByCategory[cat.key] || [];
+                    if (codes.length === 0) return;
+                    html += `<div style="padding:8px 10px;background:#fff;border-radius:8px;border:1px solid rgba(0,0,0,0.05)">
+                        <div style="display:flex;align-items:center;gap:6px;font-weight:700;font-size:12.5px;color:#1e293b;margin-bottom:5px"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${cat.color}"></span>${esc(cat.label)}</div>
+                        <div style="font-size:11.5px;color:#475569;line-height:1.55">
+                            ${codes.map(({ code, label }) => `<div><b>${esc(code)}</b> — ${esc(label)}</div>`).join('')}
+                        </div>
+                    </div>`;
+                });
+                html += `<div style="padding:8px 10px;background:#fff;border-radius:8px;border:1px solid rgba(0,0,0,0.05)">
+                        <div style="display:flex;align-items:center;gap:6px;font-weight:700;font-size:12.5px;color:#1e293b;margin-bottom:5px"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#E5E7EB"></span>Working Day</div>
+                        <div style="font-size:11.5px;color:#475569;line-height:1.55"><div>Blank cell — no event logged</div></div>
+                    </div>`;
                 html += `</div></div>`;
 
                 el.innerHTML = html;
@@ -4665,79 +4816,93 @@
 
                     const rows = whereabouts[sheetName] || [];
                     if (rows.length === 0) {
-                        _renderEmptyState(root, { message: `No data for ${sheetName}.`, showReset: false });
+                        _renderEmptyState(root, { message: `No data for ${sheetDisplay(sheetName)}.`, showReset: false });
                         return;
                     }
 
-                    const dailyCounts = (aggregates.daily_office_count_by_month || {})[sheetName] || {};
-                    const statusTotals = (aggregates.status_totals_by_month || {})[sheetName] || {};
+                    // Events filtered to this month only
+                    const monthEvents = allEvents.filter(e => e.sheet === sheetName);
 
-                    const dailyId = `${uid}-daily-${sheetName.replace(/\W+/g, '')}`;
-                    const donutId = `${uid}-donut-${sheetName.replace(/\W+/g, '')}`;
-                    const countryId = `${uid}-country-${sheetName.replace(/\W+/g, '')}`;
-                    const heatId = `${uid}-heat-${sheetName.replace(/\W+/g, '')}`;
+                    // Daily event count across all employees — seed with all days in the month
+                    // so the column chart x-axis is continuous even when most days have 0 events.
+                    const dailyEventCounts = {};
+                    const seedDaily = (aggregates.daily_office_count_by_month || {})[sheetName] || {};
+                    Object.keys(seedDaily).forEach(d => { dailyEventCounts[d] = 0; });
+                    monthEvents.forEach(ev => {
+                        dailyEventCounts[ev.date] = (dailyEventCounts[ev.date] || 0) + 1;
+                    });
+
+                    // Event categories distribution for this month
+                    const categoryCounts = {};
+                    monthEvents.forEach(ev => {
+                        categoryCounts[ev.category] = (categoryCounts[ev.category] || 0) + 1;
+                    });
+
+                    const sheetClean = sheetName.replace(/\W+/g, '');
+                    const dailyId = `${uid}-daily-${sheetClean}`;
+                    const donutId = `${uid}-donut-${sheetClean}`;
+                    const countryId = `${uid}-country-${sheetClean}`;
+                    const matrixId = `${uid}-matrix-${sheetClean}`;
 
                     let panelHtml = '';
                     if (!isExec) {
-                        // Chart A: daily office line + Chart B: status donut
                         panelHtml += `<div class="viz-chart-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px">
-                            <div class="viz-chart-card"><div class="viz-chart-header">Daily Office Attendance — ${esc(sheetName)}</div><div id="${dailyId}" class="viz-chart-body" style="min-height:320px"></div></div>
-                            <div class="viz-chart-card"><div class="viz-chart-header">Status Distribution</div><div id="${donutId}" class="viz-chart-body" style="min-height:320px"></div></div>
+                            <div class="viz-chart-card"><div class="viz-chart-header">Daily Event Count — ${esc(sheetDisplay(sheetName))}</div><div id="${dailyId}" class="viz-chart-body" style="min-height:320px"></div></div>
+                            <div class="viz-chart-card"><div class="viz-chart-header">Event Categories — ${esc(sheetDisplay(sheetName))}</div><div id="${donutId}" class="viz-chart-body" style="min-height:320px"></div></div>
                         </div>`;
-                        // Chart C: country bar
-                        panelHtml += `<div class="viz-chart-card" style="margin-top:16px"><div class="viz-chart-header">Employees by Country (${esc(sheetName)})</div><div id="${countryId}" class="viz-chart-body" style="min-height:300px"></div></div>`;
-                        // Chart D: heatmap
-                        panelHtml += `<div class="viz-chart-card" style="margin-top:16px"><div class="viz-chart-header">Top 30 Employees — Office-Day Heatmap</div><div id="${heatId}" class="viz-chart-body" style="min-height:420px;overflow-x:auto"></div></div>`;
+                        panelHtml += `<div class="viz-chart-card" style="margin-top:16px"><div class="viz-chart-header">Employees by Country</div><div id="${countryId}" class="viz-chart-body" style="min-height:300px"></div></div>`;
+                        panelHtml += `<div class="viz-chart-card" style="margin-top:16px"><div class="viz-chart-header">Country × Event Category — ${esc(sheetDisplay(sheetName))}</div><div id="${matrixId}" class="viz-chart-body" style="min-height:360px;overflow-x:auto"></div></div>`;
                     } else {
-                        // Executive: one chart only
-                        panelHtml += `<div class="viz-chart-card"><div class="viz-chart-header">Daily Office Attendance — ${esc(sheetName)}</div><div id="${dailyId}" class="viz-chart-body" style="min-height:320px"></div></div>`;
+                        panelHtml += `<div class="viz-chart-card"><div class="viz-chart-header">Daily Event Count — ${esc(sheetDisplay(sheetName))}</div><div id="${dailyId}" class="viz-chart-body" style="min-height:320px"></div></div>`;
                     }
                     root.innerHTML = panelHtml;
 
                     setTimeout(() => {
-                        // Chart A — daily office count line
-                        const dates = Object.keys(dailyCounts).sort();
-                        const countsArr = dates.map(d => dailyCounts[d] || 0);
+                        // Chart 1 — Daily Event Count (column)
+                        const dates = Object.keys(dailyEventCounts).sort();
+                        const countsArr = dates.map(d => dailyEventCounts[d] || 0);
                         if (dates.length > 0 && document.getElementById(dailyId)) {
                             _renderChart(dailyId, {
-                                chart: { type: 'line', height: 320, toolbar: { show: false } },
-                                series: [{ name: 'In Office', data: countsArr }],
+                                chart: { type: 'bar', height: 320, toolbar: { show: false } },
+                                series: [{ name: 'Events', data: countsArr }],
                                 xaxis: { categories: dates.map(d => d.slice(-5)), labels: { rotate: -45, style: { fontSize: '10px' } } },
-                                stroke: { width: 3, curve: 'smooth' },
                                 colors: ['#0EA5E9'],
-                                markers: { size: 4 },
+                                plotOptions: { bar: { borderRadius: 3, columnWidth: '70%' } },
                                 dataLabels: { enabled: false },
                                 grid: { borderColor: 'rgba(0,0,0,0.06)' },
-                                tooltip: { x: { formatter: (_v, { dataPointIndex }) => dates[dataPointIndex] } },
+                                yaxis: { labels: { formatter: (v) => Math.round(v) } },
+                                tooltip: { x: { formatter: (_v, { dataPointIndex }) => _ewFmtDate(dates[dataPointIndex]) } },
                             });
                         }
 
                         if (!isExec) {
-                            // Chart B — donut of status counts
-                            const statusKeys = Object.keys(statusTotals).filter(k => k !== '_blank');
-                            if (statusKeys.length > 0 && document.getElementById(donutId)) {
+                            // Chart 2 — Event Categories donut (grouped, hide empty)
+                            const catEntries = EW_CATEGORIES
+                                .map(c => ({ label: c.label, color: c.color, val: categoryCounts[c.key] || 0 }))
+                                .filter(e => e.val > 0);
+                            if (catEntries.length > 0 && document.getElementById(donutId)) {
                                 _renderChart(donutId, {
                                     chart: { type: 'donut', height: 320 },
-                                    series: statusKeys.map(k => statusTotals[k] || 0),
-                                    labels: statusKeys.map(k => `${k} — ${esc(legend[k] || k)}`),
-                                    colors: statusKeys.map(k => STATUS_COLORS[k] || '#94A3B8'),
-                                    plotOptions: { pie: { donut: { size: '62%' } } },
-                                    legend: { position: 'bottom' },
+                                    series: catEntries.map(e => e.val),
+                                    labels: catEntries.map(e => e.label),
+                                    colors: catEntries.map(e => e.color),
+                                    plotOptions: { pie: { donut: { size: '62%', labels: { show: true, total: { show: true, label: 'Events', formatter: () => String(monthEvents.length) } } } } },
+                                    legend: { position: 'bottom', fontSize: '12px' },
                                     dataLabels: { enabled: true, formatter: (v) => v.toFixed(0) + '%' },
+                                    tooltip: { y: { formatter: (v) => `${v} events` } },
                                 });
+                            } else if (document.getElementById(donutId)) {
+                                _renderEmptyState(document.getElementById(donutId), { message: 'No events logged this month.', showReset: false });
                             }
 
-                            // Chart C — country breakdown horizontal bar
-                            const byCountry = {};
-                            rows.forEach(r => {
-                                const c = r.country || 'Unknown';
-                                byCountry[c] = (byCountry[c] || 0) + 1;
-                            });
-                            const countryLabels = Object.keys(byCountry).sort((a, b) => byCountry[b] - byCountry[a]);
-                            const countryVals = countryLabels.map(c => byCountry[c]);
+                            // Chart 3 — Employees by Country (keep; already fine)
+                            const byCountryMonth = {};
+                            rows.forEach(r => { const c = r.country || 'Unknown'; byCountryMonth[c] = (byCountryMonth[c] || 0) + 1; });
+                            const countryLabels = Object.keys(byCountryMonth).sort((a, b) => byCountryMonth[b] - byCountryMonth[a]);
+                            const countryVals = countryLabels.map(c => byCountryMonth[c]);
                             if (countryLabels.length > 0 && document.getElementById(countryId)) {
                                 _renderChart(countryId, {
-                                    chart: { type: 'bar', height: Math.max(280, countryLabels.length * 36 + 60), toolbar: { show: false } },
+                                    chart: { type: 'bar', height: Math.max(280, countryLabels.length * 34 + 60), toolbar: { show: false } },
                                     series: [{ name: 'Employees', data: countryVals }],
                                     xaxis: { categories: countryLabels.map(c => _truncate(String(c), 24)) },
                                     colors: EW_PALETTE,
@@ -4748,49 +4913,50 @@
                                 });
                             }
 
-                            // Chart D — heatmap: top 30 employees × day, colored by office-day
-                            const ranked = rows
-                                .map(r => ({ row: r, office: (r.status_counts && r.status_counts.O) || 0 }))
-                                .sort((a, b) => b.office - a.office)
-                                .slice(0, 30);
-                            if (ranked.length > 0 && dates.length > 0 && document.getElementById(heatId)) {
-                                const series = ranked.map(({ row }) => ({
-                                    name: _truncate(row.name || row.employee_number || '—', 24),
-                                    data: dates.map(d => {
-                                        const code = (row.daily_status || {})[d] || '';
-                                        const rank = _ewStatusRank(code);
-                                        return { x: d.slice(-5), y: rank, meta: { code, date: d } };
-                                    }),
+                            // Chart 4 — Country × Event Category heatmap matrix
+                            const activeCatKeys = EW_CATEGORIES.map(c => c.key).filter(k => (categoryCounts[k] || 0) > 0);
+                            const matrixCountries = [...new Set(monthEvents.map(e => e.country || 'Unknown'))].sort();
+                            if (activeCatKeys.length > 0 && matrixCountries.length > 0 && document.getElementById(matrixId)) {
+                                const matrixCounts = {};
+                                matrixCountries.forEach(c => { matrixCounts[c] = {}; activeCatKeys.forEach(k => { matrixCounts[c][k] = 0; }); });
+                                monthEvents.forEach(ev => {
+                                    const c = ev.country || 'Unknown';
+                                    if (matrixCounts[c] && ev.category in matrixCounts[c]) matrixCounts[c][ev.category] += 1;
+                                });
+                                const series = matrixCountries.map(country => ({
+                                    name: _truncate(country, 20),
+                                    data: activeCatKeys.map(k => ({ x: k, y: matrixCounts[country][k] })),
                                 }));
-                                _renderChart(heatId, {
-                                    chart: { type: 'heatmap', height: Math.max(420, ranked.length * 18 + 80), toolbar: { show: false } },
+                                let maxCell = 0;
+                                matrixCountries.forEach(c => activeCatKeys.forEach(k => { if (matrixCounts[c][k] > maxCell) maxCell = matrixCounts[c][k]; }));
+                                const step = Math.max(1, Math.ceil(maxCell / 4));
+                                _renderChart(matrixId, {
+                                    chart: { type: 'heatmap', height: Math.max(300, matrixCountries.length * 30 + 80), toolbar: { show: false } },
                                     series,
-                                    colors: ['#0EA5E9'],
-                                    dataLabels: { enabled: false },
+                                    dataLabels: { enabled: true, style: { fontSize: '11px', colors: ['#1e293b'] }, formatter: (v) => v > 0 ? v : '' },
                                     plotOptions: {
                                         heatmap: {
-                                            radius: 2,
+                                            radius: 3,
                                             useFillColorAsStroke: false,
                                             colorScale: {
                                                 ranges: [
-                                                    { from: 0, to: 0, name: '—', color: STATUS_COLORS._blank },
-                                                    { from: 1, to: 1, name: 'Office', color: STATUS_COLORS.O },
-                                                    { from: 2, to: 2, name: 'WFH', color: STATUS_COLORS.H },
-                                                    { from: 3, to: 3, name: 'Leave', color: STATUS_COLORS.L },
-                                                    { from: 4, to: 4, name: 'Biz Trip', color: STATUS_COLORS.B },
-                                                    { from: 5, to: 5, name: 'Sick', color: STATUS_COLORS.S },
+                                                    { from: 0, to: 0, name: 'None', color: '#F1F5F9' },
+                                                    { from: 1, to: step, name: 'Low', color: '#BAE6FD' },
+                                                    { from: step + 1, to: step * 2, name: 'Med', color: '#38BDF8' },
+                                                    { from: step * 2 + 1, to: step * 3, name: 'High', color: '#0284C7' },
+                                                    { from: step * 3 + 1, to: Math.max(step * 4, maxCell), name: 'Peak', color: '#0C4A6E' },
                                                 ],
                                             },
                                         },
                                     },
-                                    xaxis: { labels: { rotate: -45, style: { fontSize: '9px' } } },
+                                    xaxis: { labels: { style: { fontSize: '11px' }, rotate: -30 } },
                                     legend: { show: true, position: 'bottom' },
                                     tooltip: {
                                         custom: ({ seriesIndex, dataPointIndex, w }) => {
-                                            const p = w.config.series[seriesIndex].data[dataPointIndex];
-                                            const code = (p && p.meta && p.meta.code) || '—';
-                                            const label = legend[code] || (code ? code : 'Not logged');
-                                            return `<div style="padding:6px 10px"><b>${w.config.series[seriesIndex].name}</b><br/>${p.meta && p.meta.date || ''}<br/>${esc(code || '—')} · ${esc(label)}</div>`;
+                                            const country = w.config.series[seriesIndex].name;
+                                            const cat = activeCatKeys[dataPointIndex];
+                                            const val = (w.config.series[seriesIndex].data[dataPointIndex] || {}).y || 0;
+                                            return `<div style="padding:6px 10px"><b>${esc(country)}</b><br/>${esc(cat)}: <b>${val}</b> event${val === 1 ? '' : 's'}</div>`;
                                         },
                                     },
                                 });
@@ -4799,9 +4965,64 @@
                     }, 60);
                 };
 
+                // ─── Top Employees by Logged Events (aggregated, all months) ───
+                const renderTopEmployees = () => {
+                    const node = document.getElementById(topEmpId);
+                    if (!node) return;
+                    const ranked = Object.entries(empStats)
+                        .map(([key, s]) => {
+                            const emp = empIndex[key] || {};
+                            return {
+                                name: emp.name || key,
+                                count: s.count,
+                                country: emp.country || '',
+                            };
+                        })
+                        .filter(x => x.count > 0)
+                        .sort((a, b) => b.count - a.count);
+                    if (ranked.length === 0) {
+                        _renderEmptyState(node, { message: 'No logged events yet.', showReset: false });
+                        return;
+                    }
+                    const slice = ranked.length <= 15 ? ranked : ranked.slice(0, 15);
+                    const height = Math.max(280, slice.length * 28 + 80);
+                    _renderChart(topEmpId, {
+                        chart: { type: 'bar', height, toolbar: { show: false } },
+                        series: [{ name: 'Events', data: slice.map(x => x.count) }],
+                        xaxis: { categories: slice.map(x => _truncate(x.name, 28)) },
+                        colors: ['#0369A1'],
+                        plotOptions: { bar: { horizontal: true, borderRadius: 4, barHeight: '62%' } },
+                        dataLabels: { enabled: true, style: { fontSize: '11px', colors: ['#fff'] } },
+                        grid: { borderColor: 'rgba(0,0,0,0.06)' },
+                        legend: { show: false },
+                        tooltip: {
+                            y: { formatter: (v) => `${v} event${v === 1 ? '' : 's'}` },
+                            custom: ({ dataPointIndex }) => {
+                                const row = slice[dataPointIndex];
+                                return `<div style="padding:6px 10px"><b>${esc(row.name)}</b>${row.country ? '<br/>' + esc(row.country) : ''}<br/>${row.count} event${row.count === 1 ? '' : 's'}</div>`;
+                            },
+                        },
+                    });
+                };
+
                 // ─── Employee table renderer (shared across months) ───
-                const EMP_HEADERS = ['Employee #', 'Name', 'Sector', 'Country'];
-                const empToRows = (list) => list.map(e => [e.employee_number || '—', e.name || '—', e.business_sector || '—', e.country || '—']);
+                const EMP_HEADERS = ['Employee #', 'Name', 'Sector', 'Country', 'Events', 'Primary Event', 'Last Event'];
+                const empToRows = (list) => list.map(e => {
+                    const key = String(e.employee_number || '');
+                    const s = empStats[key] || { count: 0, byCategory: {}, lastDate: '' };
+                    let primary = '—';
+                    const catKeys = Object.keys(s.byCategory || {});
+                    if (catKeys.length) primary = catKeys.sort((a, b) => s.byCategory[b] - s.byCategory[a])[0];
+                    return [
+                        e.employee_number || '—',
+                        e.name || '—',
+                        e.business_sector || '—',
+                        e.country || '—',
+                        s.count,
+                        primary,
+                        s.lastDate ? _ewFmtDate(s.lastDate) : '—',
+                    ];
+                });
 
                 const renderEmployeeTable = () => {
                     const wrap = document.getElementById(empTableId);
@@ -4920,21 +5141,12 @@
 
                 // ─── Initial renders ───
                 if (sheetsParsed.length > 0) renderMonthPanel(sheetsParsed[0]);
-                if (!isExec) renderEmployeeTable();
+                if (!isExec) {
+                    setTimeout(renderTopEmployees, 80);
+                    renderEmployeeTable();
+                }
                 _registerFilterState('EMPLOYEE_WHEREABOUTS', {});
                 if (window.lucide) window.lucide.createIcons();
-            }
-
-            // Rank letter status codes for heatmap coloring (0 = blank/weekend).
-            function _ewStatusRank(code) {
-                if (!code) return 0;
-                const c = String(code).trim().toUpperCase();
-                if (c === 'O') return 1;
-                if (c === 'H') return 2;
-                if (c === 'L') return 3;
-                if (c === 'B') return 4;
-                if (c === 'S') return 5;
-                return 0;
             }
 
             // ═══════════════════════════════════════════════════
