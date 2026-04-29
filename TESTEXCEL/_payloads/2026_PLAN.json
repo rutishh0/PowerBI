@@ -1,0 +1,1665 @@
+{
+  "file_type": "COMMERCIAL_PLAN",
+  "metadata": {
+    "source_file": "2026_PLAN.xlsx",
+    "sheets_parsed": [
+      "1YP",
+      "5YP SPE SALES",
+      "SPE SALES PER YEAR"
+    ],
+    "plan_year": 2026,
+    "generated_at": "2026-04-23T09:27:10",
+    "counts": {
+      "one_year_plan_items": 28,
+      "five_year_spe_items": 46,
+      "annual_summary_years": 5
+    }
+  },
+  "one_year_plan": {
+    "week_columns": [
+      "2026-01-01",
+      "2026-01-08",
+      "2026-01-15",
+      "2026-01-22",
+      "2026-01-29",
+      "2026-02-05",
+      "2026-02-12",
+      "2026-02-19",
+      "2026-02-26",
+      "2026-03-05",
+      "2026-03-12",
+      "2026-03-19",
+      "2026-03-26",
+      "2026-04-02",
+      "2026-04-09",
+      "2026-04-16",
+      "2026-04-23",
+      "2026-04-30",
+      "2026-05-07",
+      "2026-05-14",
+      "2026-05-21",
+      "2026-05-28",
+      "2026-06-04",
+      "2026-06-11",
+      "2026-06-18",
+      "2026-06-25",
+      "2026-07-02",
+      "2026-07-09",
+      "2026-07-16",
+      "2026-07-23",
+      "2026-07-30",
+      "2026-08-06",
+      "2026-08-13",
+      "2026-08-20",
+      "2026-08-27",
+      "2026-09-03",
+      "2026-09-10",
+      "2026-09-17",
+      "2026-09-24",
+      "2026-10-01",
+      "2026-10-08",
+      "2026-10-15",
+      "2026-10-22",
+      "2026-10-29",
+      "2026-11-05",
+      "2026-11-12",
+      "2026-11-19",
+      "2026-11-26",
+      "2026-12-03",
+      "2026-12-10",
+      "2026-12-17",
+      "2026-12-24"
+    ],
+    "historical_week_columns": [
+      "2024-10-07",
+      "2024-10-14",
+      "2024-10-21",
+      "2024-10-28",
+      "2024-11-04",
+      "2024-11-11",
+      "2024-11-18",
+      "2024-11-25",
+      "2024-12-02",
+      "2024-12-09",
+      "2024-12-16",
+      "2024-12-23",
+      "2024-12-30"
+    ],
+    "category_columns": [
+      "COMMERCIAL",
+      "AM",
+      "SALES",
+      "CUSTOMER OPS"
+    ],
+    "items": [
+      {
+        "row_index": 7,
+        "blue_chip": null,
+        "customer": "Ethiopian",
+        "issue": "Dispute and Debt",
+        "description": "Need to settle AOG claim in order to unlock debt",
+        "owner": "Gordon",
+        "primary_owner": "Gordon",
+        "campaign_owner": "Gordon",
+        "latest_update": "L1 approved.  L2 Planned",
+        "campaign_description": "A350-900, A350-1000, 787 & Norse 787 campaign",
+        "category_status": {
+          "COMMERCIAL": null,
+          "AM": "L1",
+          "SALES": "L2",
+          "CUSTOMER OPS": null
+        },
+        "historical_status": {
+          "2024-10-14": "L1",
+          "2024-10-21": "L2",
+          "2024-11-04": "EIS & \nKBP meeting\nOffer Letter",
+          "2024-11-11": "Negotiations",
+          "2024-12-02": "Feedback on Offer\nNegotiations",
+          "2024-12-09": "Amndt?",
+          "2024-12-16": "ETH sign or Offset Debt"
+        },
+        "weekly_status": {
+          "2026-03-26": "ICT Kick Off",
+          "2026-04-02": "Osman in Addis, TCA Value Sell, Derate analysis, LLP Service",
+          "2026-04-09": "Osman in Addis, TCA Value Sell, Derate analysis, LLP Service",
+          "2026-04-16": "L1 strategy",
+          "2026-04-23": "L2 Strategy",
+          "2026-04-30": "L3 Strategy\nIATA Africa Addis",
+          "2026-05-07": "L3 Approval",
+          "2026-05-14": "IC Meeting",
+          "2026-05-21": "Package proposal submission",
+          "2026-06-11": "ET Senior visit to Derby & agree proposal",
+          "2026-07-23": "Announcement Farnborough"
+        },
+        "weeks_active": 11,
+        "status_summary": "Active"
+      },
+      {
+        "row_index": 8,
+        "blue_chip": null,
+        "customer": "Ethiopian",
+        "issue": null,
+        "description": null,
+        "owner": null,
+        "primary_owner": null,
+        "campaign_owner": null,
+        "latest_update": null,
+        "campaign_description": "2 A350-900 Whitetail TCA + SPE",
+        "category_status": {
+          "COMMERCIAL": null,
+          "AM": null,
+          "SALES": null,
+          "CUSTOMER OPS": null
+        },
+        "historical_status": {},
+        "weekly_status": {
+          "2026-04-02": "Osman in Addis",
+          "2026-04-16": "L2 for amended proposal (rate, training , TCA & SPE escalation)",
+          "2026-05-14": "Proposal Signature",
+          "2026-05-21": "TCA & PA  contract amendment",
+          "2026-06-11": "PA Signature",
+          "2026-06-25": "SPE Delivery"
+        },
+        "weeks_active": 6,
+        "status_summary": "Active"
+      },
+      {
+        "row_index": 9,
+        "blue_chip": null,
+        "customer": "Gulf",
+        "issue": "Settlement/Sales",
+        "description": "Need to settle the AOG Remedy to unlock Sale opportunity",
+        "owner": "Georgia",
+        "primary_owner": "Georgia",
+        "campaign_owner": "Georgia",
+        "latest_update": null,
+        "campaign_description": "Project Falcon",
+        "category_status": {
+          "COMMERCIAL": "L2",
+          "AM": "L2",
+          "SALES": "L3/L4",
+          "CUSTOMER OPS": null
+        },
+        "historical_status": {
+          "2024-10-07": "L2",
+          "2024-10-14": "L2",
+          "2024-10-21": "L3/L4",
+          "2024-11-11": "Bahrain Airshow  & Submit +2 Proposal",
+          "2024-11-18": "Strategy review for 5+5 propsoal",
+          "2024-11-25": "Feedback from GFA",
+          "2024-12-09": "Revised Submission"
+        },
+        "weekly_status": {
+          "2026-03-05": "Initial customer meeting to share proposal",
+          "2026-04-02": "Follow-up meeting and bid 2 submission",
+          "2026-04-09": "Customer meeting to discuss proposal valuation",
+          "2026-04-16": "Follow up with senior management",
+          "2026-04-23": "Bid 3 submission",
+          "2026-05-07": "Proposal agreement and offer letter submission",
+          "2026-05-21": "Offer l.etter signed",
+          "2026-05-28": "Prod engine lease executed"
+        },
+        "weeks_active": 8,
+        "status_summary": "Active"
+      },
+      {
+        "row_index": 10,
+        "blue_chip": null,
+        "customer": "Qatar",
+        "issue": null,
+        "description": null,
+        "owner": "Issy",
+        "primary_owner": null,
+        "campaign_owner": "Issy",
+        "latest_update": null,
+        "campaign_description": "A350-1000 Campaign, 60 AC",
+        "category_status": {
+          "COMMERCIAL": null,
+          "AM": null,
+          "SALES": null,
+          "CUSTOMER OPS": null
+        },
+        "historical_status": {},
+        "weekly_status": {
+          "2026-03-05": "Date TBC on when travel is allowed - target for a session in Doha to review feedback on precious A350-1000 Campaign",
+          "2026-05-14": "A350 Triparty  Meeting"
+        },
+        "weeks_active": 2,
+        "status_summary": "Active"
+      },
+      {
+        "row_index": 11,
+        "blue_chip": null,
+        "customer": "Qatar",
+        "issue": "Debt",
+        "description": "Need to solve for Qatar CRC",
+        "owner": "Issy",
+        "primary_owner": "Issy",
+        "campaign_owner": null,
+        "latest_update": null,
+        "campaign_description": "Amendment 12 (Extension)",
+        "category_status": {
+          "COMMERCIAL": null,
+          "AM": "Identify Stand repair",
+          "SALES": "Discussion with Qatar on workable solution",
+          "CUSTOMER OPS": null
+        },
+        "historical_status": {
+          "2024-10-14": "Identify Stand repair",
+          "2024-10-21": "Discussion with Qatar on workable solution",
+          "2024-11-04": "L1 Strategy",
+          "2024-11-11": "Propose solution to stratgey",
+          "2024-12-02": "Follow on session on CRC debt with Qatar\nSession with Tim to pursue net off"
+        },
+        "weekly_status": {
+          "2026-01-22": "Amendment 12 (84k extension) signature expected"
+        },
+        "weeks_active": 1,
+        "status_summary": "Active"
+      },
+      {
+        "row_index": 12,
+        "blue_chip": null,
+        "customer": "MSR",
+        "issue": null,
+        "description": null,
+        "owner": "Georges",
+        "primary_owner": null,
+        "campaign_owner": "Georges",
+        "latest_update": null,
+        "campaign_description": "Trent 700 Extension",
+        "category_status": {
+          "COMMERCIAL": null,
+          "AM": null,
+          "SALES": null,
+          "CUSTOMER OPS": null
+        },
+        "historical_status": {},
+        "weekly_status": {
+          "2026-03-19": "Submit Proposal",
+          "2026-04-16": "Proposal Negotiatiion",
+          "2026-05-28": "Agree a Proposal",
+          "2026-06-04": "Contracting"
+        },
+        "weeks_active": 4,
+        "status_summary": "Active"
+      },
+      {
+        "row_index": 13,
+        "blue_chip": null,
+        "customer": "MSR",
+        "issue": null,
+        "description": null,
+        "owner": "Georges",
+        "primary_owner": null,
+        "campaign_owner": "Georges",
+        "latest_update": null,
+        "campaign_description": "Widebody Campaign  (Trent 7000 / XW-84 / Trent 1000)",
+        "category_status": {
+          "COMMERCIAL": null,
+          "AM": null,
+          "SALES": null,
+          "CUSTOMER OPS": null
+        },
+        "historical_status": {},
+        "weekly_status": {},
+        "weeks_active": 0,
+        "status_summary": "Unassigned"
+      },
+      {
+        "row_index": 14,
+        "blue_chip": null,
+        "customer": "MSR",
+        "issue": "Debt",
+        "description": "Drive for 0 debt",
+        "owner": "Georges",
+        "primary_owner": "Georges",
+        "campaign_owner": "Georges",
+        "latest_update": null,
+        "campaign_description": "EP Trent XWB-84 upsell",
+        "category_status": {
+          "COMMERCIAL": null,
+          "AM": null,
+          "SALES": "MSR Raise AOG credits",
+          "CUSTOMER OPS": "Clear Debt"
+        },
+        "historical_status": {
+          "2024-10-21": "MSR Raise AOG credits",
+          "2024-10-28": "Clear Debt",
+          "2024-11-25": "ULW Dispute?"
+        },
+        "weekly_status": {
+          "2026-03-26": "Agree Proposal",
+          "2026-04-23": "Agree Proposal"
+        },
+        "weeks_active": 2,
+        "status_summary": "Active"
+      },
+      {
+        "row_index": 15,
+        "blue_chip": null,
+        "customer": "Emirates",
+        "issue": "SPE delivery",
+        "description": "Deliver SPE",
+        "owner": "Darren",
+        "primary_owner": "Darren",
+        "campaign_owner": "Darren",
+        "latest_update": null,
+        "campaign_description": "Project Pantheon",
+        "category_status": {
+          "COMMERCIAL": null,
+          "AM": null,
+          "SALES": null,
+          "CUSTOMER OPS": "SPE Delivery"
+        },
+        "historical_status": {
+          "2024-10-28": "SPE Delivery"
+        },
+        "weekly_status": {
+          "2026-01-08": "Level 1 Finance Approval",
+          "2026-01-22": "Level 2 Finance Approval",
+          "2026-01-29": "Customer Negotiations",
+          "2026-03-05": "Re-Run Finance Models",
+          "2026-03-26": "Level 1 Finance Approval",
+          "2026-04-09": "Level 2 Finance Approval",
+          "2026-04-16": "Customer Negotiations",
+          "2026-05-21": "Contracting",
+          "2026-07-30": "Execution"
+        },
+        "weeks_active": 9,
+        "status_summary": "Active"
+      },
+      {
+        "row_index": 16,
+        "blue_chip": null,
+        "customer": "Saudia",
+        "issue": null,
+        "description": null,
+        "owner": "Georges",
+        "primary_owner": null,
+        "campaign_owner": "Georges",
+        "latest_update": null,
+        "campaign_description": "Solve Commercial Issue",
+        "category_status": {
+          "COMMERCIAL": null,
+          "AM": null,
+          "SALES": null,
+          "CUSTOMER OPS": null
+        },
+        "historical_status": {},
+        "weekly_status": {
+          "2026-01-22": "Solve Commercial issues"
+        },
+        "weeks_active": 1,
+        "status_summary": "Active"
+      },
+      {
+        "row_index": 17,
+        "blue_chip": null,
+        "customer": "Saudia",
+        "issue": null,
+        "description": null,
+        "owner": "Georges",
+        "primary_owner": null,
+        "campaign_owner": "Georges",
+        "latest_update": null,
+        "campaign_description": "Widebody Campaign  (Trent 7000 / XWB-97)",
+        "category_status": {
+          "COMMERCIAL": null,
+          "AM": null,
+          "SALES": null,
+          "CUSTOMER OPS": null
+        },
+        "historical_status": {},
+        "weekly_status": {
+          "2026-05-07": "Start Campaign"
+        },
+        "weeks_active": 1,
+        "status_summary": "Active"
+      },
+      {
+        "row_index": 18,
+        "blue_chip": null,
+        "customer": "Saudia",
+        "issue": null,
+        "description": null,
+        "owner": "Georges",
+        "primary_owner": null,
+        "campaign_owner": "Georges",
+        "latest_update": null,
+        "campaign_description": "Extend Trent 700s (Classic)",
+        "category_status": {
+          "COMMERCIAL": null,
+          "AM": null,
+          "SALES": null,
+          "CUSTOMER OPS": null
+        },
+        "historical_status": {},
+        "weekly_status": {
+          "2026-05-07": "Start Campaign"
+        },
+        "weeks_active": 1,
+        "status_summary": "Active"
+      },
+      {
+        "row_index": 19,
+        "blue_chip": null,
+        "customer": "Flynas",
+        "issue": "Sales",
+        "description": "Sign Proposal",
+        "owner": "Craig",
+        "primary_owner": "Craig",
+        "campaign_owner": "Georges",
+        "latest_update": null,
+        "campaign_description": "Contracting Trent 7000",
+        "category_status": {
+          "COMMERCIAL": null,
+          "AM": null,
+          "SALES": null,
+          "CUSTOMER OPS": null
+        },
+        "historical_status": {
+          "2024-11-18": "Meeting CEO Dubai",
+          "2024-12-09": "Sign Proposal"
+        },
+        "weekly_status": {
+          "2026-04-30": "Contracting Trent 7000",
+          "2026-10-29": "Spare Deposit"
+        },
+        "weeks_active": 2,
+        "status_summary": "Active"
+      },
+      {
+        "row_index": 20,
+        "blue_chip": null,
+        "customer": "Flyadeal",
+        "issue": "Sales",
+        "description": "Secure Proposal",
+        "owner": "Craig",
+        "primary_owner": "Craig",
+        "campaign_owner": "Georges",
+        "latest_update": null,
+        "campaign_description": "Contracting Trent 7000",
+        "category_status": {
+          "COMMERCIAL": null,
+          "AM": null,
+          "SALES": null,
+          "CUSTOMER OPS": "Meeting with DG"
+        },
+        "historical_status": {
+          "2024-10-28": "Meeting with DG",
+          "2024-11-04": "Follow on meeting",
+          "2024-11-11": "BAFO",
+          "2024-11-18": "Resolultion AQ30",
+          "2024-12-16": "Sign Proposal"
+        },
+        "weekly_status": {
+          "2026-01-08": "Contracting Trent 7000",
+          "2026-07-02": "Spare Deposit"
+        },
+        "weeks_active": 2,
+        "status_summary": "Active"
+      },
+      {
+        "row_index": 21,
+        "blue_chip": null,
+        "customer": "Etihad",
+        "issue": "Sales",
+        "description": "Submit proposal",
+        "owner": "Craig",
+        "primary_owner": "Craig",
+        "campaign_owner": "Gordon",
+        "latest_update": null,
+        "campaign_description": "A330neo Abra SPE",
+        "category_status": {
+          "COMMERCIAL": null,
+          "AM": null,
+          "SALES": "RFP recieved",
+          "CUSTOMER OPS": "L1"
+        },
+        "historical_status": {
+          "2024-10-21": "RFP recieved",
+          "2024-10-28": "L1",
+          "2024-11-04": "L2",
+          "2024-11-11": "L3",
+          "2024-11-25": "L4",
+          "2024-12-09": "Submit Proposal",
+          "2024-12-16": "Counter Proposal"
+        },
+        "weekly_status": {
+          "2026-03-26": "RR proposal signed with Abra",
+          "2026-06-04": "Etihad LoI with Abra",
+          "2026-06-18": "Etihad commitment on SPE pull forward",
+          "2026-07-09": "PA amendment submitted",
+          "2026-08-06": "PA amendment signed",
+          "2026-11-12": "Trent 7000 SPE delivery"
+        },
+        "weeks_active": 6,
+        "status_summary": "Active"
+      },
+      {
+        "row_index": 22,
+        "blue_chip": null,
+        "customer": "Etihad",
+        "issue": null,
+        "description": null,
+        "owner": "Gordon",
+        "primary_owner": null,
+        "campaign_owner": "Gordon",
+        "latest_update": null,
+        "campaign_description": "Trent 7000 TCA & SFAA",
+        "category_status": {
+          "COMMERCIAL": null,
+          "AM": null,
+          "SALES": null,
+          "CUSTOMER OPS": null
+        },
+        "historical_status": {},
+        "weekly_status": {
+          "2026-04-02": "TCA & SFAA updated drafts issued to Etihad",
+          "2026-04-23": "L2 Final Approval",
+          "2026-04-30": "Senior Close Meeting",
+          "2026-05-14": "Contract signature"
+        },
+        "weeks_active": 4,
+        "status_summary": "Active"
+      },
+      {
+        "row_index": 23,
+        "blue_chip": null,
+        "customer": "SilkWay",
+        "issue": null,
+        "description": null,
+        "owner": "Alexei",
+        "primary_owner": null,
+        "campaign_owner": "Alexei",
+        "latest_update": null,
+        "campaign_description": null,
+        "category_status": {
+          "COMMERCIAL": null,
+          "AM": null,
+          "SALES": null,
+          "CUSTOMER OPS": null
+        },
+        "historical_status": {},
+        "weekly_status": {},
+        "weeks_active": 0,
+        "status_summary": "Unassigned"
+      },
+      {
+        "row_index": 24,
+        "blue_chip": null,
+        "customer": "RIA",
+        "issue": null,
+        "description": null,
+        "owner": "Georges",
+        "primary_owner": null,
+        "campaign_owner": "Georges",
+        "latest_update": null,
+        "campaign_description": "Contracting Trent XWB-97",
+        "category_status": {
+          "COMMERCIAL": null,
+          "AM": null,
+          "SALES": null,
+          "CUSTOMER OPS": null
+        },
+        "historical_status": {},
+        "weekly_status": {
+          "2026-04-16": "Contracting Product Agreement",
+          "2026-06-25": "Spare Deposit"
+        },
+        "weeks_active": 2,
+        "status_summary": "Active"
+      },
+      {
+        "row_index": 25,
+        "blue_chip": null,
+        "customer": "Kuwait",
+        "issue": null,
+        "description": null,
+        "owner": "Georgia",
+        "primary_owner": null,
+        "campaign_owner": "Georgia",
+        "latest_update": null,
+        "campaign_description": "A350-900 Campaign",
+        "category_status": {
+          "COMMERCIAL": null,
+          "AM": null,
+          "SALES": null,
+          "CUSTOMER OPS": null
+        },
+        "historical_status": {},
+        "weekly_status": {},
+        "weeks_active": 0,
+        "status_summary": "Unassigned"
+      },
+      {
+        "row_index": 26,
+        "blue_chip": null,
+        "customer": "Air Tanzania",
+        "issue": null,
+        "description": null,
+        "owner": "Gordon",
+        "primary_owner": null,
+        "campaign_owner": "Gordon",
+        "latest_update": null,
+        "campaign_description": "SPE sale",
+        "category_status": {
+          "COMMERCIAL": null,
+          "AM": null,
+          "SALES": null,
+          "CUSTOMER OPS": null
+        },
+        "historical_status": {},
+        "weekly_status": {
+          "2026-04-09": "Further deposit payment $12.7",
+          "2026-04-23": "Final balance payment $1.1M & BoS"
+        },
+        "weeks_active": 2,
+        "status_summary": "Active"
+      },
+      {
+        "row_index": 27,
+        "blue_chip": null,
+        "customer": "Uzbekistan Airways",
+        "issue": null,
+        "description": null,
+        "owner": "Alexei",
+        "primary_owner": null,
+        "campaign_owner": "Alexei",
+        "latest_update": null,
+        "campaign_description": "22 B787-9 TCA campaign",
+        "category_status": {
+          "COMMERCIAL": null,
+          "AM": null,
+          "SALES": null,
+          "CUSTOMER OPS": null
+        },
+        "historical_status": {},
+        "weekly_status": {
+          "2026-02-05": "Visit UzAir to present proposal",
+          "2026-02-12": "09/02,  Omar meeting with UZ Ambassador, UK",
+          "2026-02-19": "17/02, UK-UZ infrastructure conference (Omar mtg with Lord Alderdice) and  CEO.",
+          "2026-02-26": "Proposal resent to UzAir CEO by Omar. 26/02,  evening - C5 Foreign ministers summit",
+          "2026-03-05": "Omar/team mtg with Adrian Gane (Board Member)",
+          "2026-03-19": "Alexei mtg with Nicholas (head of  UKTI in Tashkent) (IPO)",
+          "2026-04-16": "15-16/04 CA conference in Astana",
+          "2026-04-23": "Follow up letter from Omar to CEO to request update/mtg",
+          "2026-06-04": "UZ presdential vist to UK",
+          "2026-06-11": "KBP, 11/06",
+          "2026-07-16": "Farnborough invite + (CA delegation)"
+        },
+        "weeks_active": 11,
+        "status_summary": "Active"
+      },
+      {
+        "row_index": 28,
+        "blue_chip": null,
+        "customer": "Air Mauritius",
+        "issue": null,
+        "description": null,
+        "owner": "Georgia",
+        "primary_owner": null,
+        "campaign_owner": "Georgia",
+        "latest_update": null,
+        "campaign_description": "Fleet Restructure",
+        "category_status": {
+          "COMMERCIAL": null,
+          "AM": null,
+          "SALES": null,
+          "CUSTOMER OPS": null
+        },
+        "historical_status": {},
+        "weekly_status": {
+          "2026-04-02": "NDA Signed",
+          "2026-04-23": "Fleet Review feedback"
+        },
+        "weeks_active": 2,
+        "status_summary": "Active"
+      },
+      {
+        "row_index": 29,
+        "blue_chip": null,
+        "customer": "Air Astana",
+        "issue": null,
+        "description": null,
+        "owner": "Alexei",
+        "primary_owner": null,
+        "campaign_owner": "Alexei",
+        "latest_update": null,
+        "campaign_description": null,
+        "category_status": {
+          "COMMERCIAL": null,
+          "AM": null,
+          "SALES": null,
+          "CUSTOMER OPS": null
+        },
+        "historical_status": {},
+        "weekly_status": {
+          "2026-01-29": "Proposal in October 2025, 29/01 visit  to RR Derby by  assessemnt team",
+          "2026-03-26": "SVS L2 pack",
+          "2026-04-02": "03/04, presentation of updated proposal in Almaty",
+          "2026-04-16": "UK HMA meeting with CEO  -request fpr  guarantees",
+          "2026-04-23": "Intro letter from Omar to the new CEO",
+          "2026-05-07": "EX CEO (now advisor) P Foster visit to RR Derby in May, date TBC (Omar)",
+          "2026-05-14": "meeting to discuss guarantees (ToW/AOG), date TBC - key aspect forf decision, according to CEO",
+          "2026-06-04": "Meeting with CEO during  IATA (Omar)",
+          "2026-07-16": "Farnborough invite + (CA delegation)",
+          "2026-08-06": "Minister Bryant’s visit, date TBC (RR mtg with CEO as aprt of the agenda), may move to September",
+          "2026-10-29": "engine decsion (further delay possible)"
+        },
+        "weeks_active": 11,
+        "status_summary": "Active"
+      },
+      {
+        "row_index": 30,
+        "blue_chip": null,
+        "customer": "Somon Air",
+        "issue": null,
+        "description": null,
+        "owner": "Alexei",
+        "primary_owner": null,
+        "campaign_owner": "Alexei",
+        "latest_update": null,
+        "campaign_description": null,
+        "category_status": {
+          "COMMERCIAL": null,
+          "AM": null,
+          "SALES": null,
+          "CUSTOMER OPS": null
+        },
+        "historical_status": {},
+        "weekly_status": {
+          "2026-01-01": "Meeting with CTO, NDA and UKEF letter in Dec-25",
+          "2026-03-26": "SVSL2 pack,",
+          "2026-04-02": "02/04 presentation of 1st proposal in Dushanbe",
+          "2026-04-16": "Comments received on 1st proposal",
+          "2026-04-23": "Intro letter from Omar to the  CEO",
+          "2026-04-30": "response to comments",
+          "2026-05-21": "Airline visit to RR Derby",
+          "2026-06-11": "KBP, date TBC",
+          "2026-07-09": "engine decision (delay possible)",
+          "2026-07-16": "Farnborough invite + (CA delegation)"
+        },
+        "weeks_active": 10,
+        "status_summary": "Active"
+      },
+      {
+        "row_index": 31,
+        "blue_chip": null,
+        "customer": "Uganda Future",
+        "issue": null,
+        "description": null,
+        "owner": "Gordon",
+        "primary_owner": null,
+        "campaign_owner": "Gordon",
+        "latest_update": null,
+        "campaign_description": "Spare Engine Sale",
+        "category_status": {
+          "COMMERCIAL": null,
+          "AM": null,
+          "SALES": null,
+          "CUSTOMER OPS": null
+        },
+        "historical_status": {},
+        "weekly_status": {
+          "2026-04-02": "L2 Approvals",
+          "2026-04-09": "Submit final offer",
+          "2026-04-16": "Submit formal proposal",
+          "2026-04-23": "RRPF proposal",
+          "2026-04-30": "Proposal signed. Draft CoL",
+          "2026-05-07": "PA amendment & CoL",
+          "2026-05-28": "PA & CoL signed",
+          "2026-06-18": "SPE Delivery"
+        },
+        "weeks_active": 8,
+        "status_summary": "Active"
+      },
+      {
+        "row_index": 32,
+        "blue_chip": null,
+        "customer": "Desert Wings SPE",
+        "issue": null,
+        "description": null,
+        "owner": null,
+        "primary_owner": null,
+        "campaign_owner": null,
+        "latest_update": null,
+        "campaign_description": "Trent 7000 Sale",
+        "category_status": {
+          "COMMERCIAL": null,
+          "AM": null,
+          "SALES": null,
+          "CUSTOMER OPS": null
+        },
+        "historical_status": {},
+        "weekly_status": {
+          "2026-04-16": "Meeting CEO",
+          "2026-04-30": "Submit Proposal",
+          "2026-07-02": "Sign Proposal",
+          "2026-07-30": "Contracting",
+          "2026-12-03": "Spare Sale"
+        },
+        "weeks_active": 5,
+        "status_summary": "Active"
+      },
+      {
+        "row_index": 33,
+        "blue_chip": null,
+        "customer": "SRA",
+        "issue": null,
+        "description": null,
+        "owner": null,
+        "primary_owner": null,
+        "campaign_owner": null,
+        "latest_update": null,
+        "campaign_description": "Trent XWB-84 Deposit",
+        "category_status": {
+          "COMMERCIAL": null,
+          "AM": null,
+          "SALES": null,
+          "CUSTOMER OPS": null
+        },
+        "historical_status": {},
+        "weekly_status": {
+          "2026-04-16": "Meeting CEO",
+          "2026-06-04": "Submit Proposal",
+          "2026-07-23": "Sign Proposal",
+          "2026-08-27": "Contracting",
+          "2026-10-01": "Sign Contract",
+          "2026-12-10": "Deposit"
+        },
+        "weeks_active": 6,
+        "status_summary": "Active"
+      },
+      {
+        "row_index": 34,
+        "blue_chip": null,
+        "customer": "Air Algerir",
+        "issue": null,
+        "description": null,
+        "owner": null,
+        "primary_owner": null,
+        "campaign_owner": null,
+        "latest_update": null,
+        "campaign_description": "Trent 7000 Contracting",
+        "category_status": {
+          "COMMERCIAL": null,
+          "AM": null,
+          "SALES": null,
+          "CUSTOMER OPS": null
+        },
+        "historical_status": {},
+        "weekly_status": {
+          "2026-01-01": "Contracting Trent 7000 TCA",
+          "2026-06-04": "Submit Proposal",
+          "2026-07-23": "Sign Proposal",
+          "2026-08-27": "Contracting",
+          "2026-10-01": "Sign Contract",
+          "2026-12-10": "Deposit"
+        },
+        "weeks_active": 6,
+        "status_summary": "Active"
+      }
+    ]
+  },
+  "five_year_spe_sales": {
+    "items": [
+      {
+        "row_index": 2,
+        "customer": "Emirates",
+        "engine_type": "XWB-84",
+        "year": 2026,
+        "quarter": "Q2",
+        "amount": 23.3,
+        "comments": null
+      },
+      {
+        "row_index": 3,
+        "customer": "Emirates",
+        "engine_type": "XWB-84",
+        "year": 2026,
+        "quarter": "Q4",
+        "amount": 24.0,
+        "comments": null
+      },
+      {
+        "row_index": 4,
+        "customer": "Emirates",
+        "engine_type": "XWB-84",
+        "year": 2027,
+        "quarter": "Q1",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 5,
+        "customer": "Emirates",
+        "engine_type": "XWB-84",
+        "year": 2027,
+        "quarter": "Q2",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 6,
+        "customer": "Emirates",
+        "engine_type": "XWB-84",
+        "year": 2027,
+        "quarter": "Q2",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 7,
+        "customer": "Emirates",
+        "engine_type": "XWB-84",
+        "year": 2027,
+        "quarter": "Q3",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 8,
+        "customer": "Emirates",
+        "engine_type": "XWB-84",
+        "year": 2027,
+        "quarter": "Q3",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 9,
+        "customer": "Emirates",
+        "engine_type": "XWB-84",
+        "year": 2027,
+        "quarter": "Q4",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 10,
+        "customer": "Emirates",
+        "engine_type": "XWB-84",
+        "year": 2028,
+        "quarter": "Q1",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 11,
+        "customer": "Emirates",
+        "engine_type": "XWB-84",
+        "year": 2028,
+        "quarter": "Q2",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 12,
+        "customer": "Emirates",
+        "engine_type": "XWB-84",
+        "year": 2031,
+        "quarter": "Q1",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 13,
+        "customer": "Emirates",
+        "engine_type": "XWB-84",
+        "year": 2031,
+        "quarter": "Q3",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 14,
+        "customer": "Etihad",
+        "engine_type": "XWB-97",
+        "year": 2026,
+        "quarter": "Q3",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 15,
+        "customer": "Etihad",
+        "engine_type": "XWB-97",
+        "year": 2028,
+        "quarter": "Q3/Q4",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 16,
+        "customer": "Etihad",
+        "engine_type": "XWB-97",
+        "year": 2028,
+        "quarter": null,
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 17,
+        "customer": "Etihad",
+        "engine_type": "XWB-97",
+        "year": 2029,
+        "quarter": null,
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 18,
+        "customer": "Etihad",
+        "engine_type": "XWB-97",
+        "year": 2029,
+        "quarter": null,
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 19,
+        "customer": "Etihad",
+        "engine_type": "XWB-97",
+        "year": 2029,
+        "quarter": null,
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 20,
+        "customer": "Etihad",
+        "engine_type": "XWB-97",
+        "year": 2030,
+        "quarter": "Q3/Q4",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 21,
+        "customer": "Etihad",
+        "engine_type": "Trent 7000",
+        "year": 2027,
+        "quarter": "Q2",
+        "amount": null,
+        "comments": "Possibly 2026 Q4"
+      },
+      {
+        "row_index": 22,
+        "customer": "Etihad",
+        "engine_type": "Trent 7000",
+        "year": 2027,
+        "quarter": "Q3",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 23,
+        "customer": "Etihad",
+        "engine_type": "Trent 7000",
+        "year": 2027,
+        "quarter": "Q4",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 24,
+        "customer": "Etihad",
+        "engine_type": "Trent 7000",
+        "year": 2028,
+        "quarter": "Q1",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 25,
+        "customer": "Etihad",
+        "engine_type": "Trent 7000",
+        "year": 2028,
+        "quarter": "Q2",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 26,
+        "customer": "Etihad",
+        "engine_type": "Trent 7000",
+        "year": 2029,
+        "quarter": "Q3",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 27,
+        "customer": "Flynas",
+        "engine_type": "TRENT1000",
+        "year": 2028,
+        "quarter": "Q2",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 28,
+        "customer": "Flynas",
+        "engine_type": "TRENT1000",
+        "year": 2028,
+        "quarter": "Q4",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 29,
+        "customer": "Flynas",
+        "engine_type": "TRENT7000",
+        "year": 2027,
+        "quarter": "Q1",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 30,
+        "customer": "Flynas",
+        "engine_type": "TRENT7000",
+        "year": 2029,
+        "quarter": "Q1",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 31,
+        "customer": "Flynas",
+        "engine_type": "TRENT7000",
+        "year": 2029,
+        "quarter": "Q3",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 32,
+        "customer": "Flyadeal",
+        "engine_type": "TRENT7000",
+        "year": 2027,
+        "quarter": "Q2",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 33,
+        "customer": "Flyadeal",
+        "engine_type": "TRENT7000",
+        "year": 2028,
+        "quarter": "Q2",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 34,
+        "customer": "Flyadeal",
+        "engine_type": "TRENT7000",
+        "year": 2029,
+        "quarter": "Q2",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 35,
+        "customer": "Flyadeal",
+        "engine_type": "TRENT7000",
+        "year": 2029,
+        "quarter": "Q3",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 36,
+        "customer": "Egypt Air",
+        "engine_type": "XWB-84",
+        "year": 2026,
+        "quarter": "Q2",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 37,
+        "customer": "Egypt Air",
+        "engine_type": "XWB-84",
+        "year": 2027,
+        "quarter": "Q1",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 38,
+        "customer": "Egypt Air",
+        "engine_type": "XWB-84",
+        "year": 2030,
+        "quarter": null,
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 39,
+        "customer": "Air Algerie",
+        "engine_type": "TRENT7000",
+        "year": 2026,
+        "quarter": "Q1",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 40,
+        "customer": "Air Algerie",
+        "engine_type": "TRENT7000",
+        "year": 2027,
+        "quarter": "Q3",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 41,
+        "customer": "Ethiopian",
+        "engine_type": "XWB-84",
+        "year": 2029,
+        "quarter": "Q3",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 42,
+        "customer": "Ethiopian",
+        "engine_type": "XWB-84",
+        "year": 2030,
+        "quarter": "Q3",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 43,
+        "customer": "Ethiopian",
+        "engine_type": "XWB-84",
+        "year": 2026,
+        "quarter": "Q2",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 44,
+        "customer": "Silkways",
+        "engine_type": "XWB-97",
+        "year": 2028,
+        "quarter": "Q4",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 45,
+        "customer": "RiyadhAir",
+        "engine_type": "XWB-97",
+        "year": 2030,
+        "quarter": null,
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 46,
+        "customer": "Tanzania",
+        "engine_type": "TRENT1000",
+        "year": 2026,
+        "quarter": "Q2",
+        "amount": null,
+        "comments": null
+      },
+      {
+        "row_index": 47,
+        "customer": "Mauritius",
+        "engine_type": "XWB-84",
+        "year": 2027,
+        "quarter": "Q4",
+        "amount": null,
+        "comments": null
+      }
+    ],
+    "totals": {
+      "by_year": {
+        "2026": 7,
+        "2027": 14,
+        "2028": 10,
+        "2029": 9,
+        "2030": 4,
+        "2031": 2
+      },
+      "by_engine": {
+        "XWB-84": 19,
+        "XWB-97": 9,
+        "TRENT7000": 9,
+        "Trent 7000": 6,
+        "TRENT1000": 3
+      },
+      "by_customer": {
+        "Etihad": 13,
+        "Emirates": 12,
+        "Flynas": 5,
+        "Flyadeal": 4,
+        "Egypt Air": 3,
+        "Ethiopian": 3,
+        "Air Algerie": 2,
+        "Silkways": 1,
+        "RiyadhAir": 1,
+        "Tanzania": 1,
+        "Mauritius": 1
+      },
+      "total_opportunities": 46,
+      "total_amount": 47.3
+    }
+  },
+  "annual_summary": {
+    "by_year": {
+      "2026": {
+        "year": 2026,
+        "customers": [
+          {
+            "name": "Air Algerie",
+            "total": 1,
+            "engines": [
+              {
+                "type": "TRENT7000",
+                "count": 1
+              }
+            ]
+          },
+          {
+            "name": "Egypt Air",
+            "total": 1,
+            "engines": [
+              {
+                "type": "XWB-84",
+                "count": 1
+              }
+            ]
+          },
+          {
+            "name": "Emirates",
+            "total": 2,
+            "engines": [
+              {
+                "type": "XWB-84",
+                "count": 2
+              }
+            ]
+          },
+          {
+            "name": "Etihad",
+            "total": 1,
+            "engines": [
+              {
+                "type": "XWB-97",
+                "count": 1
+              }
+            ]
+          },
+          {
+            "name": "Tanzania",
+            "total": 1,
+            "engines": [
+              {
+                "type": "TRENT1000",
+                "count": 1
+              }
+            ]
+          },
+          {
+            "name": "Ethiopian",
+            "total": 1,
+            "engines": [
+              {
+                "type": "XWB-84",
+                "count": 1
+              }
+            ]
+          }
+        ],
+        "grand_total": 7
+      },
+      "2027": {
+        "year": 2027,
+        "customers": [
+          {
+            "name": "Air Algerie",
+            "total": 1,
+            "engines": [
+              {
+                "type": "TRENT7000",
+                "count": 1
+              }
+            ]
+          },
+          {
+            "name": "Egypt Air",
+            "total": 1,
+            "engines": [
+              {
+                "type": "XWB-84",
+                "count": 1
+              }
+            ]
+          },
+          {
+            "name": "Emirates",
+            "total": 6,
+            "engines": [
+              {
+                "type": "XWB-84",
+                "count": 6
+              }
+            ]
+          },
+          {
+            "name": "Etihad",
+            "total": 3,
+            "engines": [
+              {
+                "type": "Trent 7000",
+                "count": 3
+              }
+            ]
+          },
+          {
+            "name": "Flyadeal",
+            "total": 1,
+            "engines": [
+              {
+                "type": "TRENT7000",
+                "count": 1
+              }
+            ]
+          },
+          {
+            "name": "Flynas",
+            "total": 1,
+            "engines": [
+              {
+                "type": "TRENT7000",
+                "count": 1
+              }
+            ]
+          },
+          {
+            "name": "Mauritius",
+            "total": 1,
+            "engines": [
+              {
+                "type": "XWB-84",
+                "count": 1
+              }
+            ]
+          }
+        ],
+        "grand_total": 14
+      },
+      "2028": {
+        "year": 2028,
+        "customers": [
+          {
+            "name": "Emirates",
+            "total": 2,
+            "engines": [
+              {
+                "type": "XWB-84",
+                "count": 2
+              }
+            ]
+          },
+          {
+            "name": "Etihad",
+            "total": 4,
+            "engines": [
+              {
+                "type": "Trent 7000",
+                "count": 2
+              },
+              {
+                "type": "XWB-97",
+                "count": 2
+              }
+            ]
+          },
+          {
+            "name": "Flyadeal",
+            "total": 1,
+            "engines": [
+              {
+                "type": "TRENT7000",
+                "count": 1
+              }
+            ]
+          },
+          {
+            "name": "Flynas",
+            "total": 2,
+            "engines": [
+              {
+                "type": "TRENT1000",
+                "count": 2
+              }
+            ]
+          },
+          {
+            "name": "Silkways",
+            "total": 1,
+            "engines": [
+              {
+                "type": "XWB-97",
+                "count": 1
+              }
+            ]
+          }
+        ],
+        "grand_total": 10
+      },
+      "2029": {
+        "year": 2029,
+        "customers": [
+          {
+            "name": "Ethiopian",
+            "total": 1,
+            "engines": [
+              {
+                "type": "XWB-84",
+                "count": 1
+              }
+            ]
+          },
+          {
+            "name": "Etihad",
+            "total": 4,
+            "engines": [
+              {
+                "type": "Trent 7000",
+                "count": 1
+              },
+              {
+                "type": "XWB-97",
+                "count": 3
+              }
+            ]
+          },
+          {
+            "name": "Flyadeal",
+            "total": 2,
+            "engines": [
+              {
+                "type": "TRENT7000",
+                "count": 2
+              }
+            ]
+          },
+          {
+            "name": "Flynas",
+            "total": 2,
+            "engines": [
+              {
+                "type": "TRENT7000",
+                "count": 2
+              }
+            ]
+          }
+        ],
+        "grand_total": 9
+      },
+      "2030": {
+        "year": 2030,
+        "customers": [
+          {
+            "name": "Egypt Air",
+            "total": 1,
+            "engines": [
+              {
+                "type": "XWB-84",
+                "count": 1
+              }
+            ]
+          },
+          {
+            "name": "Ethiopian",
+            "total": 1,
+            "engines": [
+              {
+                "type": "XWB-84",
+                "count": 1
+              }
+            ]
+          },
+          {
+            "name": "Etihad",
+            "total": 1,
+            "engines": [
+              {
+                "type": "XWB-97",
+                "count": 1
+              }
+            ]
+          },
+          {
+            "name": "RiyadhAir",
+            "total": 1,
+            "engines": [
+              {
+                "type": "XWB-97",
+                "count": 1
+              }
+            ]
+          }
+        ],
+        "grand_total": 4
+      }
+    },
+    "year_list": [
+      2026,
+      2027,
+      2028,
+      2029,
+      2030
+    ]
+  }
+}

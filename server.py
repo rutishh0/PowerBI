@@ -90,7 +90,25 @@ app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "rr-soa-dashboard-" + uuid.uuid4().hex[:8])
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50MB per request (R2 chunks are ~11MB each)
 
-CORS(app)
+# Session cookie config — tuned so the Next.js frontend can reach this API
+# either same-origin (via Next rewrites in dev/prod) or cross-origin with
+# credentials. Browsers require Secure=True for SameSite=None; localhost is
+# treated as secure by Chrome/Firefox so this works in dev too.
+_SAMESITE = os.environ.get("SESSION_COOKIE_SAMESITE", "Lax")  # "None" for cross-origin direct
+app.config["SESSION_COOKIE_SAMESITE"] = _SAMESITE
+app.config["SESSION_COOKIE_SECURE"] = _SAMESITE.lower() == "none" or os.environ.get(
+    "SESSION_COOKIE_SECURE", ""
+).lower() in ("1", "true", "yes")
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+
+# CORS — allow the Next frontend origin(s). In production set CORS_ORIGINS
+# to a comma-separated list (e.g. "https://dashboard.example.com").
+_origins_env = os.environ.get(
+    "CORS_ORIGINS",
+    "http://localhost:3000,http://127.0.0.1:3000",
+)
+_cors_origins = [o.strip() for o in _origins_env.split(",") if o.strip()]
+CORS(app, origins=_cors_origins, supports_credentials=True)
 
 # Initialize DB tables on import (needed for gunicorn which skips __main__)
 init_db()
@@ -170,7 +188,43 @@ def login():
 def logout():
     """Clear session and logout."""
     session.clear()
+    # If the request came from a JSON client (Next frontend), return JSON;
+    # else fall back to the legacy HTML redirect to /login.
+    accept = request.headers.get("Accept", "")
+    if request.is_json or "application/json" in accept:
+        return jsonify({"ok": True})
     return redirect(url_for("login"))
+
+
+# ─────────────────────────────────────────────────────────────
+# JSON AUTH ENDPOINTS (for the Next.js frontend)
+# The HTML /login form is preserved above. /api/login is the JSON
+# companion used by the Next client; both share the same Flask session.
+# ─────────────────────────────────────────────────────────────
+
+@app.route("/api/login", methods=["POST"])
+def api_login():
+    """JSON login endpoint. Body: {password}. Sets the Flask session cookie on success."""
+    data = request.get_json(silent=True) or {}
+    password = data.get("password") or ""
+    expected_password = os.environ.get("APP_PASSWORD", "rollsroyce")
+    if password != expected_password:
+        return jsonify({"ok": False, "error": "Invalid access code"}), 401
+    session["authenticated"] = True
+    return jsonify({"ok": True})
+
+
+@app.route("/api/me", methods=["GET"])
+def api_me():
+    """Return the auth state for the current session. Always 200 — the client uses
+    `authenticated` to decide whether to redirect to /login."""
+    return jsonify({"authenticated": bool(session.get("authenticated"))})
+
+
+@app.route("/api/health", methods=["GET"])
+def api_health():
+    """Lightweight liveness probe. No auth required."""
+    return jsonify({"ok": True, "service": "rr-powerbi-api"})
 
 
 @app.route("/api/upload", methods=["POST"])
