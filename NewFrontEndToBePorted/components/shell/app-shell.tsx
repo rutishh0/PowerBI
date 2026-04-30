@@ -40,7 +40,9 @@ export function AppShell() {
     const accepted: UploadedFile[] = []
     const failed: { name: string; error: string }[] = []
 
-    const LARGE = 40 * 1024 * 1024
+    // Matches SIMPLE_UPLOAD_THRESHOLD in lib/api.ts — files over this size
+    // route through the R2 chunked path, so we surface a progress toast.
+    const LARGE = 32 * 1024 * 1024
     let bigToast: string | number | undefined
 
     for (const f of Array.from(picked)) {

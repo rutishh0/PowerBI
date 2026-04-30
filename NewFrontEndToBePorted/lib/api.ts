@@ -126,17 +126,43 @@ export async function getConfig(): Promise<ConfigResponse> {
  * shape into the frontend's UploadedFile[] (always a list, even for one
  * file, to keep callers uniform).
  */
-export async function uploadFile(file: File): Promise<UploadedFile[]> {
-  const fd = new FormData()
-  // Field name MUST be "files" — Flask /api/upload reads request.files.getlist("files")
-  fd.append("files", file)
+/**
+ * Read a File as a base64 data URL (`data:<mime>;base64,<...>`). Used by
+ * the NetSkope-safe upload path so the body is JSON instead of multipart.
+ */
+function fileToDataURL(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result ?? ""))
+    reader.onerror = () => reject(reader.error ?? new Error("FileReader failed"))
+    reader.readAsDataURL(file)
+  })
+}
 
-  const res = await fetch("/api/upload", { method: "POST", body: fd })
+/**
+ * Upload one workbook to Flask `/api/upload` as JSON-encoded base64.
+ *
+ * IMPORTANT: this path is intentionally JSON, not multipart/form-data.
+ * Corporate web proxies (NetSkope etc.) inspect multipart .xlsx POSTs
+ * and frequently block or strip them. The Flask backend has a matching
+ * `if request.is_json: ... # NetSkope bypass` branch that decodes this
+ * format. Multipart still works as a backend fallback but should not be
+ * used from the new frontend.
+ */
+export async function uploadFile(file: File): Promise<UploadedFile[]> {
+  const dataUrl = await fileToDataURL(file)
+
+  const res = await fetch("/api/upload", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      files: [{ name: file.name, data: dataUrl }],
+    }),
+  })
   const body = await handle<UploadAnyResponse>(res)
 
-  // Flask's /api/upload returns:
-  //   { files: { "<filename>": <parsed>, ... }, errors: [...] }
-  // Different from our ChunkUpload's UploadResponse — handle both shapes.
+  // Flask returns { files: { "<filename>": <parsed>, ... }, errors: [...] }
+  // — accept both that shape and the legacy array shape just in case.
   if (body && typeof body.files === "object" && !Array.isArray(body.files) && body.files) {
     return Object.entries(body.files).map(([name, parsed]) => ({
       name,
@@ -165,12 +191,12 @@ export async function uploadFile(file: File): Promise<UploadedFile[]> {
 
 /* ---------- R2 chunked upload (large files) ---------- */
 
-// Server's MAX_CONTENT_LENGTH is 50MB and base64 inflates by 33%, so cap
-// each raw chunk at 8 MB → ~10.7 MB after base64. Threshold for falling
-// back to chunked upload is 40 MB raw to leave headroom on the simple
-// /api/upload path.
+// Server's MAX_CONTENT_LENGTH is 50 MB and base64 inflates by 33%, so cap
+// each raw chunk at 8 MB → ~10.7 MB after base64. The simple JSON-base64
+// `/api/upload` path is also subject to the same 50 MB cap, so cut over
+// to chunked once the raw file is over ~32 MB (≈ 42.7 MB after base64).
 const CHUNK_SIZE_BYTES = 8 * 1024 * 1024
-const SIMPLE_UPLOAD_THRESHOLD = 40 * 1024 * 1024
+const SIMPLE_UPLOAD_THRESHOLD = 32 * 1024 * 1024
 
 interface ChunkInitResponse {
   upload_id: string
