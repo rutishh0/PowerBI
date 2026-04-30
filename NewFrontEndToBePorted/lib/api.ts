@@ -26,6 +26,14 @@ export interface UploadResponse {
   error?: string
 }
 
+/** Flask's /api/upload returns {files: {filename: parsedPayload}} — a map,
+ * not an array. We accept both shapes via this union for forward compat. */
+export type UploadAnyResponse = UploadResponse & {
+  files?:
+    | UploadResponse["files"]
+    | Record<string, ParsedFile>
+}
+
 export interface ChatChartFence {
   type: string
   title?: string
@@ -120,11 +128,22 @@ export async function getConfig(): Promise<ConfigResponse> {
  */
 export async function uploadFile(file: File): Promise<UploadedFile[]> {
   const fd = new FormData()
-  fd.append("file", file)
+  // Field name MUST be "files" — Flask /api/upload reads request.files.getlist("files")
+  fd.append("files", file)
 
   const res = await fetch("/api/upload", { method: "POST", body: fd })
-  const body = await handle<UploadResponse>(res)
+  const body = await handle<UploadAnyResponse>(res)
 
+  // Flask's /api/upload returns:
+  //   { files: { "<filename>": <parsed>, ... }, errors: [...] }
+  // Different from our ChunkUpload's UploadResponse — handle both shapes.
+  if (body && typeof body.files === "object" && !Array.isArray(body.files) && body.files) {
+    return Object.entries(body.files).map(([name, parsed]) => ({
+      name,
+      file_type: (parsed as { file_type?: FileType }).file_type ?? "UNKNOWN",
+      parsed: parsed as ParsedFile,
+    }))
+  }
   if (Array.isArray(body.files)) {
     return body.files.map((f) => ({
       name: f.filename,
