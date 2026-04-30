@@ -243,10 +243,12 @@ NEXT_BACKEND_URL = os.environ.get(
 
 # Hop-by-hop headers that must NOT be forwarded across the proxy
 # (RFC 7230 §6.1) plus a few that requests/Flask manage themselves.
+# IMPORTANT: do NOT add "content-encoding" — it is end-to-end. Stripping
+# it while passing through compressed bytes corrupts JS/CSS chunks.
 _HOP_HEADERS = {
     "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
     "te", "trailers", "transfer-encoding", "upgrade",
-    "host", "content-length", "content-encoding",
+    "host", "content-length",
 }
 
 
@@ -262,6 +264,12 @@ def _proxy_to_next(subpath: str):
         k: v for k, v in request.headers.items()
         if k.lower() not in _HOP_HEADERS
     }
+    # Force upstream to send identity-encoded bytes. urllib3's auto-decode
+    # is unreliable across encodings (especially Brotli without the
+    # `brotli` pip package), and tracking Content-Encoding through a
+    # streaming proxy is fragile. Performance hit is negligible inside
+    # the same Render region.
+    fwd_headers["Accept-Encoding"] = "identity"
     # Tell Next the original host the browser saw — it uses this for the
     # Server-Action Origin/Host CSRF check and any same-origin redirects.
     fwd_headers["X-Forwarded-Host"] = request.host
