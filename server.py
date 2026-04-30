@@ -262,6 +262,13 @@ def _proxy_to_next(subpath: str):
         k: v for k, v in request.headers.items()
         if k.lower() not in _HOP_HEADERS
     }
+    # Tell Next the original host the browser saw — it uses this for the
+    # Server-Action Origin/Host CSRF check and any same-origin redirects.
+    fwd_headers["X-Forwarded-Host"] = request.host
+    fwd_headers["X-Forwarded-Proto"] = request.scheme
+    fwd_headers["X-Forwarded-For"] = request.headers.get(
+        "X-Forwarded-For", request.remote_addr or ""
+    )
 
     try:
         upstream_resp = _requests.request(
@@ -277,10 +284,24 @@ def _proxy_to_next(subpath: str):
     except _requests.RequestException as e:
         return jsonify({"error": f"Upstream Next service unreachable: {e}"}), 502
 
-    out_headers = [
-        (k, v) for k, v in upstream_resp.raw.headers.items()
-        if k.lower() not in _HOP_HEADERS
-    ]
+    # Build response headers, preserving multi-value Set-Cookie (urllib3's
+    # `.items()` collapses duplicates into one comma-joined header which
+    # browsers misparse). `getlist` returns each Set-Cookie individually.
+    out_headers = []
+    seen_set_cookie = False
+    for k, v in upstream_resp.raw.headers.items():
+        kl = k.lower()
+        if kl in _HOP_HEADERS:
+            continue
+        if kl == "set-cookie":
+            if seen_set_cookie:
+                continue
+            seen_set_cookie = True
+            for cookie in upstream_resp.raw.headers.getlist("Set-Cookie"):
+                out_headers.append(("Set-Cookie", cookie))
+            continue
+        out_headers.append((k, v))
+
     return Response(
         upstream_resp.iter_content(chunk_size=8192),
         status=upstream_resp.status_code,
