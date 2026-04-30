@@ -19,7 +19,8 @@ import time
 import concurrent.futures
 
 import pandas as pd
-from flask import Flask, render_template, request, jsonify, send_file, session, redirect, url_for
+import requests as _requests
+from flask import Flask, render_template, request, jsonify, send_file, session, redirect, url_for, Response
 from functools import wraps
 from flask_cors import CORS
 
@@ -225,6 +226,84 @@ def api_me():
 def api_health():
     """Lightweight liveness probe. No auth required."""
     return jsonify({"ok": True, "service": "rr-powerbi-api"})
+
+
+# ─────────────────────────────────────────────────────────────
+# /beta/* — Reverse proxy to the Next.js frontend service
+#
+# Lets us serve the new Next.js UI as a sub-path of this Flask
+# domain (e.g. https://elevatechecked1.info/beta) without giving
+# up the legacy /  + /api/* routes. Set NEXT_BACKEND_URL in env
+# to the public URL of the Next service (no trailing slash).
+# ─────────────────────────────────────────────────────────────
+
+NEXT_BACKEND_URL = os.environ.get(
+    "NEXT_BACKEND_URL", "https://powerbi-1-ulbm.onrender.com"
+).rstrip("/")
+
+# Hop-by-hop headers that must NOT be forwarded across the proxy
+# (RFC 7230 §6.1) plus a few that requests/Flask manage themselves.
+_HOP_HEADERS = {
+    "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
+    "te", "trailers", "transfer-encoding", "upgrade",
+    "host", "content-length", "content-encoding",
+}
+
+
+def _proxy_to_next(subpath: str):
+    """Forward a request to the Next service, streaming the response back."""
+    upstream = f"{NEXT_BACKEND_URL}/beta"
+    if subpath:
+        upstream += "/" + subpath
+    if request.query_string:
+        upstream += "?" + request.query_string.decode("utf-8", "ignore")
+
+    fwd_headers = {
+        k: v for k, v in request.headers.items()
+        if k.lower() not in _HOP_HEADERS
+    }
+
+    try:
+        upstream_resp = _requests.request(
+            method=request.method,
+            url=upstream,
+            headers=fwd_headers,
+            data=request.get_data() if request.method in ("POST", "PUT", "PATCH", "DELETE") else None,
+            cookies=request.cookies,
+            allow_redirects=False,
+            stream=True,
+            timeout=60,
+        )
+    except _requests.RequestException as e:
+        return jsonify({"error": f"Upstream Next service unreachable: {e}"}), 502
+
+    out_headers = [
+        (k, v) for k, v in upstream_resp.raw.headers.items()
+        if k.lower() not in _HOP_HEADERS
+    ]
+    return Response(
+        upstream_resp.iter_content(chunk_size=8192),
+        status=upstream_resp.status_code,
+        headers=out_headers,
+    )
+
+
+@app.route("/beta", methods=["GET", "HEAD"])
+def beta_root():
+    return _proxy_to_next("")
+
+
+@app.route("/beta/", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"])
+def beta_root_slash():
+    return _proxy_to_next("")
+
+
+@app.route(
+    "/beta/<path:subpath>",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+)
+def beta_proxy(subpath):
+    return _proxy_to_next(subpath)
 
 
 @app.route("/api/upload", methods=["POST"])
