@@ -67,3 +67,22 @@ export function fmtDays(v: number | null | undefined): string {
   if (v === null || v === undefined || Number.isNaN(v)) return "—"
   return `${Math.round(v).toLocaleString("en-US")}d`
 }
+
+/** Compact byte-size string, e.g. 1234 → "1.2 KB", 5_500_000 → "5.5 MB". */
+export function fmtBytes(v: number | null | undefined): string {
+  if (v === null || v === undefined || Number.isNaN(v) || v < 0) return "—"
+  if (v < 1024) return `${v} B`
+  const kb = v / 1024
+  if (kb < 1024) return `${kb.toFixed(1)} KB`
+  const mb = kb / 1024
+  if (mb < 1024) return `${mb.toFixed(1)} MB`
+  return `${(mb / 1024).toFixed(2)} GB`
+}
+
+/** ISO-ish "Apr 22, 2026 · 13:20" for the storage table upload-date column. */
+export function fmtDateTime(v: string | null | undefined): string {
+  if (!v) return "—"
+  const d = new Date(v)
+  if (Number.isNaN(d.getTime())) return v
+  return `${d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })} · ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+}

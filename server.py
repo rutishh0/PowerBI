@@ -20,7 +20,7 @@ import concurrent.futures
 
 import pandas as pd
 import requests as _requests
-from flask import Flask, render_template, request, jsonify, send_file, session, redirect, url_for, Response
+from flask import Flask, request, jsonify, send_file, session, redirect, Response
 from functools import wraps
 from flask_cors import CORS
 
@@ -87,7 +87,7 @@ def _sanitize_for_json(obj):
 # APP SETUP
 # ─────────────────────────────────────────────────────────────
 
-app = Flask(__name__, static_folder="static", template_folder="templates")
+app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "rr-soa-dashboard-" + uuid.uuid4().hex[:8])
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50MB per request (R2 chunks are ~11MB each)
 
@@ -145,7 +145,9 @@ def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not session.get("authenticated"):
-            return redirect(url_for("login"))
+            # All login_required routes are /api/*; JSON 401 is what the
+            # frontend expects (ApiError handler in lib/api.ts surfaces it).
+            return jsonify({"error": "Unauthorized"}), 401
         return f(*args, **kwargs)
     return decorated_function
 
@@ -154,13 +156,6 @@ def login_required(f):
 # ROUTES
 # ─────────────────────────────────────────────────────────────
 
-@app.route("/")
-@login_required
-def index():
-    """Serve the main dashboard SPA."""
-    return render_template("index.html", feature_flags=FEATURE_FLAGS)
-
-
 @app.route("/api/config")
 @login_required
 def get_config():
@@ -168,33 +163,16 @@ def get_config():
     return jsonify(FEATURE_FLAGS)
 
 
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    """Handle login page and authentication."""
-    if request.method == "POST":
-        password = request.form.get("password")
-        # In production, use a secure hash comparison and env var
-        expected_password = os.environ.get("APP_PASSWORD", "rollsroyce")
-        
-        if password == expected_password:
-            session["authenticated"] = True
-            return redirect(url_for("index"))
-        else:
-            return render_template("login.html", error="Invalid access code")
-    
-    return render_template("login.html")
-
-
 @app.route("/logout")
 def logout():
     """Clear session and logout."""
     session.clear()
-    # If the request came from a JSON client (Next frontend), return JSON;
-    # else fall back to the legacy HTML redirect to /login.
     accept = request.headers.get("Accept", "")
     if request.is_json or "application/json" in accept:
         return jsonify({"ok": True})
-    return redirect(url_for("login"))
+    # Direct browser hit (e.g. user typing /logout in URL bar): send them
+    # to the Next.js login page, which the catch-all proxy now serves.
+    return redirect("/login")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -229,12 +207,13 @@ def api_health():
 
 
 # ─────────────────────────────────────────────────────────────
-# /beta/* — Reverse proxy to the Next.js frontend service
+# Reverse proxy to the Next.js frontend service
 #
-# Lets us serve the new Next.js UI as a sub-path of this Flask
-# domain (e.g. https://elevatechecked1.info/beta) without giving
-# up the legacy /  + /api/* routes. Set NEXT_BACKEND_URL in env
-# to the public URL of the Next service (no trailing slash).
+# Flask serves the Next.js UI at root (elevatechecked1.info/...) by
+# forwarding every non-/api/*, non-/logout path to the Next service.
+# Set NEXT_BACKEND_URL in env to the public URL of the Next service
+# (no trailing slash). /beta URLs are kept as 301 redirects to root
+# so old bookmarks survive.
 # ─────────────────────────────────────────────────────────────
 
 NEXT_BACKEND_URL = os.environ.get(
@@ -253,8 +232,13 @@ _HOP_HEADERS = {
 
 
 def _proxy_to_next(subpath: str):
-    """Forward a request to the Next service, streaming the response back."""
-    upstream = f"{NEXT_BACKEND_URL}/beta"
+    """Forward a request to the Next service, streaming the response back.
+
+    Next.js no longer has a basePath, so we proxy / → upstream-root and
+    /<subpath> → upstream/<subpath>. The catch-all routes below decide
+    which path actually hits this function.
+    """
+    upstream = NEXT_BACKEND_URL
     if subpath:
         upstream += "/" + subpath
     if request.query_string:
@@ -317,21 +301,34 @@ def _proxy_to_next(subpath: str):
     )
 
 
+# /beta legacy redirects — preserve bookmarks from the previous frontend
+# layout. 301 because the move is permanent.
 @app.route("/beta", methods=["GET", "HEAD"])
-def beta_root():
-    return _proxy_to_next("")
+@app.route("/beta/", methods=["GET", "HEAD"])
+def beta_legacy_root():
+    return redirect("/", code=301)
 
 
-@app.route("/beta/", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"])
-def beta_root_slash():
-    return _proxy_to_next("")
+@app.route("/beta/<path:subpath>", methods=["GET", "HEAD"])
+def beta_legacy_subpath(subpath):
+    query = ("?" + request.query_string.decode("utf-8", "ignore")) if request.query_string else ""
+    return redirect(f"/{subpath}{query}", code=301)
 
 
+# Catch-all reverse proxy — every path not matched by a more-specific
+# Flask route (i.e. anything outside /api/*, /logout, /beta*) is
+# forwarded to the Next.js service. Flask routes by specificity, so
+# explicit routes always win.
 @app.route(
-    "/beta/<path:subpath>",
+    "/",
+    defaults={"subpath": ""},
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
 )
-def beta_proxy(subpath):
+@app.route(
+    "/<path:subpath>",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+)
+def next_catchall(subpath):
     return _proxy_to_next(subpath)
 
 

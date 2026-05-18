@@ -7,7 +7,7 @@
  * automatically on every request without `credentials: "include"` gymnastics.
  */
 
-import type { FileType, ParsedFile, UploadedFile } from "@/lib/types"
+import type { FileType, ParsedFile, R2FileRecord, UploadedFile } from "@/lib/types"
 
 /* ---------- Server response shapes ---------- */
 
@@ -83,9 +83,9 @@ async function handle<T>(res: Response): Promise<T> {
       /* non-JSON error body */
     }
     const msg =
-      (payload && typeof payload === "object" && "error" in (payload as Record<string, unknown>) &&
+      ((payload && typeof payload === "object" && "error" in (payload as Record<string, unknown>) &&
         String((payload as Record<string, unknown>).error)) ||
-      `Request failed (${res.status})`
+        `Request failed (${res.status})`) as string
     throw new ApiError(res.status, msg, payload)
   }
   return (await res.json()) as T
@@ -388,4 +388,43 @@ export async function exportReport(payload: ExportPayload): Promise<Blob> {
     throw new ApiError(res.status, `Export failed: ${detail || res.statusText}`)
   }
   return await res.blob()
+}
+
+/* ---------- R2 archive (persistent file storage) ---------- */
+
+/** GET /api/r2/files — list everything in the R2 archive. */
+export async function listR2Files(): Promise<R2FileRecord[]> {
+  const res = await fetch("/api/r2/files", { cache: "no-store" })
+  return handle<R2FileRecord[]>(res)
+}
+
+/** DELETE /api/r2/files/{id} — remove from R2 AND the metadata row.
+ * Tolerates 404 (already gone). */
+export async function deleteR2File(id: number): Promise<void> {
+  const res = await fetch(`/api/r2/files/${id}`, { method: "DELETE" })
+  if (!res.ok && res.status !== 404) {
+    await handle(res)
+  }
+}
+
+/** POST /api/r2/files/{id}/parse — re-parse a stored workbook on the
+ * server and return it in the same UploadedFile[] shape uploads produce,
+ * so callers can feed it straight into AppShell's `setFiles`. */
+export async function parseR2File(id: number): Promise<UploadedFile[]> {
+  const res = await fetch(`/api/r2/files/${id}/parse`, { method: "POST" })
+  const body = await handle<{ files: Record<string, ParsedFile> }>(res)
+  const out: UploadedFile[] = []
+  for (const [name, parsed] of Object.entries(body.files ?? {})) {
+    out.push({
+      name,
+      file_type: (parsed as { file_type?: FileType }).file_type ?? "UNKNOWN",
+      parsed: parsed as ParsedFile,
+    })
+  }
+  return out
+}
+
+/** Pure helper — the URL a browser uses to download a stored file. */
+export function r2FileDownloadUrl(id: number): string {
+  return `/api/r2/files/${id}`
 }

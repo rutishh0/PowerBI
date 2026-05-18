@@ -444,6 +444,19 @@ export interface EmployeeWhereaboutsData {
   errors?: string[]
 }
 
+/* ---------- R2 archived file (persistent storage row) ---------- */
+/* Mirrors storage.get_all_r2_files() projection (id, filename, r2_key,
+ * public_url, file_size, upload_date — upload_date is already coerced
+ * to an ISO string server-side at storage.py:258-259). */
+export interface R2FileRecord {
+  id: number
+  filename: string
+  r2_key: string
+  public_url: string | null
+  file_size: number
+  upload_date: string
+}
+
 /* ---------- Union ---------- */
 export type ParsedFile =
   | SOAData

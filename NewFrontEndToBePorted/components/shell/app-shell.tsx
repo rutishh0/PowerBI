@@ -11,7 +11,7 @@ import { WelcomeState } from "./welcome-state"
 import { FileVisualizer } from "@/components/visualizers/file-visualizer"
 import { SlidesView } from "@/components/views/slides-view"
 import { CompareView } from "@/components/views/compare-view"
-import { FilesView } from "@/components/views/files-view"
+import { FilesView } from "@/components/views/files"
 import { AiAssistantView } from "@/components/views/ai-assistant-view"
 import { ExportModal } from "@/components/export-modal"
 
@@ -121,6 +121,16 @@ export function AppShell() {
     }
   }
 
+  function handleStorageParsed(parsed: UploadedFile[]) {
+    if (parsed.length === 0) return
+    setFiles((prev) => {
+      const byName = new Map(prev.map((p) => [p.name, p]))
+      for (const a of parsed) byName.set(a.name, a)
+      return Array.from(byName.values())
+    })
+    setActiveFile((curr) => curr ?? parsed[0]?.name ?? null)
+  }
+
   function resetView(next: ViewMode) {
     setView(next)
   }
@@ -157,6 +167,7 @@ export function AppShell() {
                 setActiveFile(name)
                 setView("standard")
               }}
+              onParsed={handleStorageParsed}
             />
           ) : view === "ai" ? (
             <AiAssistantView activeFile={active} />
