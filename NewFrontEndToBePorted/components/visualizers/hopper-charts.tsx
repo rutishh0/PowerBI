@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, type ReactElement } from "react"
+import { useMemo, useState, type ReactElement } from "react"
 import {
   Bar,
   BarChart,
@@ -17,6 +17,11 @@ import {
 import type { HopperOpp } from "@/lib/types"
 import { fmtGBP, fmtCount } from "@/lib/format"
 import { palette, seriesColorsLight } from "@/lib/chart-palette"
+import {
+  DIM,
+  DrilldownView,
+  type DrilldownInvocation,
+} from "./hopper-drilldown"
 
 export type HopperChartCategory =
   | "pipeline"
@@ -27,16 +32,8 @@ export type HopperChartCategory =
   | "structural"
   | "ownership"
 
-export interface OpenDrilldownArgs {
-  chartTitle: string
-  segmentLabel: string
-  segmentValue: string
-  predicate: (o: HopperOpp) => boolean
-}
-
 export interface HopperChartProps {
   filtered: HopperOpp[]
-  onDrilldown: (args: OpenDrilldownArgs) => void
 }
 
 export interface HopperChartDef {
@@ -63,9 +60,29 @@ const PIPELINE_ORDER = [
   "Contracting Concluded",
 ]
 
-/* ---------- Individual chart components ---------- */
+/* ---------- Tooltip styling shared by every chart ---------- */
+const TOOLTIP_STYLE = {
+  contentStyle: {
+    background: "oklch(0.22 0.04 165)",
+    border: "1px solid rgba(255,255,255,0.15)",
+    borderRadius: 6,
+    fontSize: 12,
+  } as const,
+  itemStyle: { color: "white" },
+  labelStyle: { color: "white" },
+}
 
-export function PipelineByStatusChart({ filtered, onDrilldown }: HopperChartProps) {
+const LEGEND_FORMATTER = (value: string) => (
+  <span style={{ color: "rgba(255,255,255,0.85)" }}>{value}</span>
+)
+
+/* ============================================================
+ *  EXISTING 6 CHARTS — now with inline drill-down
+ * ============================================================ */
+
+export function PipelineByStatusChart({ filtered }: HopperChartProps) {
+  const [drilldown, setDrilldown] = useState<DrilldownInvocation | null>(null)
+
   const data = useMemo(() => {
     const map = new Map<string, number>()
     for (const s of PIPELINE_ORDER) map.set(s, 0)
@@ -73,18 +90,15 @@ export function PipelineByStatusChart({ filtered, onDrilldown }: HopperChartProp
     return PIPELINE_ORDER.map((stage) => ({ stage, value: +Number(map.get(stage) ?? 0).toFixed(1) }))
   }, [filtered])
 
+  if (drilldown) return <DrilldownView invocation={drilldown} onClose={() => setDrilldown(null)} />
+
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 60 }}>
         <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" vertical={false} />
         <XAxis dataKey="stage" tick={{ fontSize: 9, fill: "rgba(255,255,255,0.6)" }} interval={0} angle={-25} height={80} textAnchor="end" />
         <YAxis tick={{ fontSize: 10, fill: "rgba(255,255,255,0.6)" }} tickFormatter={(v) => `£${v}m`} />
-        <Tooltip
-          formatter={(v: number) => fmtGBP(v)}
-          contentStyle={{ background: "oklch(0.22 0.04 165)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, fontSize: 12 }}
-          itemStyle={{ color: "white" }}
-          labelStyle={{ color: "white" }}
-        />
+        <Tooltip formatter={(v: number) => fmtGBP(v)} {...TOOLTIP_STYLE} />
         <Bar
           dataKey="value"
           fill={palette.accent}
@@ -92,11 +106,15 @@ export function PipelineByStatusChart({ filtered, onDrilldown }: HopperChartProp
           cursor="pointer"
           onClick={(d: { stage?: string; value?: number }) => {
             if (!d.stage) return
-            onDrilldown({
-              chartTitle: "Pipeline by Status",
+            const rows = filtered.filter((o) => o.status === d.stage)
+            if (rows.length === 0) return
+            setDrilldown({
+              kind: "aggregate",
               segmentLabel: d.stage,
               segmentValue: fmtGBP(d.value ?? 0),
-              predicate: (o) => o.status === d.stage,
+              rows,
+              metric: { kind: "sum_crp" },
+              breakdowns: [DIM.region, DIM.customer, DIM.evs, DIM.restructure_type],
             })
           }}
         />
@@ -105,7 +123,9 @@ export function PipelineByStatusChart({ filtered, onDrilldown }: HopperChartProp
   )
 }
 
-export function CrpByRegionChart({ filtered, onDrilldown }: HopperChartProps) {
+export function CrpByRegionChart({ filtered }: HopperChartProps) {
+  const [drilldown, setDrilldown] = useState<DrilldownInvocation | null>(null)
+
   const data = useMemo(() => {
     const map = new Map<string, number>()
     for (const o of filtered) map.set(o.region, (map.get(o.region) ?? 0) + o.crp_term_benefit)
@@ -113,6 +133,8 @@ export function CrpByRegionChart({ filtered, onDrilldown }: HopperChartProps) {
       .map(([name, value]) => ({ name, value: +value.toFixed(1) }))
       .filter((r) => r.value > 0)
   }, [filtered])
+
+  if (drilldown) return <DrilldownView invocation={drilldown} onClose={() => setDrilldown(null)} />
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -128,11 +150,15 @@ export function CrpByRegionChart({ filtered, onDrilldown }: HopperChartProps) {
           cursor="pointer"
           onClick={(d: { name?: string; value?: number }) => {
             if (!d.name) return
-            onDrilldown({
-              chartTitle: "CRP by Region",
+            const rows = filtered.filter((o) => o.region === d.name)
+            if (rows.length === 0) return
+            setDrilldown({
+              kind: "aggregate",
               segmentLabel: d.name,
               segmentValue: fmtGBP(d.value ?? 0),
-              predicate: (o) => o.region === d.name,
+              rows,
+              metric: { kind: "sum_crp" },
+              breakdowns: [DIM.customer, DIM.evs, DIM.status, DIM.restructure_type],
             })
           }}
         >
@@ -140,25 +166,16 @@ export function CrpByRegionChart({ filtered, onDrilldown }: HopperChartProps) {
             <Cell key={i} fill={seriesColorsLight[i % seriesColorsLight.length]} />
           ))}
         </Pie>
-        <Tooltip
-          formatter={(v: number) => fmtGBP(v)}
-          contentStyle={{ background: "oklch(0.22 0.04 165)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, fontSize: 12 }}
-          itemStyle={{ color: "white" }}
-          labelStyle={{ color: "white" }}
-        />
-        <Legend
-          iconSize={8}
-          wrapperStyle={{ fontSize: 11 }}
-          formatter={(value: string) => (
-            <span style={{ color: "rgba(255,255,255,0.85)" }}>{value}</span>
-          )}
-        />
+        <Tooltip formatter={(v: number) => fmtGBP(v)} {...TOOLTIP_STYLE} />
+        <Legend iconSize={8} wrapperStyle={{ fontSize: 11 }} formatter={LEGEND_FORMATTER} />
       </PieChart>
     </ResponsiveContainer>
   )
 }
 
-export function TopCustomersChart({ filtered, onDrilldown }: HopperChartProps) {
+export function TopCustomersChart({ filtered }: HopperChartProps) {
+  const [drilldown, setDrilldown] = useState<DrilldownInvocation | null>(null)
+
   const data = useMemo(() => {
     const map = new Map<string, number>()
     for (const o of filtered) map.set(o.customer, (map.get(o.customer) ?? 0) + o.crp_term_benefit)
@@ -168,18 +185,15 @@ export function TopCustomersChart({ filtered, onDrilldown }: HopperChartProps) {
       .slice(0, 15)
   }, [filtered])
 
+  if (drilldown) return <DrilldownView invocation={drilldown} onClose={() => setDrilldown(null)} />
+
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={data} layout="vertical" margin={{ top: 6, right: 10, left: 10, bottom: 6 }}>
         <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" horizontal={false} />
         <XAxis type="number" tick={{ fontSize: 10, fill: "rgba(255,255,255,0.6)" }} tickFormatter={(v) => `£${v}m`} />
         <YAxis dataKey="customer" type="category" tick={{ fontSize: 10, fill: "rgba(255,255,255,0.75)" }} width={100} />
-        <Tooltip
-          formatter={(v: number) => fmtGBP(v)}
-          contentStyle={{ background: "oklch(0.22 0.04 165)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, fontSize: 12 }}
-          itemStyle={{ color: "white" }}
-          labelStyle={{ color: "white" }}
-        />
+        <Tooltip formatter={(v: number) => fmtGBP(v)} {...TOOLTIP_STYLE} />
         <Bar
           dataKey="value"
           fill={palette.blue}
@@ -187,11 +201,15 @@ export function TopCustomersChart({ filtered, onDrilldown }: HopperChartProps) {
           cursor="pointer"
           onClick={(d: { customer?: string; value?: number }) => {
             if (!d.customer) return
-            onDrilldown({
-              chartTitle: "Top Customers",
+            const rows = filtered.filter((o) => o.customer === d.customer)
+            if (rows.length === 0) return
+            setDrilldown({
+              kind: "aggregate",
               segmentLabel: d.customer,
               segmentValue: fmtGBP(d.value ?? 0),
-              predicate: (o) => o.customer === d.customer,
+              rows,
+              metric: { kind: "sum_crp" },
+              breakdowns: [DIM.evs, DIM.status, DIM.restructure_type, DIM.maturity],
             })
           }}
         />
@@ -200,7 +218,9 @@ export function TopCustomersChart({ filtered, onDrilldown }: HopperChartProps) {
   )
 }
 
-export function EvsDistributionChart({ filtered, onDrilldown }: HopperChartProps) {
+export function EvsDistributionChart({ filtered }: HopperChartProps) {
+  const [drilldown, setDrilldown] = useState<DrilldownInvocation | null>(null)
+
   const data = useMemo(() => {
     const map = new Map<string, number>()
     for (const o of filtered) map.set(o.engine_value_stream, (map.get(o.engine_value_stream) ?? 0) + 1)
@@ -209,17 +229,15 @@ export function EvsDistributionChart({ filtered, onDrilldown }: HopperChartProps
       .sort((a, b) => b.value - a.value)
   }, [filtered])
 
+  if (drilldown) return <DrilldownView invocation={drilldown} onClose={() => setDrilldown(null)} />
+
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 40 }}>
         <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" vertical={false} />
         <XAxis dataKey="name" tick={{ fontSize: 10, fill: "rgba(255,255,255,0.6)" }} interval={0} angle={-18} height={60} textAnchor="end" />
         <YAxis tick={{ fontSize: 10, fill: "rgba(255,255,255,0.6)" }} />
-        <Tooltip
-          contentStyle={{ background: "oklch(0.22 0.04 165)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, fontSize: 12 }}
-          itemStyle={{ color: "white" }}
-          labelStyle={{ color: "white" }}
-        />
+        <Tooltip {...TOOLTIP_STYLE} />
         <Bar
           dataKey="value"
           fill={palette.copper}
@@ -227,11 +245,15 @@ export function EvsDistributionChart({ filtered, onDrilldown }: HopperChartProps
           cursor="pointer"
           onClick={(d: { name?: string; value?: number }) => {
             if (!d.name) return
-            onDrilldown({
-              chartTitle: "Engine Value Stream Distribution",
+            const rows = filtered.filter((o) => o.engine_value_stream === d.name)
+            if (rows.length === 0) return
+            setDrilldown({
+              kind: "aggregate",
               segmentLabel: d.name,
-              segmentValue: fmtCount(d.value ?? 0),
-              predicate: (o) => o.engine_value_stream === d.name,
+              segmentValue: fmtCount(d.value ?? 0) + " opportunities",
+              rows,
+              metric: { kind: "count" },
+              breakdowns: [DIM.region, DIM.customer, DIM.status, DIM.restructure_type],
             })
           }}
         />
@@ -240,7 +262,9 @@ export function EvsDistributionChart({ filtered, onDrilldown }: HopperChartProps
   )
 }
 
-export function AnnualProfitForecastChart({ filtered, onDrilldown }: HopperChartProps) {
+export function AnnualProfitForecastChart({ filtered }: HopperChartProps) {
+  const [drilldown, setDrilldown] = useState<DrilldownInvocation | null>(null)
+
   const data = useMemo(
     () => [
       { year: "2026", value: +filtered.reduce((a, b) => a + b.profit_2026, 0).toFixed(1) },
@@ -252,18 +276,15 @@ export function AnnualProfitForecastChart({ filtered, onDrilldown }: HopperChart
     [filtered],
   )
 
+  if (drilldown) return <DrilldownView invocation={drilldown} onClose={() => setDrilldown(null)} />
+
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
         <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" vertical={false} />
         <XAxis dataKey="year" tick={{ fontSize: 11, fill: "rgba(255,255,255,0.75)" }} />
         <YAxis tick={{ fontSize: 10, fill: "rgba(255,255,255,0.6)" }} tickFormatter={(v) => `£${v}m`} />
-        <Tooltip
-          formatter={(v: number) => fmtGBP(v)}
-          contentStyle={{ background: "oklch(0.22 0.04 165)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, fontSize: 12 }}
-          itemStyle={{ color: "white" }}
-          labelStyle={{ color: "white" }}
-        />
+        <Tooltip formatter={(v: number) => fmtGBP(v)} {...TOOLTIP_STYLE} />
         <Bar
           dataKey="value"
           fill={palette.accent}
@@ -271,12 +292,17 @@ export function AnnualProfitForecastChart({ filtered, onDrilldown }: HopperChart
           cursor="pointer"
           onClick={(d: { year?: string; value?: number }) => {
             if (!d.year) return
-            const yearKey = `profit_${d.year}` as keyof HopperOpp
-            onDrilldown({
-              chartTitle: "Annual Profit Forecast",
+            const year = Number(d.year) as 2026 | 2027 | 2028 | 2029 | 2030
+            const yearKey = `profit_${year}` as keyof HopperOpp
+            const rows = filtered.filter((o) => Number(o[yearKey]) !== 0)
+            if (rows.length === 0) return
+            setDrilldown({
+              kind: "aggregate",
               segmentLabel: d.year,
               segmentValue: fmtGBP(d.value ?? 0),
-              predicate: (o) => Number(o[yearKey]) !== 0,
+              rows,
+              metric: { kind: "sum_profit_year", year },
+              breakdowns: [DIM.region, DIM.customer, DIM.evs, DIM.restructure_type],
             })
           }}
         >
@@ -289,7 +315,9 @@ export function AnnualProfitForecastChart({ filtered, onDrilldown }: HopperChart
   )
 }
 
-export function RestructureTypeSplitChart({ filtered, onDrilldown }: HopperChartProps) {
+export function RestructureTypeSplitChart({ filtered }: HopperChartProps) {
+  const [drilldown, setDrilldown] = useState<DrilldownInvocation | null>(null)
+
   const data = useMemo(() => {
     const map = new Map<string, number>()
     for (const o of filtered) map.set(o.restructure_type, (map.get(o.restructure_type) ?? 0) + o.crp_term_benefit)
@@ -297,6 +325,8 @@ export function RestructureTypeSplitChart({ filtered, onDrilldown }: HopperChart
       .map(([name, value]) => ({ name, value: +value.toFixed(1) }))
       .filter((r) => r.value > 0)
   }, [filtered])
+
+  if (drilldown) return <DrilldownView invocation={drilldown} onClose={() => setDrilldown(null)} />
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -312,11 +342,15 @@ export function RestructureTypeSplitChart({ filtered, onDrilldown }: HopperChart
           cursor="pointer"
           onClick={(d: { name?: string; value?: number }) => {
             if (!d.name) return
-            onDrilldown({
-              chartTitle: "Restructure Type Split",
+            const rows = filtered.filter((o) => o.restructure_type === d.name)
+            if (rows.length === 0) return
+            setDrilldown({
+              kind: "aggregate",
               segmentLabel: d.name,
               segmentValue: fmtGBP(d.value ?? 0),
-              predicate: (o) => o.restructure_type === d.name,
+              rows,
+              metric: { kind: "sum_crp" },
+              breakdowns: [DIM.region, DIM.customer, DIM.status, DIM.maturity],
             })
           }}
         >
@@ -324,27 +358,20 @@ export function RestructureTypeSplitChart({ filtered, onDrilldown }: HopperChart
             <Cell key={i} fill={seriesColorsLight[i % seriesColorsLight.length]} />
           ))}
         </Pie>
-        <Tooltip
-          formatter={(v: number) => fmtGBP(v)}
-          contentStyle={{ background: "oklch(0.22 0.04 165)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, fontSize: 12 }}
-          itemStyle={{ color: "white" }}
-          labelStyle={{ color: "white" }}
-        />
-        <Legend
-          iconSize={8}
-          wrapperStyle={{ fontSize: 10 }}
-          formatter={(value: string) => (
-            <span style={{ color: "rgba(255,255,255,0.85)" }}>{value}</span>
-          )}
-        />
+        <Tooltip formatter={(v: number) => fmtGBP(v)} {...TOOLTIP_STYLE} />
+        <Legend iconSize={8} wrapperStyle={{ fontSize: 10 }} formatter={LEGEND_FORMATTER} />
       </PieChart>
     </ResponsiveContainer>
   )
 }
 
-/* ---------- New chart types (sub-project D) ---------- */
+/* ============================================================
+ *  NEW chart types (sub-project D) — with inline drill-down
+ * ============================================================ */
 
-export function PipelineConversionFunnelChart({ filtered, onDrilldown }: HopperChartProps) {
+export function PipelineConversionFunnelChart({ filtered }: HopperChartProps) {
+  const [drilldown, setDrilldown] = useState<DrilldownInvocation | null>(null)
+
   const data = useMemo(() => {
     const map = new Map<string, number>()
     for (const s of PIPELINE_ORDER) map.set(s, 0)
@@ -352,17 +379,15 @@ export function PipelineConversionFunnelChart({ filtered, onDrilldown }: HopperC
     return PIPELINE_ORDER.map((stage) => ({ stage, value: map.get(stage) ?? 0 }))
   }, [filtered])
 
+  if (drilldown) return <DrilldownView invocation={drilldown} onClose={() => setDrilldown(null)} />
+
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 60 }}>
         <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" vertical={false} />
         <XAxis dataKey="stage" tick={{ fontSize: 9, fill: "rgba(255,255,255,0.6)" }} interval={0} angle={-25} height={80} textAnchor="end" />
         <YAxis tick={{ fontSize: 10, fill: "rgba(255,255,255,0.6)" }} />
-        <Tooltip
-          contentStyle={{ background: "oklch(0.22 0.04 165)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, fontSize: 12 }}
-          itemStyle={{ color: "white" }}
-          labelStyle={{ color: "white" }}
-        />
+        <Tooltip {...TOOLTIP_STYLE} />
         <Bar
           dataKey="value"
           fill={palette.blue}
@@ -370,11 +395,15 @@ export function PipelineConversionFunnelChart({ filtered, onDrilldown }: HopperC
           cursor="pointer"
           onClick={(d: { stage?: string; value?: number }) => {
             if (!d.stage) return
-            onDrilldown({
-              chartTitle: "Pipeline Conversion Funnel",
+            const rows = filtered.filter((o) => o.status === d.stage)
+            if (rows.length === 0) return
+            setDrilldown({
+              kind: "aggregate",
               segmentLabel: d.stage,
-              segmentValue: fmtCount(d.value ?? 0),
-              predicate: (o) => o.status === d.stage,
+              segmentValue: fmtCount(d.value ?? 0) + " opportunities",
+              rows,
+              metric: { kind: "count" },
+              breakdowns: [DIM.region, DIM.customer, DIM.evs, DIM.restructure_type],
             })
           }}
         />
@@ -383,7 +412,9 @@ export function PipelineConversionFunnelChart({ filtered, onDrilldown }: HopperC
   )
 }
 
-export function RegionEvsHeatmapChart({ filtered, onDrilldown }: HopperChartProps) {
+export function RegionEvsHeatmapChart({ filtered }: HopperChartProps) {
+  const [drilldown, setDrilldown] = useState<DrilldownInvocation | null>(null)
+
   const { regions, evss, counts, maxCount } = useMemo(() => {
     const byRegion = new Map<string, number>()
     const byEvs = new Map<string, number>()
@@ -391,14 +422,8 @@ export function RegionEvsHeatmapChart({ filtered, onDrilldown }: HopperChartProp
       byRegion.set(o.region, (byRegion.get(o.region) ?? 0) + 1)
       byEvs.set(o.engine_value_stream, (byEvs.get(o.engine_value_stream) ?? 0) + 1)
     }
-    const topRegions = Array.from(byRegion.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([r]) => r)
-    const topEvss = Array.from(byEvs.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 8)
-      .map(([e]) => e)
+    const topRegions = Array.from(byRegion.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([r]) => r)
+    const topEvss = Array.from(byEvs.entries()).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([e]) => e)
     const cellCounts = new Map<string, number>()
     for (const o of filtered) {
       if (!topRegions.includes(o.region) || !topEvss.includes(o.engine_value_stream)) continue
@@ -409,6 +434,8 @@ export function RegionEvsHeatmapChart({ filtered, onDrilldown }: HopperChartProp
     for (const v of cellCounts.values()) if (v > max) max = v
     return { regions: topRegions, evss: topEvss, counts: cellCounts, maxCount: max }
   }, [filtered])
+
+  if (drilldown) return <DrilldownView invocation={drilldown} onClose={() => setDrilldown(null)} />
 
   if (regions.length === 0 || evss.length === 0) {
     return (
@@ -443,11 +470,15 @@ export function RegionEvsHeatmapChart({ filtered, onDrilldown }: HopperChartProp
                     key={e}
                     onClick={() => {
                       if (count === 0) return
-                      onDrilldown({
-                        chartTitle: "Region × EVS Heatmap",
+                      const rows = filtered.filter((o) => o.region === r && o.engine_value_stream === e)
+                      if (rows.length === 0) return
+                      setDrilldown({
+                        kind: "aggregate",
                         segmentLabel: `${r} · ${e}`,
-                        segmentValue: fmtCount(count),
-                        predicate: (o) => o.region === r && o.engine_value_stream === e,
+                        segmentValue: fmtCount(count) + " opportunities",
+                        rows,
+                        metric: { kind: "count" },
+                        breakdowns: [DIM.customer, DIM.status, DIM.restructure_type, DIM.maturity],
                       })
                     }}
                     className="px-1.5 py-1 text-center tnum"
@@ -471,7 +502,9 @@ export function RegionEvsHeatmapChart({ filtered, onDrilldown }: HopperChartProp
   )
 }
 
-export function TopVpOwnersChart({ filtered, onDrilldown }: HopperChartProps) {
+export function TopVpOwnersChart({ filtered }: HopperChartProps) {
+  const [drilldown, setDrilldown] = useState<DrilldownInvocation | null>(null)
+
   const data = useMemo(() => {
     const map = new Map<string, number>()
     for (const o of filtered) {
@@ -484,18 +517,15 @@ export function TopVpOwnersChart({ filtered, onDrilldown }: HopperChartProps) {
       .slice(0, 10)
   }, [filtered])
 
+  if (drilldown) return <DrilldownView invocation={drilldown} onClose={() => setDrilldown(null)} />
+
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={data} layout="vertical" margin={{ top: 6, right: 10, left: 10, bottom: 6 }}>
         <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" horizontal={false} />
         <XAxis type="number" tick={{ fontSize: 10, fill: "rgba(255,255,255,0.6)" }} tickFormatter={(v) => `£${v}m`} />
         <YAxis dataKey="vp_owner" type="category" tick={{ fontSize: 10, fill: "rgba(255,255,255,0.75)" }} width={120} />
-        <Tooltip
-          formatter={(v: number) => fmtGBP(v)}
-          contentStyle={{ background: "oklch(0.22 0.04 165)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, fontSize: 12 }}
-          itemStyle={{ color: "white" }}
-          labelStyle={{ color: "white" }}
-        />
+        <Tooltip formatter={(v: number) => fmtGBP(v)} {...TOOLTIP_STYLE} />
         <Bar
           dataKey="value"
           fill={palette.success}
@@ -503,11 +533,15 @@ export function TopVpOwnersChart({ filtered, onDrilldown }: HopperChartProps) {
           cursor="pointer"
           onClick={(d: { vp_owner?: string; value?: number }) => {
             if (!d.vp_owner) return
-            onDrilldown({
-              chartTitle: "Top VP / Owners",
+            const rows = filtered.filter((o) => o.vp_owner === d.vp_owner)
+            if (rows.length === 0) return
+            setDrilldown({
+              kind: "aggregate",
               segmentLabel: d.vp_owner,
               segmentValue: fmtGBP(d.value ?? 0),
-              predicate: (o) => o.vp_owner === d.vp_owner,
+              rows,
+              metric: { kind: "sum_crp" },
+              breakdowns: [DIM.region, DIM.customer, DIM.evs, DIM.status],
             })
           }}
         />
@@ -516,7 +550,9 @@ export function TopVpOwnersChart({ filtered, onDrilldown }: HopperChartProps) {
   )
 }
 
-export function TopSingleOpportunitiesChart({ filtered, onDrilldown }: HopperChartProps) {
+export function TopSingleOpportunitiesChart({ filtered }: HopperChartProps) {
+  const [drilldown, setDrilldown] = useState<DrilldownInvocation | null>(null)
+
   const data = useMemo(() => {
     return filtered
       .map((o, idx) => ({
@@ -529,18 +565,15 @@ export function TopSingleOpportunitiesChart({ filtered, onDrilldown }: HopperCha
       .slice(0, 10)
   }, [filtered])
 
+  if (drilldown) return <DrilldownView invocation={drilldown} onClose={() => setDrilldown(null)} />
+
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={data} layout="vertical" margin={{ top: 6, right: 10, left: 10, bottom: 6 }}>
         <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" horizontal={false} />
         <XAxis type="number" tick={{ fontSize: 10, fill: "rgba(255,255,255,0.6)" }} tickFormatter={(v) => `£${v}m`} />
         <YAxis dataKey="label" type="category" tick={{ fontSize: 9, fill: "rgba(255,255,255,0.75)" }} width={170} />
-        <Tooltip
-          formatter={(v: number) => fmtGBP(v)}
-          contentStyle={{ background: "oklch(0.22 0.04 165)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, fontSize: 12 }}
-          itemStyle={{ color: "white" }}
-          labelStyle={{ color: "white" }}
-        />
+        <Tooltip formatter={(v: number) => fmtGBP(v)} {...TOOLTIP_STYLE} />
         <Bar
           dataKey="value"
           fill={palette.accent}
@@ -550,14 +583,11 @@ export function TopSingleOpportunitiesChart({ filtered, onDrilldown }: HopperCha
             if (d.idx === undefined) return
             const row = data[d.idx]
             if (!row) return
-            onDrilldown({
-              chartTitle: "Top Single Opportunities",
+            setDrilldown({
+              kind: "single-row",
               segmentLabel: row.label,
               segmentValue: fmtGBP(row.value),
-              predicate: (o) =>
-                o.customer === row.opp.customer &&
-                o.engine_value_stream === row.opp.engine_value_stream &&
-                o.crp_term_benefit === row.opp.crp_term_benefit,
+              row: row.opp,
             })
           }}
         />
@@ -566,7 +596,9 @@ export function TopSingleOpportunitiesChart({ filtered, onDrilldown }: HopperCha
   )
 }
 
-export function MaturityMixChart({ filtered, onDrilldown }: HopperChartProps) {
+export function MaturityMixChart({ filtered }: HopperChartProps) {
+  const [drilldown, setDrilldown] = useState<DrilldownInvocation | null>(null)
+
   const data = useMemo(() => {
     const map = new Map<string, number>()
     for (const o of filtered) map.set(o.maturity, (map.get(o.maturity) ?? 0) + o.crp_term_benefit)
@@ -575,6 +607,8 @@ export function MaturityMixChart({ filtered, onDrilldown }: HopperChartProps) {
       .filter((r) => r.value > 0)
   }, [filtered])
 
+  if (drilldown) return <DrilldownView invocation={drilldown} onClose={() => setDrilldown(null)} />
+
   return (
     <ResponsiveContainer width="100%" height="100%">
       <PieChart>
@@ -589,11 +623,15 @@ export function MaturityMixChart({ filtered, onDrilldown }: HopperChartProps) {
           cursor="pointer"
           onClick={(d: { name?: string; value?: number }) => {
             if (!d.name) return
-            onDrilldown({
-              chartTitle: "Maturity Mix",
+            const rows = filtered.filter((o) => o.maturity === d.name)
+            if (rows.length === 0) return
+            setDrilldown({
+              kind: "aggregate",
               segmentLabel: d.name,
               segmentValue: fmtGBP(d.value ?? 0),
-              predicate: (o) => o.maturity === d.name,
+              rows,
+              metric: { kind: "sum_crp" },
+              breakdowns: [DIM.region, DIM.customer, DIM.evs, DIM.status],
             })
           }}
         >
@@ -601,25 +639,16 @@ export function MaturityMixChart({ filtered, onDrilldown }: HopperChartProps) {
             <Cell key={i} fill={seriesColorsLight[i % seriesColorsLight.length]} />
           ))}
         </Pie>
-        <Tooltip
-          formatter={(v: number) => fmtGBP(v)}
-          contentStyle={{ background: "oklch(0.22 0.04 165)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, fontSize: 12 }}
-          itemStyle={{ color: "white" }}
-          labelStyle={{ color: "white" }}
-        />
-        <Legend
-          iconSize={8}
-          wrapperStyle={{ fontSize: 11 }}
-          formatter={(value: string) => (
-            <span style={{ color: "rgba(255,255,255,0.85)" }}>{value}</span>
-          )}
-        />
+        <Tooltip formatter={(v: number) => fmtGBP(v)} {...TOOLTIP_STYLE} />
+        <Legend iconSize={8} wrapperStyle={{ fontSize: 11 }} formatter={LEGEND_FORMATTER} />
       </PieChart>
     </ResponsiveContainer>
   )
 }
 
-export function OnerousMixChart({ filtered, onDrilldown }: HopperChartProps) {
+export function OnerousMixChart({ filtered }: HopperChartProps) {
+  const [drilldown, setDrilldown] = useState<DrilldownInvocation | null>(null)
+
   const data = useMemo(() => {
     const map = new Map<string, number>()
     for (const o of filtered) map.set(o.onerous_type, (map.get(o.onerous_type) ?? 0) + o.crp_term_benefit)
@@ -628,6 +657,8 @@ export function OnerousMixChart({ filtered, onDrilldown }: HopperChartProps) {
       .filter((r) => r.value > 0)
   }, [filtered])
 
+  if (drilldown) return <DrilldownView invocation={drilldown} onClose={() => setDrilldown(null)} />
+
   return (
     <ResponsiveContainer width="100%" height="100%">
       <PieChart>
@@ -642,11 +673,15 @@ export function OnerousMixChart({ filtered, onDrilldown }: HopperChartProps) {
           cursor="pointer"
           onClick={(d: { name?: string; value?: number }) => {
             if (!d.name) return
-            onDrilldown({
-              chartTitle: "Onerous Mix",
+            const rows = filtered.filter((o) => o.onerous_type === d.name)
+            if (rows.length === 0) return
+            setDrilldown({
+              kind: "aggregate",
               segmentLabel: d.name,
               segmentValue: fmtGBP(d.value ?? 0),
-              predicate: (o) => o.onerous_type === d.name,
+              rows,
+              metric: { kind: "sum_crp" },
+              breakdowns: [DIM.region, DIM.customer, DIM.evs, DIM.status],
             })
           }}
         >
@@ -654,19 +689,8 @@ export function OnerousMixChart({ filtered, onDrilldown }: HopperChartProps) {
             <Cell key={i} fill={seriesColorsLight[i % seriesColorsLight.length]} />
           ))}
         </Pie>
-        <Tooltip
-          formatter={(v: number) => fmtGBP(v)}
-          contentStyle={{ background: "oklch(0.22 0.04 165)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, fontSize: 12 }}
-          itemStyle={{ color: "white" }}
-          labelStyle={{ color: "white" }}
-        />
-        <Legend
-          iconSize={8}
-          wrapperStyle={{ fontSize: 11 }}
-          formatter={(value: string) => (
-            <span style={{ color: "rgba(255,255,255,0.85)" }}>{value}</span>
-          )}
-        />
+        <Tooltip formatter={(v: number) => fmtGBP(v)} {...TOOLTIP_STYLE} />
+        <Legend iconSize={8} wrapperStyle={{ fontSize: 11 }} formatter={LEGEND_FORMATTER} />
       </PieChart>
     </ResponsiveContainer>
   )

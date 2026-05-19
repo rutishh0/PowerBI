@@ -16,20 +16,12 @@ import {
 } from "lucide-react"
 import type { GlobalHopperData, HopperOpp } from "@/lib/types"
 import { DataTable, type DataTableColumn } from "@/components/shared/data-table"
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet"
 import { fmtGBP, fmtCount } from "@/lib/format"
 import { loadPins, savePins } from "@/lib/chart-pins"
 import {
   CHART_DEFS,
   HOPPER_PINS_KEY,
   HOPPER_DEFAULT_PINS,
-  type OpenDrilldownArgs,
 } from "./hopper-charts"
 import { HopperCustomizeSheet } from "./hopper-customize-sheet"
 
@@ -45,13 +37,6 @@ export function GlobalHopperVisualizer({ data, filename }: GlobalHopperVisualize
   const [status, setStatus] = useState("__all__")
   const [maturity, setMaturity] = useState("__all__")
   const [rtype, setRtype] = useState("__all__")
-
-  type Drilldown = {
-    title: string
-    subtitle: string
-    rows: HopperOpp[]
-  } | null
-  const [drilldown, setDrilldown] = useState<Drilldown>(null)
 
   const filtered = useMemo(() => {
     return data.opportunities.filter((o) => {
@@ -151,16 +136,6 @@ export function GlobalHopperVisualizer({ data, filename }: GlobalHopperVisualize
     },
     { key: "vp", header: "VP/Owner", accessor: (r) => r.vp_owner, sortable: true, widthClass: "w-[8rem]" },
   ]
-
-  function openDrilldown(args: OpenDrilldownArgs) {
-    const rows = filtered.filter(args.predicate)
-    if (rows.length === 0) return
-    setDrilldown({
-      title: `${args.segmentLabel} — ${args.segmentValue}`,
-      subtitle: `${args.chartTitle} · ${rows.length} opportunit${rows.length === 1 ? "y" : "ies"}`,
-      rows,
-    })
-  }
 
   return (
     <div className="bg-[oklch(0.17_0.03_165)] text-white min-h-full">
@@ -268,7 +243,7 @@ export function GlobalHopperVisualizer({ data, filename }: GlobalHopperVisualize
             <div className="grid gap-4 lg:grid-cols-2">
               {visible.map((def) => (
                 <HopperChartCard key={def.id} title={def.title} subtitle={def.subtitle}>
-                  <def.Component filtered={filtered} onDrilldown={openDrilldown} />
+                  <def.Component filtered={filtered} />
                 </HopperChartCard>
               ))}
             </div>
@@ -285,55 +260,6 @@ export function GlobalHopperVisualizer({ data, filename }: GlobalHopperVisualize
           />
         </HopperCollapsible>
       </div>
-
-      {/* Drill-down drawer */}
-      <Sheet open={!!drilldown} onOpenChange={(open) => { if (!open) setDrilldown(null) }}>
-        <SheetContent
-          side="right"
-          className="w-[42rem] max-w-[90vw] bg-[oklch(0.17_0.03_165)] text-white border-l border-white/10 overflow-y-auto p-6"
-        >
-          <SheetHeader className="text-left p-0">
-            <SheetTitle className="text-white font-display">{drilldown?.title ?? ""}</SheetTitle>
-            <SheetDescription className="text-white/60">
-              {drilldown?.subtitle ?? ""}
-            </SheetDescription>
-          </SheetHeader>
-          {drilldown ? (
-            <div className="mt-6 space-y-4">
-              <div className="grid grid-cols-4 gap-2">
-                <DrilldownStat label="Count" value={fmtCount(drilldown.rows.length)} />
-                <DrilldownStat
-                  label="CRP Term"
-                  value={fmtGBP(drilldown.rows.reduce((a, b) => a + b.crp_term_benefit, 0))}
-                />
-                <DrilldownStat
-                  label="2026"
-                  value={fmtGBP(drilldown.rows.reduce((a, b) => a + b.profit_2026, 0))}
-                />
-                <DrilldownStat
-                  label="2027"
-                  value={fmtGBP(drilldown.rows.reduce((a, b) => a + b.profit_2027, 0))}
-                />
-              </div>
-              <DataTable
-                columns={registerCols}
-                rows={drilldown.rows}
-                maxRows={500}
-                getRowId={(r, i) => `${r.region}-${r.customer}-${i}`}
-              />
-            </div>
-          ) : null}
-        </SheetContent>
-      </Sheet>
-    </div>
-  )
-}
-
-function DrilldownStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded border border-white/10 bg-white/[0.03] px-3 py-2">
-      <div className="text-[9px] uppercase tracking-[0.12em] text-white/55">{label}</div>
-      <div className="mt-1 font-display text-base font-semibold tnum">{value}</div>
     </div>
   )
 }
