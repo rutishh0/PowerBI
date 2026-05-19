@@ -24,6 +24,18 @@ export const seriesColors = [
   "var(--chart-6)",
 ]
 
+/** Series colors safe on dark panels: same set as seriesColors but with
+ * the near-background navy (chart-1) demoted to last position so it never
+ * lands on a chart's dominant first segment. */
+export const seriesColorsLight = [
+  "var(--chart-2)",   // gold
+  "var(--chart-5)",   // mid blue
+  "var(--chart-4)",   // green
+  "var(--chart-3)",   // red
+  "var(--chart-6)",   // copper
+  "var(--chart-1)",   // navy (last — still in rotation for 6+ series)
+]
+
 /** Aging-bucket ramp: green → amber → deep red, 6 stops */
 export const agingColors = [
   "var(--chart-4)",        // current — green

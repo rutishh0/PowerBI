@@ -499,7 +499,11 @@ export function OppTrackerVisualizer({ data, filename }: OppTrackerVisualizerPro
                       <td className="px-2 py-2 font-medium text-white/90">{m.project}</td>
                       <td className="px-2 py-2 text-white/70">{m.customer}</td>
                       {PHASE_ORDER.map((p, i) => {
-                        const date = m.milestones[p]
+                        // Defensive: parser's Timeline-sheet branch
+                        // historically emitted rows without a `milestones`
+                        // dict. Optional chaining keeps us safe if the
+                        // parser ever regresses again.
+                        const date = m.milestones?.[p]
                         const state = date ? (i === currentIdx ? "current" : "done") : i === currentIdx ? "current" : "future"
                         return (
                           <td

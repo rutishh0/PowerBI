@@ -1,50 +1,37 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Legend,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts"
+import { useEffect, useMemo, useState } from "react"
 import {
   Globe2,
   TrendingUp,
   Activity,
   AlertCircle,
-  Users,
   Filter,
   Gauge,
   ShieldCheck,
   ShieldAlert,
-  ChevronDown,
   Database,
+  LayoutDashboard,
+  ChevronDown,
 } from "lucide-react"
 import type { GlobalHopperData, HopperOpp } from "@/lib/types"
 import { DataTable, type DataTableColumn } from "@/components/shared/data-table"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet"
 import { fmtGBP, fmtCount } from "@/lib/format"
-import { palette, seriesColors } from "@/lib/chart-palette"
-
-// Canonical pipeline order (V6 SPEC §6.6.2)
-const PIPELINE_ORDER = [
-  "Initial idea",
-  "ICT formed",
-  "Strategy Approved",
-  "Financial Modelling Started",
-  "Financial Modelling Complete",
-  "Financials Approved",
-  "Negotiations Started",
-  "Negotiations Concluded",
-  "Contracting Started",
-  "Contracting Concluded",
-]
+import { loadPins, savePins } from "@/lib/chart-pins"
+import {
+  CHART_DEFS,
+  HOPPER_PINS_KEY,
+  HOPPER_DEFAULT_PINS,
+  type OpenDrilldownArgs,
+} from "./hopper-charts"
+import { HopperCustomizeSheet } from "./hopper-customize-sheet"
 
 interface GlobalHopperVisualizerProps {
   data: GlobalHopperData
@@ -58,6 +45,13 @@ export function GlobalHopperVisualizer({ data, filename }: GlobalHopperVisualize
   const [status, setStatus] = useState("__all__")
   const [maturity, setMaturity] = useState("__all__")
   const [rtype, setRtype] = useState("__all__")
+
+  type Drilldown = {
+    title: string
+    subtitle: string
+    rows: HopperOpp[]
+  } | null
+  const [drilldown, setDrilldown] = useState<Drilldown>(null)
 
   const filtered = useMemo(() => {
     return data.opportunities.filter((o) => {
@@ -84,62 +78,24 @@ export function GlobalHopperVisualizer({ data, filename }: GlobalHopperVisualize
   const notOnerous = filtered.filter((o) => o.onerous_type === "Not Onerous").length
   const regionsInView = Array.from(new Set(filtered.map((o) => o.region)))
 
-  // Pipeline by status (bar, canonical order)
-  const pipelineData = useMemo(() => {
-    const map = new Map<string, number>()
-    for (const s of PIPELINE_ORDER) map.set(s, 0)
-    for (const o of filtered) map.set(o.status, (map.get(o.status) ?? 0) + o.crp_term_benefit)
-    return PIPELINE_ORDER.map((stage) => ({ stage, value: +Number(map.get(stage) ?? 0).toFixed(1) }))
-  }, [filtered])
+  // Pinned chart IDs (persists in browser localStorage)
+  const [pinned, setPinned] = useState<Set<string>>(new Set(HOPPER_DEFAULT_PINS))
 
-  // CRP by region (donut)
-  const regionDonut = useMemo(() => {
-    const map = new Map<string, number>()
-    for (const o of filtered) map.set(o.region, (map.get(o.region) ?? 0) + o.crp_term_benefit)
-    return Array.from(map.entries())
-      .map(([name, value]) => ({ name, value: +value.toFixed(1) }))
-      .filter((r) => r.value > 0)
-  }, [filtered])
+  // Hydrate from localStorage on the client (SSR-safe — server renders defaults)
+  useEffect(() => {
+    setPinned(loadPins(HOPPER_PINS_KEY, HOPPER_DEFAULT_PINS))
+  }, [])
 
-  // Top 15 customers
-  const topCustomers = useMemo(() => {
-    const map = new Map<string, number>()
-    for (const o of filtered) map.set(o.customer, (map.get(o.customer) ?? 0) + o.crp_term_benefit)
-    return Array.from(map.entries())
-      .map(([customer, value]) => ({ customer, value: +value.toFixed(1) }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 15)
-  }, [filtered])
+  function updatePinned(next: Set<string>) {
+    setPinned(next)
+    savePins(HOPPER_PINS_KEY, next)
+  }
 
-  // EVS distribution (counts)
-  const evsData = useMemo(() => {
-    const map = new Map<string, number>()
-    for (const o of filtered) map.set(o.engine_value_stream, (map.get(o.engine_value_stream) ?? 0) + 1)
-    return Array.from(map.entries())
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value)
-  }, [filtered])
-
-  // Annual profit forecast
-  const annualForecast = useMemo(
-    () => [
-      { year: "2026", value: +filtered.reduce((a, b) => a + b.profit_2026, 0).toFixed(1) },
-      { year: "2027", value: +filtered.reduce((a, b) => a + b.profit_2027, 0).toFixed(1) },
-      { year: "2028", value: +filtered.reduce((a, b) => a + b.profit_2028, 0).toFixed(1) },
-      { year: "2029", value: +filtered.reduce((a, b) => a + b.profit_2029, 0).toFixed(1) },
-      { year: "2030", value: +filtered.reduce((a, b) => a + b.profit_2030, 0).toFixed(1) },
-    ],
-    [filtered],
-  )
-
-  // Restructure type split
-  const restructureSplit = useMemo(() => {
-    const map = new Map<string, number>()
-    for (const o of filtered) map.set(o.restructure_type, (map.get(o.restructure_type) ?? 0) + o.crp_term_benefit)
-    return Array.from(map.entries())
-      .map(([name, value]) => ({ name, value: +value.toFixed(1) }))
-      .filter((r) => r.value > 0)
-  }, [filtered])
+  function resetPinned() {
+    const fresh = new Set<string>(HOPPER_DEFAULT_PINS)
+    setPinned(fresh)
+    savePins(HOPPER_PINS_KEY, fresh)
+  }
 
   const registerCols: DataTableColumn<HopperOpp>[] = [
     { key: "region", header: "Region", accessor: (r) => r.region, sortable: true, fastFilter: true, widthClass: "w-[5.5rem]" },
@@ -196,6 +152,16 @@ export function GlobalHopperVisualizer({ data, filename }: GlobalHopperVisualize
     { key: "vp", header: "VP/Owner", accessor: (r) => r.vp_owner, sortable: true, widthClass: "w-[8rem]" },
   ]
 
+  function openDrilldown(args: OpenDrilldownArgs) {
+    const rows = filtered.filter(args.predicate)
+    if (rows.length === 0) return
+    setDrilldown({
+      title: `${args.segmentLabel} — ${args.segmentValue}`,
+      subtitle: `${args.chartTitle} · ${rows.length} opportunit${rows.length === 1 ? "y" : "ies"}`,
+      rows,
+    })
+  }
+
   return (
     <div className="bg-[oklch(0.17_0.03_165)] text-white min-h-full">
       <div className="px-6 py-6 flex flex-col gap-6 max-w-[125rem] mx-auto w-full">
@@ -234,6 +200,7 @@ export function GlobalHopperVisualizer({ data, filename }: GlobalHopperVisualize
           <HopperSelect label="Status" value={status} onChange={setStatus} options={data.summary.unique_statuses} width="10rem" />
           <HopperSelect label="Maturity" value={maturity} onChange={setMaturity} options={data.summary.unique_maturities} />
           <HopperSelect label="Restructure" value={rtype} onChange={setRtype} options={data.summary.unique_restructure_types} width="9rem" />
+          <HopperCustomizeSheet pinned={pinned} onChange={updatePinned} onReset={resetPinned} />
           {[region, customer, evs, status, maturity, rtype].some((v) => v !== "__all__") ? (
             <button
               onClick={() => {
@@ -282,123 +249,31 @@ export function GlobalHopperVisualizer({ data, filename }: GlobalHopperVisualize
           />
         </div>
 
-        {/* Charts row 1 */}
-        <div className="grid gap-4 lg:grid-cols-2">
-          <HopperChartCard title="Pipeline by Status" subtitle="CRP term benefit (£m) by canonical pipeline stage">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={pipelineData} margin={{ top: 10, right: 10, left: 0, bottom: 60 }}>
-                <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="stage" tick={{ fontSize: 9, fill: "rgba(255,255,255,0.6)" }} interval={0} angle={-25} height={80} textAnchor="end" />
-                <YAxis tick={{ fontSize: 10, fill: "rgba(255,255,255,0.6)" }} tickFormatter={(v) => `£${v}m`} />
-                <Tooltip
-                  formatter={(v: number) => fmtGBP(v)}
-                  contentStyle={{ background: "oklch(0.22 0.04 165)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, fontSize: 12 }}
-                  itemStyle={{ color: "white" }}
-                  labelStyle={{ color: "white" }}
-                />
-                <Bar dataKey="value" fill={palette.accent} radius={[3, 3, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </HopperChartCard>
-
-          <HopperChartCard title="CRP by Region" subtitle="Share of CRP term benefit">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={regionDonut} dataKey="value" nameKey="name" innerRadius="55%" outerRadius="85%" paddingAngle={2} strokeWidth={0}>
-                  {regionDonut.map((_, i) => (
-                    <Cell key={i} fill={seriesColors[i % seriesColors.length]} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  formatter={(v: number) => fmtGBP(v)}
-                  contentStyle={{ background: "oklch(0.22 0.04 165)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, fontSize: 12 }}
-                  itemStyle={{ color: "white" }}
-                  labelStyle={{ color: "white" }}
-                />
-                <Legend iconSize={8} wrapperStyle={{ fontSize: 11, color: "rgba(255,255,255,0.75)" }} />
-              </PieChart>
-            </ResponsiveContainer>
-          </HopperChartCard>
-        </div>
-
-        {/* Charts row 2 */}
-        <div className="grid gap-4 lg:grid-cols-2">
-          <HopperChartCard title={`Top ${topCustomers.length} Customers`} subtitle="By CRP term benefit (£m)">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={topCustomers} layout="vertical" margin={{ top: 6, right: 10, left: 10, bottom: 6 }}>
-                <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 10, fill: "rgba(255,255,255,0.6)" }} tickFormatter={(v) => `£${v}m`} />
-                <YAxis dataKey="customer" type="category" tick={{ fontSize: 10, fill: "rgba(255,255,255,0.75)" }} width={100} />
-                <Tooltip
-                  formatter={(v: number) => fmtGBP(v)}
-                  contentStyle={{ background: "oklch(0.22 0.04 165)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, fontSize: 12 }}
-                  itemStyle={{ color: "white" }}
-                  labelStyle={{ color: "white" }}
-                />
-                <Bar dataKey="value" fill={palette.blue} radius={[0, 3, 3, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </HopperChartCard>
-
-          <HopperChartCard title="Engine Value Stream Distribution" subtitle="Count of opportunities per EVS">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={evsData} margin={{ top: 10, right: 10, left: 0, bottom: 40 }}>
-                <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" tick={{ fontSize: 10, fill: "rgba(255,255,255,0.6)" }} interval={0} angle={-18} height={60} textAnchor="end" />
-                <YAxis tick={{ fontSize: 10, fill: "rgba(255,255,255,0.6)" }} />
-                <Tooltip
-                  contentStyle={{ background: "oklch(0.22 0.04 165)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, fontSize: 12 }}
-                  itemStyle={{ color: "white" }}
-                  labelStyle={{ color: "white" }}
-                />
-                <Bar dataKey="value" fill={palette.copper} radius={[3, 3, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </HopperChartCard>
-        </div>
-
-        {/* Charts row 3 */}
-        <div className="grid gap-4 lg:grid-cols-2">
-          <HopperChartCard title="Annual Profit Forecast" subtitle="Sum of annual profit (£m)">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={annualForecast} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
-                <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="year" tick={{ fontSize: 11, fill: "rgba(255,255,255,0.75)" }} />
-                <YAxis tick={{ fontSize: 10, fill: "rgba(255,255,255,0.6)" }} tickFormatter={(v) => `£${v}m`} />
-                <Tooltip
-                  formatter={(v: number) => fmtGBP(v)}
-                  contentStyle={{ background: "oklch(0.22 0.04 165)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, fontSize: 12 }}
-                  itemStyle={{ color: "white" }}
-                  labelStyle={{ color: "white" }}
-                />
-                <Bar dataKey="value" fill={palette.accent} radius={[3, 3, 0, 0]}>
-                  {annualForecast.map((_, i) => (
-                    <Cell key={i} fill={i < 2 ? palette.accent : i === 2 ? palette.blue : palette.copper} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </HopperChartCard>
-
-          <HopperChartCard title="Restructure Type Split" subtitle="CRP term benefit (£m)">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={restructureSplit} dataKey="value" nameKey="name" innerRadius="55%" outerRadius="85%" paddingAngle={2} strokeWidth={0}>
-                  {restructureSplit.map((_, i) => (
-                    <Cell key={i} fill={seriesColors[i % seriesColors.length]} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  formatter={(v: number) => fmtGBP(v)}
-                  contentStyle={{ background: "oklch(0.22 0.04 165)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, fontSize: 12 }}
-                  itemStyle={{ color: "white" }}
-                  labelStyle={{ color: "white" }}
-                />
-                <Legend iconSize={8} wrapperStyle={{ fontSize: 10, color: "rgba(255,255,255,0.75)" }} />
-              </PieChart>
-            </ResponsiveContainer>
-          </HopperChartCard>
-        </div>
+        {/* Charts (pinned only — manage via Customize button in the filter row) */}
+        {(() => {
+          const visible = CHART_DEFS.filter((d) => pinned.has(d.id))
+          if (visible.length === 0) {
+            return (
+              <div className="rounded-lg border border-dashed border-white/15 bg-white/[0.02] p-10 text-center">
+                <LayoutDashboard className="h-6 w-6 mx-auto text-white/40" />
+                <div className="mt-3 text-sm font-medium text-white/80">No charts pinned</div>
+                <div className="mt-1 text-xs text-white/55 max-w-sm mx-auto">
+                  Use the Customize button in the filter bar to pick which charts appear here.
+                  Your choice is saved in this browser.
+                </div>
+              </div>
+            )
+          }
+          return (
+            <div className="grid gap-4 lg:grid-cols-2">
+              {visible.map((def) => (
+                <HopperChartCard key={def.id} title={def.title} subtitle={def.subtitle}>
+                  <def.Component filtered={filtered} onDrilldown={openDrilldown} />
+                </HopperChartCard>
+              ))}
+            </div>
+          )
+        })()}
 
         {/* Register */}
         <HopperCollapsible title="Opportunities Register" defaultOpen icon={<Database className="h-4 w-4" />}>
@@ -410,6 +285,55 @@ export function GlobalHopperVisualizer({ data, filename }: GlobalHopperVisualize
           />
         </HopperCollapsible>
       </div>
+
+      {/* Drill-down drawer */}
+      <Sheet open={!!drilldown} onOpenChange={(open) => { if (!open) setDrilldown(null) }}>
+        <SheetContent
+          side="right"
+          className="w-[42rem] max-w-[90vw] bg-[oklch(0.17_0.03_165)] text-white border-l border-white/10 overflow-y-auto p-6"
+        >
+          <SheetHeader className="text-left p-0">
+            <SheetTitle className="text-white font-display">{drilldown?.title ?? ""}</SheetTitle>
+            <SheetDescription className="text-white/60">
+              {drilldown?.subtitle ?? ""}
+            </SheetDescription>
+          </SheetHeader>
+          {drilldown ? (
+            <div className="mt-6 space-y-4">
+              <div className="grid grid-cols-4 gap-2">
+                <DrilldownStat label="Count" value={fmtCount(drilldown.rows.length)} />
+                <DrilldownStat
+                  label="CRP Term"
+                  value={fmtGBP(drilldown.rows.reduce((a, b) => a + b.crp_term_benefit, 0))}
+                />
+                <DrilldownStat
+                  label="2026"
+                  value={fmtGBP(drilldown.rows.reduce((a, b) => a + b.profit_2026, 0))}
+                />
+                <DrilldownStat
+                  label="2027"
+                  value={fmtGBP(drilldown.rows.reduce((a, b) => a + b.profit_2027, 0))}
+                />
+              </div>
+              <DataTable
+                columns={registerCols}
+                rows={drilldown.rows}
+                maxRows={500}
+                getRowId={(r, i) => `${r.region}-${r.customer}-${i}`}
+              />
+            </div>
+          ) : null}
+        </SheetContent>
+      </Sheet>
+    </div>
+  )
+}
+
+function DrilldownStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded border border-white/10 bg-white/[0.03] px-3 py-2">
+      <div className="text-[9px] uppercase tracking-[0.12em] text-white/55">{label}</div>
+      <div className="mt-1 font-display text-base font-semibold tnum">{value}</div>
     </div>
   )
 }

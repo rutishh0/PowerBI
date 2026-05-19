@@ -1771,6 +1771,11 @@ def _parse_opp_timeline(all_sheets: Dict[str, pd.DataFrame]) -> Dict:
                 milestones.append({
                     "project":            proj,
                     "customer":           cust,
+                    # Empty `milestones` dict keeps the row shape consistent
+                    # with the Date Input branch so frontend code that
+                    # iterates over PHASE_ORDER doesn't crash on undefined.
+                    "milestones":         {},
+                    "current_phase":      None,
                     "timeline_milestones": timeline_milestones,
                     "source":             "Timeline",
                 })
