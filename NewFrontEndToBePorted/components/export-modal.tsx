@@ -15,17 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Checkbox } from "@/components/ui/checkbox"
-import {
-  FieldSet,
-  FieldLegend,
-  FieldGroup,
-  Field,
-  FieldLabel,
-  FieldDescription,
-} from "@/components/ui/field"
 import { Spinner } from "@/components/ui/spinner"
 import { Badge } from "@/components/ui/badge"
 
@@ -47,24 +37,37 @@ const FORMATS: { id: ExportFormat; label: string; description: string; icon: typ
   {
     id: "pptx",
     label: "PowerPoint deck",
-    description: "16:9 slideshow matching the Slides view for use in reviews.",
+    description: "16:9 slideshow matching the Slides view for use in reviews. (Coming soon — falls back to PDF.)",
     icon: Presentation,
   },
   {
     id: "png",
     label: "Current view (PNG)",
-    description: "Screenshot of the current visualizer for quick sharing.",
+    description: "Screenshot of the current visualizer for quick sharing. (Coming soon — falls back to PDF.)",
     icon: ImageIcon,
   },
 ]
 
+const SECTIONS: { id: "summary" | "charts" | "tables" | "insights"; label: string; description: string }[] = [
+  { id: "summary", label: "Executive summary", description: "Headline KPIs, meta strip and filter context." },
+  { id: "charts", label: "Charts & visuals", description: "Pipeline · region donut · annual profit forecast." },
+  { id: "tables", label: "Data tables", description: "Customer / EVS / pipeline / restructure breakdowns + Top 25 register." },
+  { id: "insights", label: "AI insights", description: "Auto-generated commentary (planned — not yet in the PDF generator)." },
+]
+
 export function ExportModal({ open, onOpenChange, activeFile }: Props) {
   const [format, setFormat] = useState<ExportFormat>("pdf")
-  const [includeSummary, setIncludeSummary] = useState(true)
-  const [includeCharts, setIncludeCharts] = useState(true)
-  const [includeTables, setIncludeTables] = useState(true)
-  const [includeInsights, setIncludeInsights] = useState(true)
+  const [sections, setSections] = useState<Record<typeof SECTIONS[number]["id"], boolean>>({
+    summary: true,
+    charts: true,
+    tables: true,
+    insights: true,
+  })
   const [busy, setBusy] = useState(false)
+
+  function toggleSection(id: typeof SECTIONS[number]["id"]) {
+    setSections((s) => ({ ...s, [id]: !s[id] }))
+  }
 
   async function handleExport() {
     if (!activeFile) return
@@ -74,14 +77,8 @@ export function ExportModal({ open, onOpenChange, activeFile }: Props) {
         filename: activeFile.name,
         file_type: activeFile.file_type,
         format,
-        sections: {
-          summary: includeSummary,
-          charts: includeCharts,
-          tables: includeTables,
-          insights: includeInsights,
-        },
+        sections,
       })
-      // Trigger browser download.
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
@@ -108,131 +105,131 @@ export function ExportModal({ open, onOpenChange, activeFile }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-xl bg-[oklch(0.17_0.03_165)] text-white border-white/10 p-6 gap-5">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 font-display">
-            <Download className="h-5 w-5 text-primary" />
+          <DialogTitle className="flex items-center gap-2 font-display text-white">
+            <Download className="h-5 w-5 text-[var(--chart-2)]" />
             Export report
           </DialogTitle>
-          <DialogDescription>
-            Generate a shareable deliverable from the current workbook. Exports are
-            branded with the Rolls-Royce Civil Aerospace header &amp; disclaimer.
+          <DialogDescription className="text-white/60">
+            Generate a shareable deliverable from the current workbook. The export is
+            branded with the Rolls-Royce Civil Aerospace header &amp; footer.
           </DialogDescription>
         </DialogHeader>
 
+        {/* Active file chip */}
         {activeFile ? (
-          <div className="rounded-md border border-border bg-muted/40 px-3 py-2 flex items-center justify-between text-sm">
+          <div className="rounded-md border border-white/10 bg-white/[0.04] px-3 py-2 flex items-center justify-between text-sm gap-3 min-w-0">
             <div className="flex items-center gap-2 min-w-0">
-              <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-              <span className="font-medium text-foreground truncate">{activeFile.name}</span>
+              <FileText className="h-4 w-4 text-white/55 shrink-0" />
+              <span className="font-medium text-white truncate">{activeFile.name}</span>
             </div>
-            <Badge variant="outline" className="text-[10px] uppercase tracking-wider shrink-0">
+            <Badge
+              variant="outline"
+              className="text-[10px] uppercase tracking-wider shrink-0 border-white/20 bg-white/5 text-white/80"
+            >
               {FILE_TYPE_LABELS[activeFile.file_type]}
             </Badge>
           </div>
         ) : (
-          <div className="rounded-md border border-dashed border-border px-3 py-3 text-sm text-muted-foreground">
+          <div className="rounded-md border border-dashed border-white/15 px-3 py-3 text-sm text-white/55">
             No file selected — load a dataset first.
           </div>
         )}
 
-        <FieldSet>
-          <FieldLegend>Format</FieldLegend>
-          <RadioGroup value={format} onValueChange={(v) => setFormat(v as ExportFormat)}>
-            <FieldGroup className="gap-2">
-              {FORMATS.map((f) => {
-                const Icon = f.icon
-                const active = format === f.id
-                return (
-                  <Label
-                    key={f.id}
-                    htmlFor={`fmt-${f.id}`}
-                    className={`flex items-start gap-3 rounded-md border p-3 cursor-pointer transition ${
+        {/* Format */}
+        <div className="space-y-2">
+          <div className="text-[11px] uppercase tracking-[0.14em] text-white/55 font-semibold">
+            Format
+          </div>
+          <div className="grid gap-2">
+            {FORMATS.map((f) => {
+              const Icon = f.icon
+              const active = format === f.id
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setFormat(f.id)}
+                  className={`flex items-start gap-3 rounded-md border p-3 text-left transition-colors ${
+                    active
+                      ? "border-[var(--chart-2)] bg-[var(--chart-2)]/10"
+                      : "border-white/10 bg-white/[0.03] hover:border-white/25 hover:bg-white/[0.06]"
+                  }`}
+                >
+                  <span
+                    className={`mt-1 h-3.5 w-3.5 rounded-full border flex-shrink-0 ${
                       active
-                        ? "border-primary bg-primary/5"
-                        : "border-border bg-background hover:border-ring"
+                        ? "border-[var(--chart-2)] bg-[var(--chart-2)]"
+                        : "border-white/40"
+                    }`}
+                    aria-hidden
+                  >
+                    {active ? (
+                      <span className="block h-1.5 w-1.5 rounded-full bg-[oklch(0.17_0.03_165)] m-auto translate-y-0.5" />
+                    ) : null}
+                  </span>
+                  <div
+                    className={`h-8 w-8 rounded-md flex items-center justify-center shrink-0 ${
+                      active
+                        ? "bg-[var(--chart-2)]/20 text-[var(--chart-2)]"
+                        : "bg-white/5 text-white/55"
                     }`}
                   >
-                    <RadioGroupItem id={`fmt-${f.id}`} value={f.id} className="mt-0.5" />
-                    <div className="flex gap-3 flex-1">
-                      <div
-                        className={`h-9 w-9 rounded-md flex items-center justify-center shrink-0 ${
-                          active
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted text-muted-foreground"
-                        }`}
-                      >
-                        <Icon className="h-4 w-4" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-foreground">{f.label}</div>
-                        <div className="text-xs text-muted-foreground mt-0.5 text-pretty">
-                          {f.description}
-                        </div>
-                      </div>
-                    </div>
-                  </Label>
-                )
-              })}
-            </FieldGroup>
-          </RadioGroup>
-        </FieldSet>
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-white">{f.label}</div>
+                    <div className="text-xs text-white/55 mt-0.5 text-pretty">{f.description}</div>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
 
-        <FieldSet>
-          <FieldLegend>Include sections</FieldLegend>
-          <FieldGroup>
-            <Field orientation="horizontal">
-              <Checkbox
-                id="sec-summary"
-                checked={includeSummary}
-                onCheckedChange={(v) => setIncludeSummary(Boolean(v))}
-              />
-              <div>
-                <FieldLabel htmlFor="sec-summary">Executive summary</FieldLabel>
-                <FieldDescription>Headline KPIs and narrative lead-in.</FieldDescription>
-              </div>
-            </Field>
-            <Field orientation="horizontal">
-              <Checkbox
-                id="sec-charts"
-                checked={includeCharts}
-                onCheckedChange={(v) => setIncludeCharts(Boolean(v))}
-              />
-              <div>
-                <FieldLabel htmlFor="sec-charts">Charts &amp; visuals</FieldLabel>
-                <FieldDescription>All charts rendered at export-quality.</FieldDescription>
-              </div>
-            </Field>
-            <Field orientation="horizontal">
-              <Checkbox
-                id="sec-tables"
-                checked={includeTables}
-                onCheckedChange={(v) => setIncludeTables(Boolean(v))}
-              />
-              <div>
-                <FieldLabel htmlFor="sec-tables">Data tables</FieldLabel>
-                <FieldDescription>Detail tables with totals and aging buckets.</FieldDescription>
-              </div>
-            </Field>
-            <Field orientation="horizontal">
-              <Checkbox
-                id="sec-insights"
-                checked={includeInsights}
-                onCheckedChange={(v) => setIncludeInsights(Boolean(v))}
-              />
-              <div>
-                <FieldLabel htmlFor="sec-insights">AI insights</FieldLabel>
-                <FieldDescription>Auto-generated commentary and highlights.</FieldDescription>
-              </div>
-            </Field>
-          </FieldGroup>
-        </FieldSet>
+        {/* Sections */}
+        <div className="space-y-2">
+          <div className="text-[11px] uppercase tracking-[0.14em] text-white/55 font-semibold">
+            Include sections
+          </div>
+          <div className="grid gap-1.5">
+            {SECTIONS.map((s) => {
+              const checked = sections[s.id]
+              return (
+                <label
+                  key={s.id}
+                  className="flex items-start gap-3 rounded border border-white/10 bg-white/[0.03] px-3 py-2 cursor-pointer hover:border-white/25 hover:bg-white/[0.06] transition-colors"
+                >
+                  <Checkbox
+                    checked={checked}
+                    onCheckedChange={() => toggleSection(s.id)}
+                    className="mt-0.5 border-white/40 data-[state=checked]:bg-[var(--chart-2)] data-[state=checked]:border-[var(--chart-2)]"
+                  />
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-white">{s.label}</div>
+                    <div className="text-xs text-white/55 mt-0.5 text-pretty">{s.description}</div>
+                  </div>
+                </label>
+              )
+            })}
+          </div>
+        </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
+        <DialogFooter className="gap-2 sm:gap-2 pt-1">
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={busy}
+            className="border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white"
+          >
             Cancel
           </Button>
-          <Button onClick={handleExport} disabled={busy || !activeFile} className="gap-2">
+          <Button
+            onClick={handleExport}
+            disabled={busy || !activeFile}
+            className="gap-2 bg-[var(--chart-2)] text-[oklch(0.17_0.03_165)] hover:bg-[var(--chart-2)]/90"
+          >
             {busy ? <Spinner className="h-4 w-4" /> : <Download className="h-4 w-4" />}
             {busy ? "Generating…" : "Generate export"}
           </Button>

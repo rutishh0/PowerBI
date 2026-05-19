@@ -177,12 +177,12 @@ export function AppShell() {
             active ? (
               <SlidesView file={active} />
             ) : (
-              <WelcomeState onUpload={() => handleUpload()} />
+              <WelcomeState onUpload={handleUpload} />
             )
           ) : active ? (
             <FileVisualizer file={active} mode={view === "executive" ? "executive" : "standard"} />
           ) : (
-            <WelcomeState onUpload={() => handleUpload()} />
+            <WelcomeState onUpload={handleUpload} />
           )}
         </div>
 
