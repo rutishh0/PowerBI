@@ -517,22 +517,88 @@ def upload_files():
 @app.route("/api/export-pdf", methods=["POST"])
 @login_required
 def export_pdf():
-    """Generate a PDF report from the uploaded data."""
+    """Generate a PDF report from the uploaded data.
+
+    Accepts two body shapes:
+
+    1. New Next.js frontend (export-modal.tsx):
+       {
+         filename: "Foo.xlsx",
+         file_type: "GLOBAL_HOPPER",
+         format: "pdf",
+         sections: { summary: true, charts: true, tables: true, insights: true }
+       }
+
+    2. Legacy clients:
+       {
+         selected_files: ["Foo.xlsx", ...],
+         file_type: "...",
+         sections_to_include: ["summary", "charts", ...],
+         filters: {...},
+         currency_symbol: "USD"
+       }
+
+    The handler normalises both into the legacy variables (selected_files,
+    sections_to_include, filters, currency_symbol) before dispatching to
+    the right `pdf_export.*` generator.
+    """
     sid = _get_session_id()
     stored = _parsed_store.get(sid, {})
 
     if not stored:
         return jsonify({"error": "No data available. Please upload files first."}), 400
 
-    # Get request params
     data = request.get_json(silent=True) or {}
     currency_symbol = data.get("currency_symbol", "USD")
-    selected_files = data.get("selected_files", list(stored.keys()))
     file_type = data.get("file_type")
-    sections_to_include = data.get("sections_to_include", [])
     filters = data.get("filters", {})
 
+    # -- selected_files (list) OR filename (single) ---------------------------
+    selected_files = data.get("selected_files")
+    if not selected_files:
+        single = data.get("filename")
+        if single:
+            selected_files = [single]
+        else:
+            selected_files = list(stored.keys())
+
+    # -- sections_to_include (legacy list) OR sections (new object) ----------
+    #
+    # The new frontend sends an abstract sections object:
+    #   { summary, charts, tables, insights }
+    # Translate to the canonical section names each generator understands.
+    sections_to_include = data.get("sections_to_include")
+    if not sections_to_include:
+        sections_obj = data.get("sections")
+        if isinstance(sections_obj, dict):
+            sections_to_include = []
+            if sections_obj.get("summary"):
+                sections_to_include.append("summary")
+            if sections_obj.get("charts"):
+                sections_to_include.append("charts")
+            if sections_obj.get("tables"):
+                # Spread "tables" across every per-type table section the
+                # generators support. Unknown names are ignored by each
+                # generator, so this is forward-compatible.
+                sections_to_include.extend([
+                    "customer_analysis", "engine_analysis",
+                    "pipeline", "restructure",
+                    "top_opportunities", "customer_breakdown",
+                ])
+            # "insights" has no backend-side rendering today — gracefully ignored.
+            if not sections_to_include:
+                # All four checkboxes unchecked: deliver a minimal one-page
+                # title-only report rather than an empty section list (which
+                # the generator would interpret as "default = render all").
+                sections_to_include = ["summary"]
+        else:
+            # No sections specified at all -> let each generator pick its default.
+            sections_to_include = None
+
+    # Resolve the active file (tolerate filename not matching any stored key).
     first_key = selected_files[0] if selected_files else list(stored.keys())[0]
+    if first_key not in stored:
+        first_key = list(stored.keys())[0]
     first_parsed = stored[first_key]["parsed"]
 
     if file_type == 'GLOBAL_HOPPER' or first_parsed.get("file_type") == 'GLOBAL_HOPPER':
