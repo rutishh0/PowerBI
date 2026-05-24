@@ -1,0 +1,33 @@
+# Don't ship build artefacts or runtime junk into the Docker image.
+# The Dockerfile builds Next.js inside the image; we don't need any
+# locally-built node_modules / .next / out shipped over.
+NewFrontEndToBePorted/node_modules
+NewFrontEndToBePorted/.next
+NewFrontEndToBePorted/out
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+.venv
+venv
+
+# Editor / OS
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Local environment
+.env
+.env.local
+
+# VCS / docs (the image doesn't need git history or markdown)
+.git
+.gitignore
+docs
+TESTEXCEL
+"New info"
+
+# Streamlit-era leftovers (none expected, but ignore the cache just in case)
+.streamlit

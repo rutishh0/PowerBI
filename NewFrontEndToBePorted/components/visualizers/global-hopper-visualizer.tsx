@@ -28,15 +28,33 @@ import { HopperCustomizeSheet } from "./hopper-customize-sheet"
 interface GlobalHopperVisualizerProps {
   data: GlobalHopperData
   filename: string
+  /** Publishes the active filter state (omitting any "__all__" entries) so
+   * the parent can forward filters into the Export PDF request. Fires
+   * whenever a filter changes. */
+  onFiltersChange?: (filters: Record<string, string>) => void
 }
 
-export function GlobalHopperVisualizer({ data, filename }: GlobalHopperVisualizerProps) {
+export function GlobalHopperVisualizer({ data, filename, onFiltersChange }: GlobalHopperVisualizerProps) {
   const [region, setRegion] = useState("__all__")
   const [customer, setCustomer] = useState("__all__")
   const [evs, setEvs] = useState("__all__")
   const [status, setStatus] = useState("__all__")
   const [maturity, setMaturity] = useState("__all__")
   const [rtype, setRtype] = useState("__all__")
+
+  // Publish current filters whenever they change. Strip "__all__" sentinels
+  // so the backend only sees real filters.
+  useEffect(() => {
+    if (!onFiltersChange) return
+    const f: Record<string, string> = {}
+    if (region !== "__all__") f.region = region
+    if (customer !== "__all__") f.customer = customer
+    if (evs !== "__all__") f.evs = evs
+    if (status !== "__all__") f.status = status
+    if (maturity !== "__all__") f.maturity = maturity
+    if (rtype !== "__all__") f.restructure_type = rtype
+    onFiltersChange(f)
+  }, [region, customer, evs, status, maturity, rtype, onFiltersChange])
 
   const filtered = useMemo(() => {
     return data.opportunities.filter((o) => {
@@ -135,6 +153,22 @@ export function GlobalHopperVisualizer({ data, filename }: GlobalHopperVisualize
       widthClass: "w-[6rem]",
     },
     { key: "vp", header: "VP/Owner", accessor: (r) => r.vp_owner, sortable: true, widthClass: "w-[8rem]" },
+    {
+      key: "initiative",
+      header: "Initiative",
+      accessor: (r) => r.initiative,
+      sortable: false,
+      fastFilter: true,
+      widthClass: "min-w-[18rem]",
+      render: (r) => (
+        <span
+          className="text-xs text-white/75 line-clamp-2 leading-snug"
+          title={r.initiative || ""}
+        >
+          {r.initiative || "—"}
+        </span>
+      ),
+    },
   ]
 
   return (

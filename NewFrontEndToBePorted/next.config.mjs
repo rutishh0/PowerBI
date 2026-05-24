@@ -1,32 +1,22 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Served at root (elevatechecked1.info/...). Flask reverse-proxies
-  // every non-/api/* request to this Next.js service.
+  // Static HTML/CSS/JS export: `next build` writes everything into ./out/.
+  // Flask serves those files directly so the whole project runs from a
+  // single Render web service. Implications:
+  //   - No Server Actions, no Route Handlers, no server-side `redirect()`
+  //     inside RSC components. Auth flows are client-side fetches to Flask.
+  //   - `experimental.serverActions` is no longer needed and removed.
+  output: "export",
   typescript: {
     ignoreBuildErrors: true,
   },
   images: {
     unoptimized: true,
   },
-  // Server Actions enforce CSRF by comparing Origin to Host. When this
-  // service is reverse-proxied through Flask, the browser's Origin is
-  // the Flask domain but our Host is the Render URL — mismatch causes
-  // 500s on every form submit. Whitelist the proxy origins explicitly.
-  experimental: {
-    serverActions: {
-      allowedOrigins: [
-        "elevatechecked1.info",
-        "www.elevatechecked1.info",
-        "powerbi-1d2m.onrender.com",
-        "powerbi-1-ulbm.onrender.com",
-      ],
-    },
-  },
+  // Dev-only rewrites so `pnpm dev` on :3000 can talk to Flask on :5000.
+  // Static export does not run a Next server in production, so rewrites
+  // never fire there — they're harmless to leave in place.
   async rewrites() {
-    // Local-dev rewrite only. In production the browser hits Flask directly
-    // at /api/*, /logout (same origin = elevatechecked1.info), so these
-    // rewrites never fire. There is no basePath anymore; the rewrite
-    // sources are root-relative.
     const backend = process.env.FLASK_BACKEND_URL || "http://localhost:5000"
     return [
       {

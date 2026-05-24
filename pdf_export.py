@@ -1597,27 +1597,42 @@ class HopperPDF(FPDF):
 
 
 def _apply_hopper_filters(opportunities, filters):
-    """Apply optional filters dict to the Hopper opportunity list."""
+    """Apply optional filters dict to the Hopper opportunity list.
+
+    Supported keys (all optional, exact-match case-insensitive):
+        region, customer, status, maturity, restructure_type,
+        evs / engine_value_stream, vp_owner, onerous_type, initiative,
+        min_value (numeric — minimum CRP term benefit).
+    """
     if not filters:
         return list(opportunities)
 
+    # Map each accepted filter key onto the row field it should match.
+    SIMPLE_FILTERS = {
+        "region":             "region",
+        "customer":           "customer",
+        "status":             "status",
+        "maturity":           "maturity",
+        "restructure_type":   "restructure_type",
+        "evs":                "engine_value_stream",
+        "engine_value_stream":"engine_value_stream",
+        "vp_owner":           "vp_owner",
+        "onerous_type":       "onerous_type",
+        "initiative":         "initiative",
+    }
+
     filtered = []
     for row in opportunities:
-        if filters.get("region"):
-            if str(row.get("region", "")).strip().lower() != str(filters["region"]).strip().lower():
+        keep = True
+        for fkey, row_field in SIMPLE_FILTERS.items():
+            wanted = filters.get(fkey)
+            if not wanted:
                 continue
-        if filters.get("customer"):
-            if str(row.get("customer", "")).strip().lower() != str(filters["customer"]).strip().lower():
-                continue
-        if filters.get("status"):
-            if str(row.get("status", "")).strip().lower() != str(filters["status"]).strip().lower():
-                continue
-        if filters.get("maturity"):
-            if str(row.get("maturity", "")).strip().lower() != str(filters["maturity"]).strip().lower():
-                continue
-        if filters.get("restructure_type"):
-            if str(row.get("restructure_type", "")).strip().lower() != str(filters["restructure_type"]).strip().lower():
-                continue
+            if str(row.get(row_field, "")).strip().lower() != str(wanted).strip().lower():
+                keep = False
+                break
+        if not keep:
+            continue
         try:
             mv = filters.get("min_value")
             if mv is not None and _val(row.get("crp_term_benefit")) < float(mv):

@@ -19,8 +19,7 @@ import time
 import concurrent.futures
 
 import pandas as pd
-import requests as _requests
-from flask import Flask, request, jsonify, send_file, session, redirect, Response
+from flask import Flask, request, jsonify, send_file, send_from_directory, session, redirect
 from functools import wraps
 from flask_cors import CORS
 
@@ -207,98 +206,73 @@ def api_health():
 
 
 # ─────────────────────────────────────────────────────────────
-# Reverse proxy to the Next.js frontend service
+# Frontend serving — Next.js static export
 #
-# Flask serves the Next.js UI at root (elevatechecked1.info/...) by
-# forwarding every non-/api/*, non-/logout path to the Next service.
-# Set NEXT_BACKEND_URL in env to the public URL of the Next service
-# (no trailing slash). /beta URLs are kept as 301 redirects to root
-# so old bookmarks survive.
+# Single-service deployment: `pnpm build` inside NewFrontEndToBePorted/
+# produces ./out/, and Flask serves those files directly. No reverse
+# proxy, no second Render service. /beta URLs are kept as 301 redirects
+# to root so old bookmarks survive.
 # ─────────────────────────────────────────────────────────────
 
-NEXT_BACKEND_URL = os.environ.get(
-    "NEXT_BACKEND_URL", "https://powerbi-1-ulbm.onrender.com"
-).rstrip("/")
+NEXT_OUT_DIR = os.path.abspath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "NewFrontEndToBePorted",
+    "out",
+))
 
-# Hop-by-hop headers that must NOT be forwarded across the proxy
-# (RFC 7230 §6.1) plus a few that requests/Flask manage themselves.
-# IMPORTANT: do NOT add "content-encoding" — it is end-to-end. Stripping
-# it while passing through compressed bytes corrupts JS/CSS chunks.
-_HOP_HEADERS = {
-    "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
-    "te", "trailers", "transfer-encoding", "upgrade",
-    "host", "content-length",
+# File extensions that are real assets — if missing, 404. (For non-asset
+# paths we fall through to the SPA root index.html so client-side
+# navigation works for any unknown route.)
+_ASSET_EXTS = {
+    ".css", ".js", ".mjs", ".map", ".json", ".txt", ".xml",
+    ".ico", ".png", ".svg", ".jpg", ".jpeg", ".gif", ".webp",
+    ".woff", ".woff2", ".ttf", ".otf", ".eot",
 }
 
 
-def _proxy_to_next(subpath: str):
-    """Forward a request to the Next service, streaming the response back.
+def _serve_static_export(subpath: str):
+    """Resolve ``subpath`` against the Next.js export and stream the file back.
 
-    Next.js no longer has a basePath, so we proxy / → upstream-root and
-    /<subpath> → upstream/<subpath>. The catch-all routes below decide
-    which path actually hits this function.
+    Resolution order:
+      1. Exact file (e.g. ``_next/static/foo.js``, ``icon.svg``)
+      2. ``<path>.html``                 (e.g. /login → login.html)
+      3. ``<path>/index.html``           (Next.js default route shape)
+      4. Asset extension and not found → 404
+      5. Anything else (i.e. an unknown HTML route) → root ``index.html``
+         so the client-side router can take it from there.
     """
-    upstream = NEXT_BACKEND_URL
-    if subpath:
-        upstream += "/" + subpath
-    if request.query_string:
-        upstream += "?" + request.query_string.decode("utf-8", "ignore")
+    if not os.path.isdir(NEXT_OUT_DIR):
+        return jsonify({
+            "error": "Frontend build not found. Run `pnpm build` inside "
+                     "NewFrontEndToBePorted/ during the deploy build step.",
+        }), 503
 
-    fwd_headers = {
-        k: v for k, v in request.headers.items()
-        if k.lower() not in _HOP_HEADERS
-    }
-    # Force upstream to send identity-encoded bytes. urllib3's auto-decode
-    # is unreliable across encodings (especially Brotli without the
-    # `brotli` pip package), and tracking Content-Encoding through a
-    # streaming proxy is fragile. Performance hit is negligible inside
-    # the same Render region.
-    fwd_headers["Accept-Encoding"] = "identity"
-    # Tell Next the original host the browser saw — it uses this for the
-    # Server-Action Origin/Host CSRF check and any same-origin redirects.
-    fwd_headers["X-Forwarded-Host"] = request.host
-    fwd_headers["X-Forwarded-Proto"] = request.scheme
-    fwd_headers["X-Forwarded-For"] = request.headers.get(
-        "X-Forwarded-For", request.remote_addr or ""
-    )
+    safe = (subpath or "").lstrip("/")
 
-    try:
-        upstream_resp = _requests.request(
-            method=request.method,
-            url=upstream,
-            headers=fwd_headers,
-            data=request.get_data() if request.method in ("POST", "PUT", "PATCH", "DELETE") else None,
-            cookies=request.cookies,
-            allow_redirects=False,
-            stream=True,
-            timeout=60,
-        )
-    except _requests.RequestException as e:
-        return jsonify({"error": f"Upstream Next service unreachable: {e}"}), 502
+    # 1. Exact file
+    if safe:
+        full = os.path.join(NEXT_OUT_DIR, safe)
+        if os.path.isfile(full):
+            return send_from_directory(NEXT_OUT_DIR, safe)
 
-    # Build response headers, preserving multi-value Set-Cookie (urllib3's
-    # `.items()` collapses duplicates into one comma-joined header which
-    # browsers misparse). `getlist` returns each Set-Cookie individually.
-    out_headers = []
-    seen_set_cookie = False
-    for k, v in upstream_resp.raw.headers.items():
-        kl = k.lower()
-        if kl in _HOP_HEADERS:
-            continue
-        if kl == "set-cookie":
-            if seen_set_cookie:
-                continue
-            seen_set_cookie = True
-            for cookie in upstream_resp.raw.headers.getlist("Set-Cookie"):
-                out_headers.append(("Set-Cookie", cookie))
-            continue
-        out_headers.append((k, v))
+        # 2. <path>.html
+        if not safe.endswith(".html"):
+            html_path = safe + ".html"
+            if os.path.isfile(os.path.join(NEXT_OUT_DIR, html_path)):
+                return send_from_directory(NEXT_OUT_DIR, html_path)
 
-    return Response(
-        upstream_resp.iter_content(chunk_size=8192),
-        status=upstream_resp.status_code,
-        headers=out_headers,
-    )
+        # 3. <path>/index.html
+        idx_path = os.path.join(safe, "index.html")
+        if os.path.isfile(os.path.join(NEXT_OUT_DIR, idx_path)):
+            return send_from_directory(NEXT_OUT_DIR, idx_path)
+
+        # 4. Asset extension but missing → real 404
+        ext = os.path.splitext(safe)[1].lower()
+        if ext in _ASSET_EXTS:
+            return jsonify({"error": "Not Found", "path": safe}), 404
+
+    # 5. SPA fallback (and the bare "/" route)
+    return send_from_directory(NEXT_OUT_DIR, "index.html")
 
 
 # /beta legacy redirects — preserve bookmarks from the previous frontend
@@ -315,21 +289,13 @@ def beta_legacy_subpath(subpath):
     return redirect(f"/{subpath}{query}", code=301)
 
 
-# Catch-all reverse proxy — every path not matched by a more-specific
-# Flask route (i.e. anything outside /api/*, /logout, /beta*) is
-# forwarded to the Next.js service. Flask routes by specificity, so
-# explicit routes always win.
-@app.route(
-    "/",
-    defaults={"subpath": ""},
-    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
-)
-@app.route(
-    "/<path:subpath>",
-    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
-)
-def next_catchall(subpath):
-    return _proxy_to_next(subpath)
+# Catch-all front-end serve. GET/HEAD only — POSTs are reserved for the
+# explicit /api/* and /logout routes above. Flask routes by specificity,
+# so this only fires for paths nothing else handled.
+@app.route("/", defaults={"subpath": ""}, methods=["GET", "HEAD"])
+@app.route("/<path:subpath>", methods=["GET", "HEAD"])
+def serve_frontend(subpath):
+    return _serve_static_export(subpath)
 
 
 @app.route("/api/upload", methods=["POST"])

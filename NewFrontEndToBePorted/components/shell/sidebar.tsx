@@ -17,7 +17,8 @@ import type { ViewMode, UploadedFile } from "@/lib/types"
 import { FileChip } from "@/components/shared/file-chip"
 import { RRMonogram, RRWordmark } from "@/components/brand/rr-wordmark"
 import { cn } from "@/lib/utils"
-import { logoutAction } from "@/app/login/actions"
+import { useRouter } from "next/navigation"
+import { logout as apiLogout } from "@/lib/api"
 
 interface SidebarProps {
   currentView: ViewMode
@@ -52,7 +53,17 @@ export function Sidebar({
   onExport,
 }: SidebarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const router = useRouter()
   const hasFiles = files.length > 0
+
+  async function handleLogout() {
+    try {
+      await apiLogout()
+    } catch {
+      /* clear cookies anyway — push to /login regardless */
+    }
+    router.replace("/login")
+  }
 
   return (
     <aside className="flex flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border w-[18rem] flex-shrink-0 h-screen sticky top-0">
@@ -183,16 +194,15 @@ export function Sidebar({
             Finance &amp; Receivables
           </span>
         </div>
-        <form action={logoutAction}>
-          <button
-            type="submit"
-            className="flex items-center justify-center h-8 w-8 rounded-md text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
-            aria-label="Sign out"
-            title="Sign out"
-          >
-            <LogOut className="h-4 w-4" />
-          </button>
-        </form>
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="flex items-center justify-center h-8 w-8 rounded-md text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
+          aria-label="Sign out"
+          title="Sign out"
+        >
+          <LogOut className="h-4 w-4" />
+        </button>
       </div>
     </aside>
   )

@@ -1,10 +1,42 @@
-import { redirect } from "next/navigation"
-import { isAuthenticated } from "./actions"
+"use client"
+
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { LoginForm } from "./login-form"
 import { RRWordmark } from "@/components/brand/rr-wordmark"
+import { me } from "@/lib/api"
 
-export default async function LoginPage() {
-  if (await isAuthenticated()) redirect("/")
+export default function LoginPage() {
+  const router = useRouter()
+  const [checking, setChecking] = useState(true)
+
+  // If the user is already authenticated, skip the form and go home.
+  // Mirrors the previous Server-Action redirect that was lost when we
+  // moved to static export.
+  useEffect(() => {
+    let cancelled = false
+    me()
+      .then((r) => {
+        if (cancelled) return
+        if (r.authenticated) router.replace("/")
+        else setChecking(false)
+      })
+      .catch(() => {
+        if (!cancelled) setChecking(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [router])
+
+  if (checking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-sidebar text-sidebar-foreground/60 text-sm">
+        Checking session…
+      </div>
+    )
+  }
+
   return (
     <main className="min-h-screen bg-sidebar text-sidebar-foreground flex items-center justify-center p-6 relative overflow-hidden">
       {/* Subtle aerospace backdrop: concentric rings evoking a turbine */}

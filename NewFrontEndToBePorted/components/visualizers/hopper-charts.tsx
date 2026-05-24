@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, type ReactElement } from "react"
+import { useMemo, type ReactElement } from "react"
 import {
   Bar,
   BarChart,
@@ -18,9 +18,12 @@ import type { HopperOpp } from "@/lib/types"
 import { fmtGBP, fmtCount } from "@/lib/format"
 import { palette, seriesColorsLight } from "@/lib/chart-palette"
 import {
-  DIM,
-  DrilldownView,
-  type DrilldownInvocation,
+  pickNextBreakdowns,
+  sumMetric,
+  formatMetric,
+  useChartDrilldown,
+  type DrilldownFrame,
+  type DrilldownMetric,
 } from "./hopper-drilldown"
 
 export type HopperChartCategory =
@@ -60,7 +63,6 @@ const PIPELINE_ORDER = [
   "Contracting Concluded",
 ]
 
-/* ---------- Tooltip styling shared by every chart ---------- */
 const TOOLTIP_STYLE = {
   contentStyle: {
     background: "oklch(0.22 0.04 165)",
@@ -76,13 +78,38 @@ const LEGEND_FORMATTER = (value: string) => (
   <span style={{ color: "rgba(255,255,255,0.85)" }}>{value}</span>
 )
 
-/* ============================================================
- *  EXISTING 6 CHARTS — now with inline drill-down
- * ============================================================ */
+/** Build the initial drill frame from a chart click, with a metric and
+ * the dimension the chart was sliced BY (so sub-drills don't offer it
+ * again). */
+function makeFrame(
+  segmentLabel: string,
+  rows: HopperOpp[],
+  metric: DrilldownMetric,
+  sourceDim: string,
+): DrilldownFrame | null {
+  if (rows.length === 0) return null
+  const used = new Set([sourceDim])
+  const segmentValue = formatMetric(metric, sumMetric(metric, rows))
+  if (rows.length === 1) {
+    return { kind: "single-row", segmentLabel, segmentValue, row: rows[0] }
+  }
+  return {
+    kind: "aggregate",
+    segmentLabel,
+    segmentValue,
+    rows,
+    metric,
+    breakdowns: pickNextBreakdowns(used),
+    usedDims: used,
+  }
+}
+
+/* ============================================================================
+ *  Existing 6 charts
+ * ========================================================================= */
 
 export function PipelineByStatusChart({ filtered }: HopperChartProps) {
-  const [drilldown, setDrilldown] = useState<DrilldownInvocation | null>(null)
-
+  const { openFrame, drilldownView } = useChartDrilldown("Pipeline by Status")
   const data = useMemo(() => {
     const map = new Map<string, number>()
     for (const s of PIPELINE_ORDER) map.set(s, 0)
@@ -90,7 +117,7 @@ export function PipelineByStatusChart({ filtered }: HopperChartProps) {
     return PIPELINE_ORDER.map((stage) => ({ stage, value: +Number(map.get(stage) ?? 0).toFixed(1) }))
   }, [filtered])
 
-  if (drilldown) return <DrilldownView invocation={drilldown} onClose={() => setDrilldown(null)} />
+  if (drilldownView) return drilldownView
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -104,18 +131,10 @@ export function PipelineByStatusChart({ filtered }: HopperChartProps) {
           fill={palette.accent}
           radius={[3, 3, 0, 0]}
           cursor="pointer"
-          onClick={(d: { stage?: string; value?: number }) => {
+          onClick={(d: { stage?: string }) => {
             if (!d.stage) return
-            const rows = filtered.filter((o) => o.status === d.stage)
-            if (rows.length === 0) return
-            setDrilldown({
-              kind: "aggregate",
-              segmentLabel: d.stage,
-              segmentValue: fmtGBP(d.value ?? 0),
-              rows,
-              metric: { kind: "sum_crp" },
-              breakdowns: [DIM.region, DIM.customer, DIM.evs, DIM.restructure_type],
-            })
+            const f = makeFrame(d.stage, filtered.filter((o) => o.status === d.stage), { kind: "sum_crp" }, "status")
+            if (f) openFrame(f)
           }}
         />
       </BarChart>
@@ -124,8 +143,7 @@ export function PipelineByStatusChart({ filtered }: HopperChartProps) {
 }
 
 export function CrpByRegionChart({ filtered }: HopperChartProps) {
-  const [drilldown, setDrilldown] = useState<DrilldownInvocation | null>(null)
-
+  const { openFrame, drilldownView } = useChartDrilldown("CRP by Region")
   const data = useMemo(() => {
     const map = new Map<string, number>()
     for (const o of filtered) map.set(o.region, (map.get(o.region) ?? 0) + o.crp_term_benefit)
@@ -134,7 +152,7 @@ export function CrpByRegionChart({ filtered }: HopperChartProps) {
       .filter((r) => r.value > 0)
   }, [filtered])
 
-  if (drilldown) return <DrilldownView invocation={drilldown} onClose={() => setDrilldown(null)} />
+  if (drilldownView) return drilldownView
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -148,18 +166,10 @@ export function CrpByRegionChart({ filtered }: HopperChartProps) {
           paddingAngle={2}
           strokeWidth={0}
           cursor="pointer"
-          onClick={(d: { name?: string; value?: number }) => {
+          onClick={(d: { name?: string }) => {
             if (!d.name) return
-            const rows = filtered.filter((o) => o.region === d.name)
-            if (rows.length === 0) return
-            setDrilldown({
-              kind: "aggregate",
-              segmentLabel: d.name,
-              segmentValue: fmtGBP(d.value ?? 0),
-              rows,
-              metric: { kind: "sum_crp" },
-              breakdowns: [DIM.customer, DIM.evs, DIM.status, DIM.restructure_type],
-            })
+            const f = makeFrame(d.name, filtered.filter((o) => o.region === d.name), { kind: "sum_crp" }, "region")
+            if (f) openFrame(f)
           }}
         >
           {data.map((_, i) => (
@@ -174,8 +184,7 @@ export function CrpByRegionChart({ filtered }: HopperChartProps) {
 }
 
 export function TopCustomersChart({ filtered }: HopperChartProps) {
-  const [drilldown, setDrilldown] = useState<DrilldownInvocation | null>(null)
-
+  const { openFrame, drilldownView } = useChartDrilldown("Top Customers")
   const data = useMemo(() => {
     const map = new Map<string, number>()
     for (const o of filtered) map.set(o.customer, (map.get(o.customer) ?? 0) + o.crp_term_benefit)
@@ -185,7 +194,7 @@ export function TopCustomersChart({ filtered }: HopperChartProps) {
       .slice(0, 15)
   }, [filtered])
 
-  if (drilldown) return <DrilldownView invocation={drilldown} onClose={() => setDrilldown(null)} />
+  if (drilldownView) return drilldownView
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -199,18 +208,10 @@ export function TopCustomersChart({ filtered }: HopperChartProps) {
           fill={palette.blue}
           radius={[0, 3, 3, 0]}
           cursor="pointer"
-          onClick={(d: { customer?: string; value?: number }) => {
+          onClick={(d: { customer?: string }) => {
             if (!d.customer) return
-            const rows = filtered.filter((o) => o.customer === d.customer)
-            if (rows.length === 0) return
-            setDrilldown({
-              kind: "aggregate",
-              segmentLabel: d.customer,
-              segmentValue: fmtGBP(d.value ?? 0),
-              rows,
-              metric: { kind: "sum_crp" },
-              breakdowns: [DIM.evs, DIM.status, DIM.restructure_type, DIM.maturity],
-            })
+            const f = makeFrame(d.customer, filtered.filter((o) => o.customer === d.customer), { kind: "sum_crp" }, "customer")
+            if (f) openFrame(f)
           }}
         />
       </BarChart>
@@ -219,8 +220,7 @@ export function TopCustomersChart({ filtered }: HopperChartProps) {
 }
 
 export function EvsDistributionChart({ filtered }: HopperChartProps) {
-  const [drilldown, setDrilldown] = useState<DrilldownInvocation | null>(null)
-
+  const { openFrame, drilldownView } = useChartDrilldown("Engine Value Stream Distribution")
   const data = useMemo(() => {
     const map = new Map<string, number>()
     for (const o of filtered) map.set(o.engine_value_stream, (map.get(o.engine_value_stream) ?? 0) + 1)
@@ -229,7 +229,7 @@ export function EvsDistributionChart({ filtered }: HopperChartProps) {
       .sort((a, b) => b.value - a.value)
   }, [filtered])
 
-  if (drilldown) return <DrilldownView invocation={drilldown} onClose={() => setDrilldown(null)} />
+  if (drilldownView) return drilldownView
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -243,18 +243,10 @@ export function EvsDistributionChart({ filtered }: HopperChartProps) {
           fill={palette.copper}
           radius={[3, 3, 0, 0]}
           cursor="pointer"
-          onClick={(d: { name?: string; value?: number }) => {
+          onClick={(d: { name?: string }) => {
             if (!d.name) return
-            const rows = filtered.filter((o) => o.engine_value_stream === d.name)
-            if (rows.length === 0) return
-            setDrilldown({
-              kind: "aggregate",
-              segmentLabel: d.name,
-              segmentValue: fmtCount(d.value ?? 0) + " opportunities",
-              rows,
-              metric: { kind: "count" },
-              breakdowns: [DIM.region, DIM.customer, DIM.status, DIM.restructure_type],
-            })
+            const f = makeFrame(d.name, filtered.filter((o) => o.engine_value_stream === d.name), { kind: "count" }, "evs")
+            if (f) openFrame(f)
           }}
         />
       </BarChart>
@@ -263,8 +255,7 @@ export function EvsDistributionChart({ filtered }: HopperChartProps) {
 }
 
 export function AnnualProfitForecastChart({ filtered }: HopperChartProps) {
-  const [drilldown, setDrilldown] = useState<DrilldownInvocation | null>(null)
-
+  const { openFrame, drilldownView } = useChartDrilldown("Annual Profit Forecast")
   const data = useMemo(
     () => [
       { year: "2026", value: +filtered.reduce((a, b) => a + b.profit_2026, 0).toFixed(1) },
@@ -276,7 +267,7 @@ export function AnnualProfitForecastChart({ filtered }: HopperChartProps) {
     [filtered],
   )
 
-  if (drilldown) return <DrilldownView invocation={drilldown} onClose={() => setDrilldown(null)} />
+  if (drilldownView) return drilldownView
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -290,20 +281,15 @@ export function AnnualProfitForecastChart({ filtered }: HopperChartProps) {
           fill={palette.accent}
           radius={[3, 3, 0, 0]}
           cursor="pointer"
-          onClick={(d: { year?: string; value?: number }) => {
+          onClick={(d: { year?: string }) => {
             if (!d.year) return
             const year = Number(d.year) as 2026 | 2027 | 2028 | 2029 | 2030
             const yearKey = `profit_${year}` as keyof HopperOpp
             const rows = filtered.filter((o) => Number(o[yearKey]) !== 0)
-            if (rows.length === 0) return
-            setDrilldown({
-              kind: "aggregate",
-              segmentLabel: d.year,
-              segmentValue: fmtGBP(d.value ?? 0),
-              rows,
-              metric: { kind: "sum_profit_year", year },
-              breakdowns: [DIM.region, DIM.customer, DIM.evs, DIM.restructure_type],
-            })
+            // Year is not in DRILL_DIM_POOL, so we don't claim a sourceDim
+            // for it — just use a dummy that's not in the pool.
+            const f = makeFrame(d.year, rows, { kind: "sum_profit_year", year }, "__year__")
+            if (f) openFrame(f)
           }}
         >
           {data.map((_, i) => (
@@ -316,8 +302,7 @@ export function AnnualProfitForecastChart({ filtered }: HopperChartProps) {
 }
 
 export function RestructureTypeSplitChart({ filtered }: HopperChartProps) {
-  const [drilldown, setDrilldown] = useState<DrilldownInvocation | null>(null)
-
+  const { openFrame, drilldownView } = useChartDrilldown("Restructure Type Split")
   const data = useMemo(() => {
     const map = new Map<string, number>()
     for (const o of filtered) map.set(o.restructure_type, (map.get(o.restructure_type) ?? 0) + o.crp_term_benefit)
@@ -326,7 +311,7 @@ export function RestructureTypeSplitChart({ filtered }: HopperChartProps) {
       .filter((r) => r.value > 0)
   }, [filtered])
 
-  if (drilldown) return <DrilldownView invocation={drilldown} onClose={() => setDrilldown(null)} />
+  if (drilldownView) return drilldownView
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -340,18 +325,10 @@ export function RestructureTypeSplitChart({ filtered }: HopperChartProps) {
           paddingAngle={2}
           strokeWidth={0}
           cursor="pointer"
-          onClick={(d: { name?: string; value?: number }) => {
+          onClick={(d: { name?: string }) => {
             if (!d.name) return
-            const rows = filtered.filter((o) => o.restructure_type === d.name)
-            if (rows.length === 0) return
-            setDrilldown({
-              kind: "aggregate",
-              segmentLabel: d.name,
-              segmentValue: fmtGBP(d.value ?? 0),
-              rows,
-              metric: { kind: "sum_crp" },
-              breakdowns: [DIM.region, DIM.customer, DIM.status, DIM.maturity],
-            })
+            const f = makeFrame(d.name, filtered.filter((o) => o.restructure_type === d.name), { kind: "sum_crp" }, "restructure_type")
+            if (f) openFrame(f)
           }}
         >
           {data.map((_, i) => (
@@ -365,13 +342,12 @@ export function RestructureTypeSplitChart({ filtered }: HopperChartProps) {
   )
 }
 
-/* ============================================================
- *  NEW chart types (sub-project D) — with inline drill-down
- * ============================================================ */
+/* ============================================================================
+ *  Sub-project D charts
+ * ========================================================================= */
 
 export function PipelineConversionFunnelChart({ filtered }: HopperChartProps) {
-  const [drilldown, setDrilldown] = useState<DrilldownInvocation | null>(null)
-
+  const { openFrame, drilldownView } = useChartDrilldown("Pipeline Conversion Funnel")
   const data = useMemo(() => {
     const map = new Map<string, number>()
     for (const s of PIPELINE_ORDER) map.set(s, 0)
@@ -379,7 +355,7 @@ export function PipelineConversionFunnelChart({ filtered }: HopperChartProps) {
     return PIPELINE_ORDER.map((stage) => ({ stage, value: map.get(stage) ?? 0 }))
   }, [filtered])
 
-  if (drilldown) return <DrilldownView invocation={drilldown} onClose={() => setDrilldown(null)} />
+  if (drilldownView) return drilldownView
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -393,18 +369,10 @@ export function PipelineConversionFunnelChart({ filtered }: HopperChartProps) {
           fill={palette.blue}
           radius={[3, 3, 0, 0]}
           cursor="pointer"
-          onClick={(d: { stage?: string; value?: number }) => {
+          onClick={(d: { stage?: string }) => {
             if (!d.stage) return
-            const rows = filtered.filter((o) => o.status === d.stage)
-            if (rows.length === 0) return
-            setDrilldown({
-              kind: "aggregate",
-              segmentLabel: d.stage,
-              segmentValue: fmtCount(d.value ?? 0) + " opportunities",
-              rows,
-              metric: { kind: "count" },
-              breakdowns: [DIM.region, DIM.customer, DIM.evs, DIM.restructure_type],
-            })
+            const f = makeFrame(d.stage, filtered.filter((o) => o.status === d.stage), { kind: "count" }, "status")
+            if (f) openFrame(f)
           }}
         />
       </BarChart>
@@ -413,8 +381,7 @@ export function PipelineConversionFunnelChart({ filtered }: HopperChartProps) {
 }
 
 export function RegionEvsHeatmapChart({ filtered }: HopperChartProps) {
-  const [drilldown, setDrilldown] = useState<DrilldownInvocation | null>(null)
-
+  const { openFrame, drilldownView } = useChartDrilldown("Region × EVS Heatmap")
   const { regions, evss, counts, maxCount } = useMemo(() => {
     const byRegion = new Map<string, number>()
     const byEvs = new Map<string, number>()
@@ -435,7 +402,7 @@ export function RegionEvsHeatmapChart({ filtered }: HopperChartProps) {
     return { regions: topRegions, evss: topEvss, counts: cellCounts, maxCount: max }
   }, [filtered])
 
-  if (drilldown) return <DrilldownView invocation={drilldown} onClose={() => setDrilldown(null)} />
+  if (drilldownView) return drilldownView
 
   if (regions.length === 0 || evss.length === 0) {
     return (
@@ -471,15 +438,24 @@ export function RegionEvsHeatmapChart({ filtered }: HopperChartProps) {
                     onClick={() => {
                       if (count === 0) return
                       const rows = filtered.filter((o) => o.region === r && o.engine_value_stream === e)
+                      // Both region AND evs are consumed up front for this chart's source dim.
                       if (rows.length === 0) return
-                      setDrilldown({
-                        kind: "aggregate",
-                        segmentLabel: `${r} · ${e}`,
-                        segmentValue: fmtCount(count) + " opportunities",
-                        rows,
-                        metric: { kind: "count" },
-                        breakdowns: [DIM.customer, DIM.status, DIM.restructure_type, DIM.maturity],
-                      })
+                      const used = new Set(["region", "evs"])
+                      const seg = `${r} · ${e}`
+                      const val = formatMetric({ kind: "count" }, rows.length)
+                      if (rows.length === 1) {
+                        openFrame({ kind: "single-row", segmentLabel: seg, segmentValue: val, row: rows[0] })
+                      } else {
+                        openFrame({
+                          kind: "aggregate",
+                          segmentLabel: seg,
+                          segmentValue: val,
+                          rows,
+                          metric: { kind: "count" },
+                          breakdowns: pickNextBreakdowns(used),
+                          usedDims: used,
+                        })
+                      }
                     }}
                     className="px-1.5 py-1 text-center tnum"
                     style={{
@@ -503,8 +479,7 @@ export function RegionEvsHeatmapChart({ filtered }: HopperChartProps) {
 }
 
 export function TopVpOwnersChart({ filtered }: HopperChartProps) {
-  const [drilldown, setDrilldown] = useState<DrilldownInvocation | null>(null)
-
+  const { openFrame, drilldownView } = useChartDrilldown("Top VP / Owners")
   const data = useMemo(() => {
     const map = new Map<string, number>()
     for (const o of filtered) {
@@ -517,7 +492,7 @@ export function TopVpOwnersChart({ filtered }: HopperChartProps) {
       .slice(0, 10)
   }, [filtered])
 
-  if (drilldown) return <DrilldownView invocation={drilldown} onClose={() => setDrilldown(null)} />
+  if (drilldownView) return drilldownView
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -531,18 +506,10 @@ export function TopVpOwnersChart({ filtered }: HopperChartProps) {
           fill={palette.success}
           radius={[0, 3, 3, 0]}
           cursor="pointer"
-          onClick={(d: { vp_owner?: string; value?: number }) => {
+          onClick={(d: { vp_owner?: string }) => {
             if (!d.vp_owner) return
-            const rows = filtered.filter((o) => o.vp_owner === d.vp_owner)
-            if (rows.length === 0) return
-            setDrilldown({
-              kind: "aggregate",
-              segmentLabel: d.vp_owner,
-              segmentValue: fmtGBP(d.value ?? 0),
-              rows,
-              metric: { kind: "sum_crp" },
-              breakdowns: [DIM.region, DIM.customer, DIM.evs, DIM.status],
-            })
+            const f = makeFrame(d.vp_owner, filtered.filter((o) => o.vp_owner === d.vp_owner), { kind: "sum_crp" }, "vp_owner")
+            if (f) openFrame(f)
           }}
         />
       </BarChart>
@@ -551,8 +518,7 @@ export function TopVpOwnersChart({ filtered }: HopperChartProps) {
 }
 
 export function TopSingleOpportunitiesChart({ filtered }: HopperChartProps) {
-  const [drilldown, setDrilldown] = useState<DrilldownInvocation | null>(null)
-
+  const { openFrame, drilldownView } = useChartDrilldown("Top Single Opportunities")
   const data = useMemo(() => {
     return filtered
       .map((o, idx) => ({
@@ -565,7 +531,7 @@ export function TopSingleOpportunitiesChart({ filtered }: HopperChartProps) {
       .slice(0, 10)
   }, [filtered])
 
-  if (drilldown) return <DrilldownView invocation={drilldown} onClose={() => setDrilldown(null)} />
+  if (drilldownView) return drilldownView
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -579,11 +545,11 @@ export function TopSingleOpportunitiesChart({ filtered }: HopperChartProps) {
           fill={palette.accent}
           radius={[0, 3, 3, 0]}
           cursor="pointer"
-          onClick={(d: { label?: string; idx?: number; value?: number }) => {
+          onClick={(d: { idx?: number }) => {
             if (d.idx === undefined) return
             const row = data[d.idx]
             if (!row) return
-            setDrilldown({
+            openFrame({
               kind: "single-row",
               segmentLabel: row.label,
               segmentValue: fmtGBP(row.value),
@@ -597,8 +563,7 @@ export function TopSingleOpportunitiesChart({ filtered }: HopperChartProps) {
 }
 
 export function MaturityMixChart({ filtered }: HopperChartProps) {
-  const [drilldown, setDrilldown] = useState<DrilldownInvocation | null>(null)
-
+  const { openFrame, drilldownView } = useChartDrilldown("Maturity Mix")
   const data = useMemo(() => {
     const map = new Map<string, number>()
     for (const o of filtered) map.set(o.maturity, (map.get(o.maturity) ?? 0) + o.crp_term_benefit)
@@ -607,7 +572,7 @@ export function MaturityMixChart({ filtered }: HopperChartProps) {
       .filter((r) => r.value > 0)
   }, [filtered])
 
-  if (drilldown) return <DrilldownView invocation={drilldown} onClose={() => setDrilldown(null)} />
+  if (drilldownView) return drilldownView
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -621,18 +586,10 @@ export function MaturityMixChart({ filtered }: HopperChartProps) {
           paddingAngle={2}
           strokeWidth={0}
           cursor="pointer"
-          onClick={(d: { name?: string; value?: number }) => {
+          onClick={(d: { name?: string }) => {
             if (!d.name) return
-            const rows = filtered.filter((o) => o.maturity === d.name)
-            if (rows.length === 0) return
-            setDrilldown({
-              kind: "aggregate",
-              segmentLabel: d.name,
-              segmentValue: fmtGBP(d.value ?? 0),
-              rows,
-              metric: { kind: "sum_crp" },
-              breakdowns: [DIM.region, DIM.customer, DIM.evs, DIM.status],
-            })
+            const f = makeFrame(d.name, filtered.filter((o) => o.maturity === d.name), { kind: "sum_crp" }, "maturity")
+            if (f) openFrame(f)
           }}
         >
           {data.map((_, i) => (
@@ -647,8 +604,7 @@ export function MaturityMixChart({ filtered }: HopperChartProps) {
 }
 
 export function OnerousMixChart({ filtered }: HopperChartProps) {
-  const [drilldown, setDrilldown] = useState<DrilldownInvocation | null>(null)
-
+  const { openFrame, drilldownView } = useChartDrilldown("Onerous Mix")
   const data = useMemo(() => {
     const map = new Map<string, number>()
     for (const o of filtered) map.set(o.onerous_type, (map.get(o.onerous_type) ?? 0) + o.crp_term_benefit)
@@ -657,7 +613,7 @@ export function OnerousMixChart({ filtered }: HopperChartProps) {
       .filter((r) => r.value > 0)
   }, [filtered])
 
-  if (drilldown) return <DrilldownView invocation={drilldown} onClose={() => setDrilldown(null)} />
+  if (drilldownView) return drilldownView
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -671,18 +627,10 @@ export function OnerousMixChart({ filtered }: HopperChartProps) {
           paddingAngle={2}
           strokeWidth={0}
           cursor="pointer"
-          onClick={(d: { name?: string; value?: number }) => {
+          onClick={(d: { name?: string }) => {
             if (!d.name) return
-            const rows = filtered.filter((o) => o.onerous_type === d.name)
-            if (rows.length === 0) return
-            setDrilldown({
-              kind: "aggregate",
-              segmentLabel: d.name,
-              segmentValue: fmtGBP(d.value ?? 0),
-              rows,
-              metric: { kind: "sum_crp" },
-              breakdowns: [DIM.region, DIM.customer, DIM.evs, DIM.status],
-            })
+            const f = makeFrame(d.name, filtered.filter((o) => o.onerous_type === d.name), { kind: "sum_crp" }, "onerous_type")
+            if (f) openFrame(f)
           }}
         >
           {data.map((_, i) => (

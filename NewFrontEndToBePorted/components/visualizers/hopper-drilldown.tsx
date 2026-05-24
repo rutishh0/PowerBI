@@ -1,11 +1,13 @@
 "use client"
 
-import { useMemo } from "react"
-import { X } from "lucide-react"
+import { useMemo, useState, type ReactElement } from "react"
+import { X, ChevronRight, Home } from "lucide-react"
 import type { HopperOpp } from "@/lib/types"
 import { fmtGBP, fmtCount } from "@/lib/format"
 
-/* ---------- Types ---------- */
+/* ============================================================================
+ *  Types
+ * ========================================================================= */
 
 export type DrilldownMetric =
   | { kind: "count" }
@@ -19,7 +21,7 @@ export interface DrilldownBreakdownDef {
   topN?: number
 }
 
-export type DrilldownInvocation =
+export type DrilldownFrame =
   | {
       kind: "aggregate"
       segmentLabel: string
@@ -27,6 +29,10 @@ export type DrilldownInvocation =
       rows: HopperOpp[]
       metric: DrilldownMetric
       breakdowns: DrilldownBreakdownDef[]
+      /** Dimensions already used to reach this frame (chart's source +
+       * every panel row the user has clicked on the way down). Drives
+       * pickNextBreakdowns so we never offer the same dimension twice. */
+      usedDims: Set<string>
     }
   | {
       kind: "single-row"
@@ -35,22 +41,46 @@ export type DrilldownInvocation =
       row: HopperOpp
     }
 
-/* ---------- Reusable breakdown dimensions ---------- */
+export type DrilldownStack = DrilldownFrame[]
+
+/* ============================================================================
+ *  Reusable breakdown dimensions
+ * ========================================================================= */
 
 export const DIM: Record<string, DrilldownBreakdownDef> = {
-  region: { id: "region", label: "By Region", group: (o) => o.region || "—" },
-  customer: { id: "customer", label: "By Customer (Top 10)", group: (o) => o.customer || "—", topN: 10 },
-  evs: { id: "evs", label: "By Engine Value Stream (Top 10)", group: (o) => o.engine_value_stream || "—", topN: 10 },
-  status: { id: "status", label: "By Status", group: (o) => o.status || "—" },
-  restructure_type: { id: "restructure_type", label: "By Restructure Type", group: (o) => o.restructure_type || "—" },
-  maturity: { id: "maturity", label: "By Maturity", group: (o) => o.maturity || "—" },
-  vp_owner: { id: "vp_owner", label: "By VP / Owner (Top 10)", group: (o) => o.vp_owner || "—", topN: 10 },
-  onerous_type: { id: "onerous_type", label: "By Onerous Type", group: (o) => o.onerous_type || "—" },
+  region:           { id: "region",           label: "By Region",                   group: (o) => o.region || "—" },
+  customer:         { id: "customer",         label: "By Customer (Top 10)",        group: (o) => o.customer || "—", topN: 10 },
+  evs:              { id: "evs",              label: "By Engine Value Stream",      group: (o) => o.engine_value_stream || "—", topN: 10 },
+  status:           { id: "status",           label: "By Status",                   group: (o) => o.status || "—" },
+  restructure_type: { id: "restructure_type", label: "By Restructure Type",         group: (o) => o.restructure_type || "—" },
+  maturity:         { id: "maturity",         label: "By Maturity",                 group: (o) => o.maturity || "—" },
+  vp_owner:         { id: "vp_owner",         label: "By VP / Owner (Top 10)",      group: (o) => o.vp_owner || "—", topN: 10 },
+  onerous_type:     { id: "onerous_type",     label: "By Onerous Type",             group: (o) => o.onerous_type || "—" },
 }
 
-/* ---------- Aggregation ---------- */
+/** Order matters — pickNextBreakdowns walks left-to-right and returns the
+ * first 4 dims that haven't been used yet. */
+const DRILL_DIM_POOL: string[] = [
+  "region", "customer", "evs", "status",
+  "restructure_type", "maturity", "vp_owner", "onerous_type",
+]
 
-function aggregateValue(metric: DrilldownMetric, o: HopperOpp): number {
+export function pickNextBreakdowns(usedDims: Set<string>, maxN = 4): DrilldownBreakdownDef[] {
+  const out: DrilldownBreakdownDef[] = []
+  for (const id of DRILL_DIM_POOL) {
+    if (usedDims.has(id)) continue
+    const def = DIM[id]
+    if (def) out.push(def)
+    if (out.length >= maxN) break
+  }
+  return out
+}
+
+/* ============================================================================
+ *  Aggregation helpers
+ * ========================================================================= */
+
+export function aggregateValue(metric: DrilldownMetric, o: HopperOpp): number {
   if (metric.kind === "count") return 1
   if (metric.kind === "sum_crp") return o.crp_term_benefit
   if (metric.kind === "sum_profit_year") {
@@ -61,30 +91,73 @@ function aggregateValue(metric: DrilldownMetric, o: HopperOpp): number {
   return 0
 }
 
-function formatValue(metric: DrilldownMetric, n: number): string {
-  if (metric.kind === "count") return fmtCount(n)
+export function sumMetric(metric: DrilldownMetric, rows: HopperOpp[]): number {
+  let s = 0
+  for (const r of rows) s += aggregateValue(metric, r)
+  return s
+}
+
+export function formatMetric(metric: DrilldownMetric, n: number): string {
+  if (metric.kind === "count") return fmtCount(n) + " " + (n === 1 ? "opp" : "opps")
   return fmtGBP(n)
 }
 
-/* ---------- View ---------- */
+/* ============================================================================
+ *  View
+ * ========================================================================= */
 
 interface DrilldownViewProps {
-  invocation: DrilldownInvocation
+  /** Name of the chart the user originally clicked from — used as the
+   * left-most breadcrumb crumb. */
+  chartTitle: string
+  stack: DrilldownStack
+  /** Pop the stack to (and including) the given index. -1 = close entirely. */
+  onPopTo: (index: number) => void
+  /** Push a new frame onto the stack (used by clickable breakdown rows). */
+  onPush: (frame: DrilldownFrame) => void
+  /** Close the drill-down entirely (returns to the chart). */
   onClose: () => void
 }
 
-export function DrilldownView({ invocation, onClose }: DrilldownViewProps) {
+/** Convenience hook for chart components. Each chart calls
+ * `openFrame(frame)` from its segment-click handler; if the returned
+ * `drilldownView` is non-null, the chart renders that instead of the
+ * recharts container.
+ */
+export function useChartDrilldown(chartTitle: string): {
+  openFrame: (frame: DrilldownFrame) => void
+  drilldownView: ReactElement | null
+} {
+  const [stack, setStack] = useState<DrilldownStack>([])
+  return {
+    openFrame: (frame) => setStack([frame]),
+    drilldownView:
+      stack.length === 0 ? null : (
+        <DrilldownView
+          chartTitle={chartTitle}
+          stack={stack}
+          onPopTo={(i) => setStack((s) => (i < 0 ? [] : s.slice(0, i + 1)))}
+          onPush={(f) => setStack((s) => [...s, f])}
+          onClose={() => setStack([])}
+        />
+      ),
+  }
+}
+
+export function DrilldownView({ chartTitle, stack, onPopTo, onPush, onClose }: DrilldownViewProps) {
+  const current = stack[stack.length - 1]
+  if (!current) return null
+
   return (
     <div className="h-full flex flex-col">
-      <div className="flex items-start justify-between gap-3 mb-2.5 pb-2 border-b border-white/10">
-        <div className="min-w-0 flex-1">
-          <div className="text-[9px] uppercase tracking-[0.14em] text-white/55">Drilling into</div>
-          <div className="text-sm font-semibold mt-0.5 truncate" title={invocation.segmentLabel}>
-            {invocation.segmentLabel}
-            <span className="text-white/55 font-normal"> · </span>
-            <span className="text-[var(--chart-2)]">{invocation.segmentValue}</span>
-          </div>
-        </div>
+      {/* Breadcrumb + close */}
+      <div className="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-white/10">
+        <Breadcrumb
+          chartTitle={chartTitle}
+          stack={stack}
+          onPopTo={onPopTo}
+          onCloseAll={onClose}
+        />
         <button
           onClick={onClose}
           className="flex h-7 w-7 items-center justify-center rounded text-white/60 hover:bg-white/10 hover:text-white transition-colors flex-shrink-0"
@@ -95,28 +168,138 @@ export function DrilldownView({ invocation, onClose }: DrilldownViewProps) {
         </button>
       </div>
 
-      {invocation.kind === "single-row" ? (
-        <SingleRowDetail row={invocation.row} />
+      {/* Current frame value */}
+      <div className="mb-2.5 px-0.5">
+        <div className="text-sm font-semibold truncate" title={current.segmentLabel}>
+          {current.segmentLabel}
+          <span className="text-white/55 font-normal"> · </span>
+          <span className="text-[var(--chart-2)]">{current.segmentValue}</span>
+        </div>
+      </div>
+
+      {/* Body */}
+      {current.kind === "single-row" ? (
+        <SingleRowDetail row={current.row} />
       ) : (
-        <BreakdownGrid rows={invocation.rows} metric={invocation.metric} breakdowns={invocation.breakdowns} />
+        <AggregateBody frame={current} onPush={onPush} />
       )}
     </div>
   )
 }
 
-function BreakdownGrid({
-  rows,
-  metric,
-  breakdowns,
+/* ---------- Breadcrumb ---------- */
+
+function Breadcrumb({
+  chartTitle,
+  stack,
+  onPopTo,
+  onCloseAll,
 }: {
-  rows: HopperOpp[]
-  metric: DrilldownMetric
-  breakdowns: DrilldownBreakdownDef[]
+  chartTitle: string
+  stack: DrilldownStack
+  onPopTo: (index: number) => void
+  onCloseAll: () => void
 }) {
   return (
+    <nav
+      aria-label="Drill-down breadcrumb"
+      className="flex items-center gap-1 text-[10px] min-w-0 flex-1 overflow-hidden"
+    >
+      <button
+        onClick={onCloseAll}
+        className="flex items-center gap-1 text-white/55 hover:text-white truncate"
+        title={`Back to ${chartTitle}`}
+      >
+        <Home className="h-3 w-3 flex-shrink-0" />
+        <span className="uppercase tracking-[0.1em] font-semibold truncate">{chartTitle}</span>
+      </button>
+      {stack.map((frame, i) => {
+        const isLast = i === stack.length - 1
+        return (
+          <span key={i} className="flex items-center gap-1 min-w-0">
+            <ChevronRight className="h-3 w-3 text-white/30 flex-shrink-0" />
+            {isLast ? (
+              <span
+                className="font-semibold text-white truncate"
+                title={frame.segmentLabel}
+              >
+                {truncate(frame.segmentLabel, 24)}
+              </span>
+            ) : (
+              <button
+                onClick={() => onPopTo(i)}
+                className="text-white/70 hover:text-white underline-offset-2 hover:underline truncate"
+                title={`Back to ${frame.segmentLabel}`}
+              >
+                {truncate(frame.segmentLabel, 18)}
+              </button>
+            )}
+          </span>
+        )
+      })}
+    </nav>
+  )
+}
+
+function truncate(s: string, n: number): string {
+  return s.length > n ? s.slice(0, n - 1) + "…" : s
+}
+
+/* ---------- Aggregate body (4 breakdown panels) ---------- */
+
+function AggregateBody({
+  frame,
+  onPush,
+}: {
+  frame: Extract<DrilldownFrame, { kind: "aggregate" }>
+  onPush: (frame: DrilldownFrame) => void
+}) {
+  // If we've exhausted the dim pool OR matched a small handful of rows,
+  // showing four mostly-empty panels feels wrong. Drop down into a
+  // compact rows list (or a single-row detail if N=1).
+  if (frame.breakdowns.length === 0 || frame.rows.length <= 2) {
+    if (frame.rows.length === 1) {
+      return <SingleRowDetail row={frame.rows[0]} />
+    }
+    return <CompactRowList rows={frame.rows} metric={frame.metric} />
+  }
+
+  function handleDrill(dim: DrilldownBreakdownDef, name: string) {
+    const newRows = frame.rows.filter((r) => dim.group(r) === name)
+    if (newRows.length === 0) return
+    const nextUsed = new Set(frame.usedDims)
+    nextUsed.add(dim.id)
+    const nextBreakdowns = pickNextBreakdowns(nextUsed)
+    if (newRows.length === 1) {
+      onPush({
+        kind: "single-row",
+        segmentLabel: name,
+        segmentValue: formatMetric(frame.metric, sumMetric(frame.metric, newRows)),
+        row: newRows[0],
+      })
+      return
+    }
+    onPush({
+      kind: "aggregate",
+      segmentLabel: name,
+      segmentValue: formatMetric(frame.metric, sumMetric(frame.metric, newRows)),
+      rows: newRows,
+      metric: frame.metric,
+      breakdowns: nextBreakdowns,
+      usedDims: nextUsed,
+    })
+  }
+
+  return (
     <div className="grid grid-cols-2 grid-rows-2 gap-2 flex-1 min-h-0">
-      {breakdowns.slice(0, 4).map((def) => (
-        <BreakdownPanel key={def.id} rows={rows} metric={metric} def={def} />
+      {frame.breakdowns.slice(0, 4).map((def) => (
+        <BreakdownPanel
+          key={def.id}
+          rows={frame.rows}
+          metric={frame.metric}
+          def={def}
+          onDrill={(name) => handleDrill(def, name)}
+        />
       ))}
     </div>
   )
@@ -126,10 +309,12 @@ function BreakdownPanel({
   rows,
   metric,
   def,
+  onDrill,
 }: {
   rows: HopperOpp[]
   metric: DrilldownMetric
   def: DrilldownBreakdownDef
+  onDrill: (name: string) => void
 }) {
   const { items, total } = useMemo(() => {
     const map = new Map<string, number>()
@@ -164,9 +349,14 @@ function BreakdownPanel({
             const pct = total > 0 ? item.value / total : 0
             const barPct = max > 0 ? item.value / max : 0
             return (
-              <div key={item.name} className="flex items-center gap-1.5 text-[10px] min-w-0">
+              <button
+                key={item.name}
+                onClick={() => onDrill(item.name)}
+                className="w-full flex items-center gap-1.5 text-[10px] min-w-0 rounded px-1 py-0.5 -mx-1 hover:bg-white/[0.06] transition-colors text-left"
+                title={`Drill into ${item.name}`}
+              >
                 <span
-                  className="w-[5rem] truncate text-white/85 flex-shrink-0"
+                  className="w-[4.8rem] truncate text-white/85 flex-shrink-0"
                   title={item.name}
                 >
                   {item.name}
@@ -177,13 +367,13 @@ function BreakdownPanel({
                     style={{ width: `${Math.max(2, barPct * 100)}%` }}
                   />
                 </div>
-                <span className="w-[3.75rem] text-right tnum text-white/85 flex-shrink-0">
-                  {formatValue(metric, item.value)}
+                <span className="w-[3.5rem] text-right tnum text-white/85 flex-shrink-0">
+                  {formatMetric(metric, item.value).replace(" opps", "").replace(" opp", "")}
                 </span>
                 <span className="w-[2.5rem] text-right tnum text-white/45 flex-shrink-0">
                   {Math.round(pct * 100)}%
                 </span>
-              </div>
+              </button>
             )
           })
         )}
@@ -195,6 +385,43 @@ function BreakdownPanel({
   )
 }
 
+/* ---------- Compact rows list (used when breakdowns are exhausted) ---------- */
+
+function CompactRowList({ rows, metric }: { rows: HopperOpp[]; metric: DrilldownMetric }) {
+  return (
+    <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-1">
+      <div className="text-[9px] uppercase tracking-[0.14em] text-white/55">
+        {rows.length === 1 ? "Single matching row" : `${rows.length} matching opportunities`}
+      </div>
+      {rows.slice(0, 12).map((r, i) => (
+        <div
+          key={i}
+          className="rounded border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[10px]"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-medium text-white truncate" title={r.customer}>
+              {r.customer || "—"}
+            </span>
+            <span className="text-[var(--chart-2)] tnum flex-shrink-0">
+              {formatMetric(metric, aggregateValue(metric, r))}
+            </span>
+          </div>
+          <div className="text-white/55 truncate mt-0.5">
+            {r.region} · {r.engine_value_stream} · {r.status}
+          </div>
+        </div>
+      ))}
+      {rows.length > 12 && (
+        <div className="text-[9px] text-white/45 italic">
+          + {rows.length - 12} more not shown
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ---------- Single row detail ---------- */
+
 function SingleRowDetail({ row }: { row: HopperOpp }) {
   const fields: ReadonlyArray<readonly [string, string | number | null | undefined]> = [
     ["Region", row.region],
@@ -205,7 +432,6 @@ function SingleRowDetail({ row }: { row: HopperOpp }) {
     ["Restructure Type", row.restructure_type],
     ["Maturity", row.maturity],
     ["Onerous Type", row.onerous_type],
-    ["Initiative", row.initiative],
     ["Status", row.status],
     ["Expected Year", row.expected_year != null ? String(row.expected_year) : "—"],
     ["Signature AP", row.signature_ap],
@@ -232,6 +458,18 @@ function SingleRowDetail({ row }: { row: HopperOpp }) {
           </div>
         ))}
       </div>
+
+      {row.initiative ? (
+        <div className="rounded border border-[var(--chart-2)]/30 bg-[var(--chart-2)]/5 p-2.5">
+          <div className="text-[9px] uppercase tracking-[0.14em] text-[var(--chart-2)] mb-1">
+            Initiative
+          </div>
+          <p className="text-[11px] text-white/85 leading-relaxed whitespace-pre-wrap">
+            {row.initiative}
+          </p>
+        </div>
+      ) : null}
+
       <div className="border-t border-white/10 pt-2.5">
         <div className="text-[9px] uppercase tracking-[0.14em] text-white/55 mb-2">Financials</div>
         <div className="grid grid-cols-3 gap-1.5">

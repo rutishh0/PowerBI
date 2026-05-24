@@ -13,9 +13,12 @@ import { EmployeeWhereaboutsVisualizer } from "./employee-whereabouts-visualizer
 interface FileVisualizerProps {
   file: UploadedFile
   mode?: "standard" | "executive"
+  /** Visualizers that support top-bar filters publish them here so the
+   * Export modal can include them in the PDF generation request. */
+  onFiltersChange?: (filters: Record<string, string>) => void
 }
 
-export function FileVisualizer({ file, mode = "standard" }: FileVisualizerProps) {
+export function FileVisualizer({ file, mode = "standard", onFiltersChange }: FileVisualizerProps) {
   switch (file.file_type) {
     case "SOA":
       return <SoaVisualizer data={file.parsed as any} filename={file.name} mode={mode} />
@@ -24,7 +27,13 @@ export function FileVisualizer({ file, mode = "standard" }: FileVisualizerProps)
     case "OPPORTUNITY_TRACKER":
       return <OppTrackerVisualizer data={file.parsed as any} filename={file.name} />
     case "GLOBAL_HOPPER":
-      return <GlobalHopperVisualizer data={file.parsed as any} filename={file.name} />
+      return (
+        <GlobalHopperVisualizer
+          data={file.parsed as any}
+          filename={file.name}
+          onFiltersChange={onFiltersChange}
+        />
+      )
     case "SHOP_VISIT_HISTORY":
       return <ShopVisitVisualizer data={file.parsed as any} filename={file.name} />
     case "SVRG_MASTER":

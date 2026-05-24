@@ -25,6 +25,9 @@ type Props = {
   open: boolean
   onOpenChange: (v: boolean) => void
   activeFile: UploadedFile | null
+  /** Active dashboard filters to apply to the exported deliverable. Empty
+   * object = no filters. */
+  filters?: Record<string, string>
 }
 
 const FORMATS: { id: ExportFormat; label: string; description: string; icon: typeof FileText }[] = [
@@ -55,7 +58,7 @@ const SECTIONS: { id: "summary" | "charts" | "tables" | "insights"; label: strin
   { id: "insights", label: "AI insights", description: "Auto-generated commentary (planned — not yet in the PDF generator)." },
 ]
 
-export function ExportModal({ open, onOpenChange, activeFile }: Props) {
+export function ExportModal({ open, onOpenChange, activeFile, filters }: Props) {
   const [format, setFormat] = useState<ExportFormat>("pdf")
   const [sections, setSections] = useState<Record<typeof SECTIONS[number]["id"], boolean>>({
     summary: true,
@@ -78,6 +81,7 @@ export function ExportModal({ open, onOpenChange, activeFile }: Props) {
         file_type: activeFile.file_type,
         format,
         sections,
+        filters: filters && Object.keys(filters).length > 0 ? filters : undefined,
       })
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
@@ -136,6 +140,26 @@ export function ExportModal({ open, onOpenChange, activeFile }: Props) {
             No file selected — load a dataset first.
           </div>
         )}
+
+        {/* Filter chips — surfaced so the user knows the export will reflect them */}
+        {filters && Object.keys(filters).length > 0 ? (
+          <div className="rounded-md border border-[var(--chart-2)]/30 bg-[var(--chart-2)]/5 px-3 py-2 text-xs text-white/80">
+            <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--chart-2)] font-semibold mb-1.5">
+              Filters applied to export
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {Object.entries(filters).map(([k, v]) => (
+                <span
+                  key={k}
+                  className="inline-flex items-center gap-1 rounded border border-white/15 bg-white/[0.06] px-2 py-0.5"
+                >
+                  <span className="text-white/55 uppercase tracking-[0.08em] text-[9px]">{k.replace("_", " ")}</span>
+                  <span className="text-white">{v}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         {/* Format */}
         <div className="space-y-2">

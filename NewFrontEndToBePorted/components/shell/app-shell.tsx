@@ -21,6 +21,10 @@ export function AppShell() {
   const [view, setView] = useState<ViewMode>("standard")
   const [exportOpen, setExportOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
+  /** Active filters published by the current visualizer (Hopper today;
+   * other visualizers can opt in later). Forwarded into the Export PDF
+   * request so the deliverable matches what the user sees on screen. */
+  const [exportFilters, setExportFilters] = useState<Record<string, string>>({})
   const inFlight = useRef<Set<string>>(new Set())
 
   const active = useMemo(
@@ -180,7 +184,11 @@ export function AppShell() {
               <WelcomeState onUpload={handleUpload} />
             )
           ) : active ? (
-            <FileVisualizer file={active} mode={view === "executive" ? "executive" : "standard"} />
+            <FileVisualizer
+              file={active}
+              mode={view === "executive" ? "executive" : "standard"}
+              onFiltersChange={setExportFilters}
+            />
           ) : (
             <WelcomeState onUpload={handleUpload} />
           )}
@@ -196,7 +204,12 @@ export function AppShell() {
         </footer>
       </main>
 
-      <ExportModal open={exportOpen} onOpenChange={setExportOpen} activeFile={active} />
+      <ExportModal
+        open={exportOpen}
+        onOpenChange={setExportOpen}
+        activeFile={active}
+        filters={exportFilters}
+      />
     </div>
   )
 }

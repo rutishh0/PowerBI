@@ -1,17 +1,51 @@
 "use client"
 
-import { useActionState, useState } from "react"
+import { useState, type FormEvent } from "react"
+import { useRouter } from "next/navigation"
 import { Eye, EyeOff, Lock, ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { loginAction } from "./actions"
 import { Spinner } from "@/components/ui/spinner"
+import { login as apiLogin, ApiError } from "@/lib/api"
 
+/**
+ * Login form — submits the access code straight to Flask `/api/login`.
+ *
+ * Was previously wired through a Next.js Server Action. Static export
+ * forbids Server Actions, so we POST directly and then router.replace("/")
+ * on success. The Flask session cookie is same-origin (Flask serves
+ * everything), so no Set-Cookie mirroring is required.
+ */
 export function LoginForm() {
-  const [state, action, pending] = useActionState(loginAction, null)
+  const router = useRouter()
+  const [password, setPassword] = useState("")
   const [show, setShow] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    if (busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      await apiLogin(password)
+      router.replace("/")
+    } catch (err) {
+      const msg =
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Login failed"
+      setError(msg)
+      setBusy(false)
+    }
+    // On success we deliberately leave `busy` true — the navigation away
+    // unmounts the form, no need to flicker the button back to idle.
+  }
 
   return (
-    <form action={action} className="flex flex-col gap-4">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <label className="sr-only" htmlFor="password">
         Access code
       </label>
@@ -27,6 +61,8 @@ export function LoginForm() {
           placeholder="Access code"
           autoComplete="current-password"
           required
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
           className="h-11 w-full rounded-md border border-sidebar-border bg-sidebar/60 pl-10 pr-10 text-sm text-sidebar-foreground placeholder:text-sidebar-foreground/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-primary focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar-accent"
         />
         <button
@@ -39,21 +75,21 @@ export function LoginForm() {
         </button>
       </div>
 
-      {state?.error ? (
+      {error ? (
         <div
           role="alert"
           className="rounded-md border border-destructive/60 bg-destructive/15 px-3 py-2 text-sm text-destructive-foreground"
         >
-          {state.error}
+          {error}
         </div>
       ) : null}
 
       <Button
         type="submit"
-        disabled={pending}
+        disabled={busy}
         className="h-11 bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 font-medium"
       >
-        {pending ? (
+        {busy ? (
           <>
             <Spinner className="text-sidebar-primary-foreground" />
             Authenticating…

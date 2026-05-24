@@ -365,6 +365,10 @@ export interface ExportPayload {
     tables?: boolean
     insights?: boolean
   }
+  /** Filters mirroring the on-screen filter bar (omitted keys = no filter
+   * on that dimension). Optional — generators that don't recognise a key
+   * silently ignore it. */
+  filters?: Record<string, string>
 }
 
 /**
