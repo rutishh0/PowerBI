@@ -33,9 +33,7 @@ export function WelcomeState({ onUpload }: WelcomeStateProps) {
           Welcome to the Data Visualizer
         </h1>
         <p className="text-base text-muted-foreground leading-relaxed text-pretty">
-          Upload customer Statements of Account, Invoice Lists, MEA Opportunity Trackers, Global Commercial
-          Optimisation Hopper workbooks, Trent Shop Visit History, or SVRG Master files. The universal parser
-          detects the format and renders the right KPIs, charts and registers.
+          Upload the necessary documents.
         </p>
       </div>
 

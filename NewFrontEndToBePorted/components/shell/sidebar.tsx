@@ -32,13 +32,19 @@ interface SidebarProps {
   onExport: () => void
 }
 
-const VIEWS: { id: ViewMode; label: string; icon: React.ElementType; experimental?: boolean }[] = [
-  { id: "standard", label: "Standard", icon: LayoutGrid },
-  { id: "executive", label: "Executive", icon: Gauge },
-  { id: "slides", label: "Slides", icon: Presentation },
-  { id: "compare", label: "Compare", icon: GitCompare },
-  { id: "files", label: "Files", icon: FolderOpen },
-  { id: "ai", label: "AI Assistant", icon: Sparkles, experimental: true },
+// Sidebar nav entries.
+//
+// Set `hidden: false` on any entry below to surface that tab again.
+// Hidden entries stay fully wired in the code (the views, the routes,
+// the React state); they're just filtered out of the sidebar render
+// below. The simplest way to re-enable them is to flip the flag.
+const VIEWS: { id: ViewMode; label: string; icon: React.ElementType; experimental?: boolean; hidden?: boolean }[] = [
+  { id: "standard",  label: "Standard",     icon: LayoutGrid },
+  { id: "executive", label: "Executive",    icon: Gauge,        hidden: true },
+  { id: "slides",    label: "Slides",       icon: Presentation, hidden: true },
+  { id: "compare",   label: "Compare",      icon: GitCompare,   hidden: true },
+  { id: "files",     label: "Files",        icon: FolderOpen,   hidden: true },
+  { id: "ai",        label: "AI Assistant", icon: Sparkles,     hidden: true, experimental: true },
 ]
 
 export function Sidebar({
@@ -130,7 +136,7 @@ export function Sidebar({
             Dashboard View
           </h2>
           <nav className="flex flex-col gap-1">
-            {VIEWS.map((v) => {
+            {VIEWS.filter((v) => !v.hidden).map((v) => {
               const active = currentView === v.id
               const Icon = v.icon
               return (
