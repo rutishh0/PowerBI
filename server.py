@@ -528,9 +528,19 @@ def export_pdf():
         else:
             selected_files = list(stored.keys())
 
-    # The export is always the full executive briefing — the per-section
-    # selection UI was removed, so the generators render every section.
-    sections_to_include = None
+    # The per-section selection UI was removed, so the report is always the
+    # full V8 report. We pass the full superset of section names both
+    # generators understand (each ignores names it doesn't recognise) rather
+    # than None — the V8 Opportunity-Tracker generator does ``"kpis" in
+    # sections_to_include`` and would raise on None.
+    sections_to_include = [
+        # Hopper section names
+        "summary", "charts", "customer_analysis", "engine_analysis",
+        "pipeline", "restructure", "top_opportunities", "customer_breakdown",
+        # Opportunity Tracker section names
+        "kpis", "top_opps", "estimation_level", "opps_threats",
+        "project_summary", "timeline",
+    ]
 
     # Resolve the active file (tolerate filename not matching any stored key).
     first_key = selected_files[0] if selected_files else list(stored.keys())[0]
