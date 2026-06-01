@@ -1,11 +1,12 @@
 "use client"
 
-import { useMemo, type ReactElement } from "react"
+import { useMemo, useState, type ReactElement } from "react"
 import {
   Bar,
   BarChart,
   CartesianGrid,
   Cell,
+  LabelList,
   Legend,
   Pie,
   PieChart,
@@ -78,6 +79,43 @@ const LEGEND_FORMATTER = (value: string) => (
   <span style={{ color: "rgba(255,255,255,0.85)" }}>{value}</span>
 )
 
+/** Small label drawn on top of / beside a bar. */
+const BAR_LABEL_STYLE = { fill: "rgba(255,255,255,0.8)", fontSize: 9 } as const
+
+type Metric = "value" | "count"
+
+/** Compact value/count switch shown in the corner of toggle-able charts. */
+function MetricToggle({ metric, onChange }: { metric: Metric; onChange: (m: Metric) => void }) {
+  return (
+    <div className="flex items-center gap-1 self-end rounded border border-white/15 bg-white/5 p-0.5 text-[10px]">
+      {(["value", "count"] as const).map((m) => (
+        <button
+          key={m}
+          type="button"
+          onClick={() => onChange(m)}
+          className={
+            metric === m
+              ? "rounded bg-white/15 px-1.5 py-0.5 font-semibold text-white"
+              : "rounded px-1.5 py-0.5 text-white/55 hover:text-white/80"
+          }
+        >
+          {m === "value" ? "Value" : "Count"}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** Wrapper that gives a chart a small header control row above the plot. */
+function ChartWithControl({ control, children }: { control: ReactElement; children: ReactElement }) {
+  return (
+    <div className="flex h-full flex-col gap-1">
+      <div className="flex justify-end">{control}</div>
+      <div className="min-h-0 flex-1">{children}</div>
+    </div>
+  )
+}
+
 /** Build the initial drill frame from a chart click, with a metric and
  * the dimension the chart was sliced BY (so sub-drills don't offer it
  * again). */
@@ -109,19 +147,22 @@ function makeFrame(
  * ========================================================================= */
 
 export function PipelineByStatusChart({ filtered }: HopperChartProps) {
-  const { openFrame, drilldownView } = useChartDrilldown("Pipeline by Status")
+  const { openFrame, drilldownView } = useChartDrilldown("Value by Stage")
   const data = useMemo(() => {
     const map = new Map<string, number>()
     for (const s of PIPELINE_ORDER) map.set(s, 0)
     for (const o of filtered) map.set(o.status, (map.get(o.status) ?? 0) + o.crp_term_benefit)
-    return PIPELINE_ORDER.map((stage) => ({ stage, value: +Number(map.get(stage) ?? 0).toFixed(1) }))
+    // Descending by value so the highest-value stages lead.
+    return Array.from(map.entries())
+      .map(([stage, value]) => ({ stage, value: +Number(value).toFixed(1) }))
+      .sort((a, b) => b.value - a.value)
   }, [filtered])
 
   if (drilldownView) return drilldownView
 
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 60 }}>
+      <BarChart data={data} margin={{ top: 16, right: 10, left: 0, bottom: 60 }}>
         <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" vertical={false} />
         <XAxis dataKey="stage" tick={{ fontSize: 9, fill: "rgba(255,255,255,0.6)" }} interval={0} angle={-25} height={80} textAnchor="end" />
         <YAxis tick={{ fontSize: 10, fill: "rgba(255,255,255,0.6)" }} tickFormatter={(v) => `£${v}m`} />
@@ -136,7 +177,49 @@ export function PipelineByStatusChart({ filtered }: HopperChartProps) {
             const f = makeFrame(d.stage, filtered.filter((o) => o.status === d.stage), { kind: "sum_crp" }, "status")
             if (f) openFrame(f)
           }}
-        />
+        >
+          <LabelList dataKey="value" position="top" style={BAR_LABEL_STYLE} formatter={(v: number) => `£${v}m`} />
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  )
+}
+
+/** Item 5 twin: status FREQUENCY (count) — includes zero/low-CRP stages that
+ *  still represent active projects. Sorted descending by count. */
+export function CountByStageChart({ filtered }: HopperChartProps) {
+  const { openFrame, drilldownView } = useChartDrilldown("Count by Stage")
+  const data = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const s of PIPELINE_ORDER) map.set(s, 0)
+    for (const o of filtered) map.set(o.status, (map.get(o.status) ?? 0) + 1)
+    return Array.from(map.entries())
+      .map(([stage, value]) => ({ stage, value }))
+      .sort((a, b) => b.value - a.value)
+  }, [filtered])
+
+  if (drilldownView) return drilldownView
+
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={data} margin={{ top: 16, right: 10, left: 0, bottom: 60 }}>
+        <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" vertical={false} />
+        <XAxis dataKey="stage" tick={{ fontSize: 9, fill: "rgba(255,255,255,0.6)" }} interval={0} angle={-25} height={80} textAnchor="end" />
+        <YAxis tick={{ fontSize: 10, fill: "rgba(255,255,255,0.6)" }} allowDecimals={false} />
+        <Tooltip formatter={(v: number) => `${v} opportunities`} {...TOOLTIP_STYLE} />
+        <Bar
+          dataKey="value"
+          fill={palette.blue}
+          radius={[3, 3, 0, 0]}
+          cursor="pointer"
+          onClick={(d: { stage?: string }) => {
+            if (!d.stage) return
+            const f = makeFrame(d.stage, filtered.filter((o) => o.status === d.stage), { kind: "count" }, "status")
+            if (f) openFrame(f)
+          }}
+        >
+          <LabelList dataKey="value" position="top" style={BAR_LABEL_STYLE} />
+        </Bar>
       </BarChart>
     </ResponsiveContainer>
   )
@@ -185,37 +268,50 @@ export function CrpByRegionChart({ filtered }: HopperChartProps) {
 
 export function TopCustomersChart({ filtered }: HopperChartProps) {
   const { openFrame, drilldownView } = useChartDrilldown("Top Customers")
+  const [metric, setMetric] = useState<Metric>("value")
   const data = useMemo(() => {
     const map = new Map<string, number>()
-    for (const o of filtered) map.set(o.customer, (map.get(o.customer) ?? 0) + o.crp_term_benefit)
+    for (const o of filtered) map.set(o.customer, (map.get(o.customer) ?? 0) + (metric === "value" ? o.crp_term_benefit : 1))
     return Array.from(map.entries())
       .map(([customer, value]) => ({ customer, value: +value.toFixed(1) }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 15)
-  }, [filtered])
+  }, [filtered, metric])
 
   if (drilldownView) return drilldownView
 
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={data} layout="vertical" margin={{ top: 6, right: 10, left: 10, bottom: 6 }}>
-        <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" horizontal={false} />
-        <XAxis type="number" tick={{ fontSize: 10, fill: "rgba(255,255,255,0.6)" }} tickFormatter={(v) => `£${v}m`} />
-        <YAxis dataKey="customer" type="category" tick={{ fontSize: 10, fill: "rgba(255,255,255,0.75)" }} width={100} />
-        <Tooltip formatter={(v: number) => fmtGBP(v)} {...TOOLTIP_STYLE} />
-        <Bar
-          dataKey="value"
-          fill={palette.blue}
-          radius={[0, 3, 3, 0]}
-          cursor="pointer"
-          onClick={(d: { customer?: string }) => {
-            if (!d.customer) return
-            const f = makeFrame(d.customer, filtered.filter((o) => o.customer === d.customer), { kind: "sum_crp" }, "customer")
-            if (f) openFrame(f)
-          }}
-        />
-      </BarChart>
-    </ResponsiveContainer>
+    <ChartWithControl control={<MetricToggle metric={metric} onChange={setMetric} />}>
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data} layout="vertical" margin={{ top: 6, right: 10, left: 10, bottom: 6 }}>
+          <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" horizontal={false} />
+          <XAxis
+            type="number"
+            tick={{ fontSize: 10, fill: "rgba(255,255,255,0.6)" }}
+            tickFormatter={(v) => (metric === "value" ? `£${v}m` : `${v}`)}
+            allowDecimals={metric === "value"}
+          />
+          <YAxis dataKey="customer" type="category" interval={0} tick={{ fontSize: 10, fill: "rgba(255,255,255,0.75)" }} width={100} />
+          <Tooltip formatter={(v: number) => (metric === "value" ? fmtGBP(v) : `${v} opportunities`)} {...TOOLTIP_STYLE} />
+          <Bar
+            dataKey="value"
+            fill={palette.blue}
+            radius={[0, 3, 3, 0]}
+            cursor="pointer"
+            onClick={(d: { customer?: string }) => {
+              if (!d.customer) return
+              const f = makeFrame(
+                d.customer,
+                filtered.filter((o) => o.customer === d.customer),
+                { kind: metric === "value" ? "sum_crp" : "count" },
+                "customer",
+              )
+              if (f) openFrame(f)
+            }}
+          />
+        </BarChart>
+      </ResponsiveContainer>
+    </ChartWithControl>
   )
 }
 
@@ -338,6 +434,46 @@ export function RestructureTypeSplitChart({ filtered }: HopperChartProps) {
         <Tooltip formatter={(v: number) => fmtGBP(v)} {...TOOLTIP_STYLE} />
         <Legend iconSize={8} wrapperStyle={{ fontSize: 10 }} formatter={LEGEND_FORMATTER} />
       </PieChart>
+    </ResponsiveContainer>
+  )
+}
+
+/** Item 6 twin: restructure-type FREQUENCY (count). Mirrors "Restructure Type
+ *  Split" but counts opportunities — surfaces types that carry little/no CRP
+ *  but are still active. Sorted descending by count. */
+export function RestructureTypeCountChart({ filtered }: HopperChartProps) {
+  const { openFrame, drilldownView } = useChartDrilldown("Restructure Type Count")
+  const data = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const o of filtered) map.set(o.restructure_type, (map.get(o.restructure_type) ?? 0) + 1)
+    return Array.from(map.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+  }, [filtered])
+
+  if (drilldownView) return drilldownView
+
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={data} margin={{ top: 16, right: 10, left: 0, bottom: 40 }}>
+        <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" vertical={false} />
+        <XAxis dataKey="name" tick={{ fontSize: 9, fill: "rgba(255,255,255,0.6)" }} interval={0} angle={-18} height={60} textAnchor="end" />
+        <YAxis tick={{ fontSize: 10, fill: "rgba(255,255,255,0.6)" }} allowDecimals={false} />
+        <Tooltip formatter={(v: number) => `${v} opportunities`} {...TOOLTIP_STYLE} />
+        <Bar
+          dataKey="value"
+          fill={palette.copper}
+          radius={[3, 3, 0, 0]}
+          cursor="pointer"
+          onClick={(d: { name?: string }) => {
+            if (!d.name) return
+            const f = makeFrame(d.name, filtered.filter((o) => o.restructure_type === d.name), { kind: "count" }, "restructure_type")
+            if (f) openFrame(f)
+          }}
+        >
+          <LabelList dataKey="value" position="top" style={BAR_LABEL_STYLE} />
+        </Bar>
+      </BarChart>
     </ResponsiveContainer>
   )
 }
@@ -480,40 +616,53 @@ export function RegionEvsHeatmapChart({ filtered }: HopperChartProps) {
 
 export function TopVpOwnersChart({ filtered }: HopperChartProps) {
   const { openFrame, drilldownView } = useChartDrilldown("Top VP / Owners")
+  const [metric, setMetric] = useState<Metric>("value")
   const data = useMemo(() => {
     const map = new Map<string, number>()
     for (const o of filtered) {
       if (!o.vp_owner) continue
-      map.set(o.vp_owner, (map.get(o.vp_owner) ?? 0) + o.crp_term_benefit)
+      map.set(o.vp_owner, (map.get(o.vp_owner) ?? 0) + (metric === "value" ? o.crp_term_benefit : 1))
     }
     return Array.from(map.entries())
       .map(([vp_owner, value]) => ({ vp_owner, value: +value.toFixed(1) }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 10)
-  }, [filtered])
+  }, [filtered, metric])
 
   if (drilldownView) return drilldownView
 
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={data} layout="vertical" margin={{ top: 6, right: 10, left: 10, bottom: 6 }}>
-        <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" horizontal={false} />
-        <XAxis type="number" tick={{ fontSize: 10, fill: "rgba(255,255,255,0.6)" }} tickFormatter={(v) => `£${v}m`} />
-        <YAxis dataKey="vp_owner" type="category" tick={{ fontSize: 10, fill: "rgba(255,255,255,0.75)" }} width={120} />
-        <Tooltip formatter={(v: number) => fmtGBP(v)} {...TOOLTIP_STYLE} />
-        <Bar
-          dataKey="value"
-          fill={palette.success}
-          radius={[0, 3, 3, 0]}
-          cursor="pointer"
-          onClick={(d: { vp_owner?: string }) => {
-            if (!d.vp_owner) return
-            const f = makeFrame(d.vp_owner, filtered.filter((o) => o.vp_owner === d.vp_owner), { kind: "sum_crp" }, "vp_owner")
-            if (f) openFrame(f)
-          }}
-        />
-      </BarChart>
-    </ResponsiveContainer>
+    <ChartWithControl control={<MetricToggle metric={metric} onChange={setMetric} />}>
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data} layout="vertical" margin={{ top: 6, right: 10, left: 10, bottom: 6 }}>
+          <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" horizontal={false} />
+          <XAxis
+            type="number"
+            tick={{ fontSize: 10, fill: "rgba(255,255,255,0.6)" }}
+            tickFormatter={(v) => (metric === "value" ? `£${v}m` : `${v}`)}
+            allowDecimals={metric === "value"}
+          />
+          <YAxis dataKey="vp_owner" type="category" interval={0} tick={{ fontSize: 10, fill: "rgba(255,255,255,0.75)" }} width={120} />
+          <Tooltip formatter={(v: number) => (metric === "value" ? fmtGBP(v) : `${v} opportunities`)} {...TOOLTIP_STYLE} />
+          <Bar
+            dataKey="value"
+            fill={palette.success}
+            radius={[0, 3, 3, 0]}
+            cursor="pointer"
+            onClick={(d: { vp_owner?: string }) => {
+              if (!d.vp_owner) return
+              const f = makeFrame(
+                d.vp_owner,
+                filtered.filter((o) => o.vp_owner === d.vp_owner),
+                { kind: metric === "value" ? "sum_crp" : "count" },
+                "vp_owner",
+              )
+              if (f) openFrame(f)
+            }}
+          />
+        </BarChart>
+      </ResponsiveContainer>
+    </ChartWithControl>
   )
 }
 
@@ -538,7 +687,7 @@ export function TopSingleOpportunitiesChart({ filtered }: HopperChartProps) {
       <BarChart data={data} layout="vertical" margin={{ top: 6, right: 10, left: 10, bottom: 6 }}>
         <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" horizontal={false} />
         <XAxis type="number" tick={{ fontSize: 10, fill: "rgba(255,255,255,0.6)" }} tickFormatter={(v) => `£${v}m`} />
-        <YAxis dataKey="label" type="category" tick={{ fontSize: 9, fill: "rgba(255,255,255,0.75)" }} width={170} />
+        <YAxis dataKey="label" type="category" interval={0} tick={{ fontSize: 9, fill: "rgba(255,255,255,0.75)" }} width={170} />
         <Tooltip formatter={(v: number) => fmtGBP(v)} {...TOOLTIP_STYLE} />
         <Bar
           dataKey="value"
@@ -649,12 +798,21 @@ export function OnerousMixChart({ filtered }: HopperChartProps) {
 export const CHART_DEFS: HopperChartDef[] = [
   {
     id: "pipeline-by-status",
-    title: "Pipeline by Status",
-    subtitle: "CRP term benefit (£m) by canonical pipeline stage",
+    title: "Value by Stage",
+    subtitle: "CRP term benefit (£m) per stage — highest first",
     category: "pipeline",
-    description: "Bar chart of CRP value at each pipeline stage.",
+    description: "Bar chart of CRP value at each pipeline stage, ranked descending with value labels.",
     defaultPinned: true,
     Component: PipelineByStatusChart,
+  },
+  {
+    id: "count-by-stage",
+    title: "Count by Stage",
+    subtitle: "Number of opportunities per stage — highest first",
+    category: "pipeline",
+    description: "Frequency of each pipeline stage, including zero/low-CRP stages that are still active projects.",
+    defaultPinned: true,
+    Component: CountByStageChart,
   },
   {
     id: "crp-by-region",
@@ -700,6 +858,15 @@ export const CHART_DEFS: HopperChartDef[] = [
     description: "Donut split of CRP by restructure type.",
     defaultPinned: true,
     Component: RestructureTypeSplitChart,
+  },
+  {
+    id: "restructure-type-count",
+    title: "Restructure Type Count",
+    subtitle: "Number of opportunities per restructure type",
+    category: "structural",
+    description: "Frequency of each restructure type, including those carrying little/no CRP.",
+    defaultPinned: true,
+    Component: RestructureTypeCountChart,
   },
   {
     id: "pipeline-conversion-funnel",

@@ -33,6 +33,7 @@ import { InfoChip } from "@/components/shared/info-chip"
 import { SectionHeader } from "@/components/shared/section-header"
 import { ChartCard } from "@/components/shared/chart-card"
 import { DataTable, type DataTableColumn } from "@/components/shared/data-table"
+import { MultiSelect, inSel } from "@/components/shared/multi-select"
 import { CollapsibleSection } from "@/components/shared/collapsible-section"
 import { fmtM, fmtCount, fmtPct, fmtDate } from "@/lib/format"
 import { palette, seriesColors } from "@/lib/chart-palette"
@@ -65,12 +66,15 @@ interface OppTrackerVisualizerProps {
 }
 
 export function OppTrackerVisualizer({ data, filename }: OppTrackerVisualizerProps) {
-  const [customer, setCustomer] = useState("__all__")
-  const [status, setStatus] = useState("__all__")
-  const [extProb, setExtProb] = useState("__all__")
-  const [priority, setPriority] = useState<string>("__all__")
-  const [oppType, setOppType] = useState("__all__")
+  // Filters are multi-select: an empty array means "All".
+  const [customer, setCustomer] = useState<string[]>([])
+  const [status, setStatus] = useState<string[]>([])
+  const [extProb, setExtProb] = useState<string[]>([])
+  const [priority, setPriority] = useState<string[]>([])
+  const [oppType, setOppType] = useState<string[]>([])
   const [minValue, setMinValue] = useState(0)
+  // Top Customers chart: rank by value ($26+27) or by opportunity frequency.
+  const [topCustMetric, setTopCustMetric] = useState<"value" | "count">("value")
 
   const allRecords: OppRecord[] = useMemo(
     () => [
@@ -83,11 +87,11 @@ export function OppTrackerVisualizer({ data, filename }: OppTrackerVisualizerPro
 
   const filtered = useMemo(() => {
     return allRecords.filter((r) => {
-      if (customer !== "__all__" && r.customer !== customer) return false
-      if (status !== "__all__" && r.status !== status) return false
-      if (extProb !== "__all__" && r.ext_probability !== extProb) return false
-      if (priority !== "__all__" && String(r.priority) !== priority) return false
-      if (oppType !== "__all__" && r.opportunity_type !== oppType) return false
+      if (!inSel(customer, r.customer)) return false
+      if (!inSel(status, r.status)) return false
+      if (!inSel(extProb, r.ext_probability)) return false
+      if (!inSel(priority, String(r.priority))) return false
+      if (!inSel(oppType, r.opportunity_type)) return false
       if (minValue > 0 && r.sum_26_27 < minValue) return false
       return true
     })
@@ -135,15 +139,16 @@ export function OppTrackerVisualizer({ data, filename }: OppTrackerVisualizerPro
     }))
   }, [filtered])
 
-  // Top 15 customers by sum_26_27
+  // Top 15 customers by sum_26_27 ($) or by opportunity count (frequency)
   const topCustomers = useMemo(() => {
     const map = new Map<string, number>()
-    for (const r of filtered) map.set(r.customer, (map.get(r.customer) ?? 0) + r.sum_26_27)
+    for (const r of filtered)
+      map.set(r.customer, (map.get(r.customer) ?? 0) + (topCustMetric === "value" ? r.sum_26_27 : 1))
     return Array.from(map.entries())
       .map(([customer, value]) => ({ customer, value: +value.toFixed(1) }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 15)
-  }, [filtered])
+  }, [filtered, topCustMetric])
 
   // Financial forecast by level
   const forecastByLevel = useMemo(() => {
@@ -270,11 +275,11 @@ export function OppTrackerVisualizer({ data, filename }: OppTrackerVisualizerPro
             <Filter className="h-3.5 w-3.5" />
             <span className="font-medium uppercase tracking-[0.1em]">Filters</span>
           </div>
-          <DarkSelect label="Customer" value={customer} onChange={setCustomer} options={customers} width="10rem" />
-          <DarkSelect label="Status" value={status} onChange={setStatus} options={STATUS_ORDER as readonly string[]} width="8rem" />
-          <DarkSelect label="Ext Prob" value={extProb} onChange={setExtProb} options={["High", "Med", "Low"]} width="6rem" />
-          <DarkSelect label="Priority" value={priority} onChange={setPriority} options={["1", "2", "3"]} width="5rem" />
-          <DarkSelect label="Type" value={oppType} onChange={setOppType} options={oppTypes} width="10rem" />
+          <MultiSelect label="Customer" value={customer} onChange={setCustomer} options={customers} width="10rem" />
+          <MultiSelect label="Status" value={status} onChange={setStatus} options={STATUS_ORDER as readonly string[]} width="8rem" />
+          <MultiSelect label="Ext Prob" value={extProb} onChange={setExtProb} options={["High", "Med", "Low"]} width="6rem" />
+          <MultiSelect label="Priority" value={priority} onChange={setPriority} options={["1", "2", "3"]} width="5rem" />
+          <MultiSelect label="Type" value={oppType} onChange={setOppType} options={oppTypes} width="10rem" />
           <label className="flex flex-col gap-1 text-xs">
             <span className="font-medium text-white/60">Min Value $M</span>
             <input
@@ -285,14 +290,14 @@ export function OppTrackerVisualizer({ data, filename }: OppTrackerVisualizerPro
               className="h-8 rounded border border-white/15 bg-white/5 px-2 text-xs text-white w-[6rem]"
             />
           </label>
-          {(customer !== "__all__" || status !== "__all__" || extProb !== "__all__" || priority !== "__all__" || oppType !== "__all__" || minValue > 0) ? (
+          {(customer.length || status.length || extProb.length || priority.length || oppType.length || minValue > 0) ? (
             <button
               onClick={() => {
-                setCustomer("__all__")
-                setStatus("__all__")
-                setExtProb("__all__")
-                setPriority("__all__")
-                setOppType("__all__")
+                setCustomer([])
+                setStatus([])
+                setExtProb([])
+                setPriority([])
+                setOppType([])
                 setMinValue(0)
               }}
               className="h-8 self-end rounded border border-white/20 bg-white/5 px-3 text-xs font-medium hover:bg-white/10 transition-colors"
@@ -390,21 +395,51 @@ export function OppTrackerVisualizer({ data, filename }: OppTrackerVisualizerPro
 
         {/* Charts row 2 */}
         <div className="grid gap-4 lg:grid-cols-3">
-          <DarkChartCard title="Top Customers (26+27 $M)" subtitle={`Top ${topCustomers.length} of ${customers.length}`}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={topCustomers} layout="vertical" margin={{ top: 6, right: 10, left: 10, bottom: 6 }}>
-                <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 10, fill: "rgba(255,255,255,0.6)" }} tickFormatter={(v) => `$${v}m`} />
-                <YAxis dataKey="customer" type="category" tick={{ fontSize: 10, fill: "rgba(255,255,255,0.75)" }} width={90} />
-                <Tooltip
-                  formatter={(v: number) => fmtM(v)}
-                  contentStyle={{ background: "oklch(0.22 0.05 260)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, fontSize: 12 }}
-                  itemStyle={{ color: "white" }}
-                  labelStyle={{ color: "white" }}
-                />
-                <Bar dataKey="value" fill={palette.accent} radius={[0, 3, 3, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          <DarkChartCard
+            title={topCustMetric === "value" ? "Top Customers (26+27 $M)" : "Top Customers (by frequency)"}
+            subtitle={`Top ${topCustomers.length} of ${customers.length}`}
+          >
+            <div className="flex h-full flex-col gap-1">
+              <div className="flex justify-end">
+                <div className="flex items-center gap-1 rounded border border-white/15 bg-white/5 p-0.5 text-[10px]">
+                  {(["value", "count"] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setTopCustMetric(m)}
+                      className={
+                        topCustMetric === m
+                          ? "rounded bg-white/15 px-1.5 py-0.5 font-semibold text-white"
+                          : "rounded px-1.5 py-0.5 text-white/55 hover:text-white/80"
+                      }
+                    >
+                      {m === "value" ? "Value" : "Count"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="min-h-0 flex-1">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={topCustomers} layout="vertical" margin={{ top: 6, right: 10, left: 10, bottom: 6 }}>
+                    <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" horizontal={false} />
+                    <XAxis
+                      type="number"
+                      tick={{ fontSize: 10, fill: "rgba(255,255,255,0.6)" }}
+                      tickFormatter={(v) => (topCustMetric === "value" ? `$${v}m` : `${v}`)}
+                      allowDecimals={topCustMetric === "value"}
+                    />
+                    <YAxis dataKey="customer" type="category" interval={0} tick={{ fontSize: 10, fill: "rgba(255,255,255,0.75)" }} width={90} />
+                    <Tooltip
+                      formatter={(v: number) => (topCustMetric === "value" ? fmtM(v) : `${v} opportunities`)}
+                      contentStyle={{ background: "oklch(0.22 0.05 260)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, fontSize: 12 }}
+                      itemStyle={{ color: "white" }}
+                      labelStyle={{ color: "white" }}
+                    />
+                    <Bar dataKey="value" fill={palette.accent} radius={[0, 3, 3, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
           </DarkChartCard>
 
           <DarkChartCard title="Forecast by Level" subtitle="Hopper / ICT / Contract estimation">
@@ -614,39 +649,6 @@ export function OppTrackerVisualizer({ data, filename }: OppTrackerVisualizerPro
 }
 
 /* ---------- Dark theme helpers (scoped to this visualizer) ---------- */
-
-function DarkSelect({
-  label,
-  value,
-  onChange,
-  options,
-  width,
-}: {
-  label: string
-  value: string
-  onChange: (v: string) => void
-  options: readonly string[]
-  width: string
-}) {
-  return (
-    <label className="flex flex-col gap-1 text-xs">
-      <span className="font-medium text-white/60">{label}</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-8 rounded border border-white/15 bg-white/5 px-2 text-xs text-white"
-        style={{ minWidth: width }}
-      >
-        <option value="__all__" className="bg-[oklch(0.22_0.05_260)]">All</option>
-        {options.map((o) => (
-          <option key={o} value={o} className="bg-[oklch(0.22_0.05_260)]">
-            {o}
-          </option>
-        ))}
-      </select>
-    </label>
-  )
-}
 
 function DarkChip({ label, value }: { label: string; value: React.ReactNode }) {
   if (value === null || value === undefined || value === "") return null

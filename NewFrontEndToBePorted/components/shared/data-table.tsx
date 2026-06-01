@@ -103,11 +103,11 @@ export function DataTable<T>({
                   onChange={(e) =>
                     setFastFilters((prev) => ({ ...prev, [col.key]: e.target.value }))
                   }
-                  className="h-7 rounded border border-input bg-background px-2 text-xs"
+                  className="h-7 rounded border border-input bg-background text-foreground px-2 text-xs [color-scheme:light] dark:[color-scheme:dark]"
                 >
-                  <option value="__all__">All</option>
+                  <option value="__all__" className="bg-background text-foreground">All</option>
                   {values.map((v) => (
-                    <option key={v} value={v}>
+                    <option key={v} value={v} className="bg-background text-foreground">
                       {v}
                     </option>
                   ))}

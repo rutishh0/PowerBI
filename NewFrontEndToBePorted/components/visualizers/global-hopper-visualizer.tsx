@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 import type { GlobalHopperData, HopperOpp } from "@/lib/types"
 import { DataTable, type DataTableColumn } from "@/components/shared/data-table"
+import { MultiSelect, inSel } from "@/components/shared/multi-select"
 import { fmtGBP, fmtCount } from "@/lib/format"
 import { loadPins, savePins } from "@/lib/chart-pins"
 import {
@@ -35,35 +36,36 @@ interface GlobalHopperVisualizerProps {
 }
 
 export function GlobalHopperVisualizer({ data, filename, onFiltersChange }: GlobalHopperVisualizerProps) {
-  const [region, setRegion] = useState("__all__")
-  const [customer, setCustomer] = useState("__all__")
-  const [evs, setEvs] = useState("__all__")
-  const [status, setStatus] = useState("__all__")
-  const [maturity, setMaturity] = useState("__all__")
-  const [rtype, setRtype] = useState("__all__")
+  // Filters are multi-select: an empty array means "All".
+  const [region, setRegion] = useState<string[]>([])
+  const [customer, setCustomer] = useState<string[]>([])
+  const [evs, setEvs] = useState<string[]>([])
+  const [status, setStatus] = useState<string[]>([])
+  const [maturity, setMaturity] = useState<string[]>([])
+  const [rtype, setRtype] = useState<string[]>([])
 
-  // Publish current filters whenever they change. Strip "__all__" sentinels
-  // so the backend only sees real filters.
+  // Publish current filters whenever they change. Empty arrays are omitted;
+  // multi-selections are joined so the wire shape stays Record<string,string>.
   useEffect(() => {
     if (!onFiltersChange) return
     const f: Record<string, string> = {}
-    if (region !== "__all__") f.region = region
-    if (customer !== "__all__") f.customer = customer
-    if (evs !== "__all__") f.evs = evs
-    if (status !== "__all__") f.status = status
-    if (maturity !== "__all__") f.maturity = maturity
-    if (rtype !== "__all__") f.restructure_type = rtype
+    if (region.length) f.region = region.join(", ")
+    if (customer.length) f.customer = customer.join(", ")
+    if (evs.length) f.evs = evs.join(", ")
+    if (status.length) f.status = status.join(", ")
+    if (maturity.length) f.maturity = maturity.join(", ")
+    if (rtype.length) f.restructure_type = rtype.join(", ")
     onFiltersChange(f)
   }, [region, customer, evs, status, maturity, rtype, onFiltersChange])
 
   const filtered = useMemo(() => {
     return data.opportunities.filter((o) => {
-      if (region !== "__all__" && o.region !== region) return false
-      if (customer !== "__all__" && o.customer !== customer) return false
-      if (evs !== "__all__" && o.engine_value_stream !== evs) return false
-      if (status !== "__all__" && o.status !== status) return false
-      if (maturity !== "__all__" && o.maturity !== maturity) return false
-      if (rtype !== "__all__" && o.restructure_type !== rtype) return false
+      if (!inSel(region, o.region)) return false
+      if (!inSel(customer, o.customer)) return false
+      if (!inSel(evs, o.engine_value_stream)) return false
+      if (!inSel(status, o.status)) return false
+      if (!inSel(maturity, o.maturity)) return false
+      if (!inSel(rtype, o.restructure_type)) return false
       return true
     })
   }, [data.opportunities, region, customer, evs, status, maturity, rtype])
@@ -103,7 +105,7 @@ export function GlobalHopperVisualizer({ data, filename, onFiltersChange }: Glob
   const registerCols: DataTableColumn<HopperOpp>[] = [
     { key: "region", header: "Region", accessor: (r) => r.region, sortable: true, fastFilter: true, widthClass: "w-[5.5rem]" },
     { key: "customer", header: "Customer", accessor: (r) => r.customer, sortable: true, fastFilter: true, widthClass: "w-[9rem]" },
-    { key: "evs", header: "EVS", accessor: (r) => r.engine_value_stream, sortable: true, fastFilter: true, widthClass: "w-[9rem]" },
+    { key: "evs", header: "Engine Value Stream", accessor: (r) => r.engine_value_stream, sortable: true, fastFilter: true, widthClass: "w-[9rem]" },
     { key: "rtype", header: "Restructure Type", accessor: (r) => r.restructure_type, sortable: true, fastFilter: true, widthClass: "w-[10rem]" },
     {
       key: "maturity",
@@ -203,22 +205,22 @@ export function GlobalHopperVisualizer({ data, filename, onFiltersChange }: Glob
             <Filter className="h-3.5 w-3.5" />
             <span className="font-medium uppercase tracking-[0.1em]">Filters</span>
           </div>
-          <HopperSelect label="Region" value={region} onChange={setRegion} options={data.summary.unique_regions} />
-          <HopperSelect label="Customer" value={customer} onChange={setCustomer} options={data.summary.unique_customers} width="10rem" />
-          <HopperSelect label="EVS" value={evs} onChange={setEvs} options={data.summary.unique_evs} width="9rem" />
-          <HopperSelect label="Status" value={status} onChange={setStatus} options={data.summary.unique_statuses} width="10rem" />
-          <HopperSelect label="Maturity" value={maturity} onChange={setMaturity} options={data.summary.unique_maturities} />
-          <HopperSelect label="Restructure" value={rtype} onChange={setRtype} options={data.summary.unique_restructure_types} width="9rem" />
+          <MultiSelect label="Region" value={region} onChange={setRegion} options={data.summary.unique_regions} />
+          <MultiSelect label="Customer" value={customer} onChange={setCustomer} options={data.summary.unique_customers} width="10rem" />
+          <MultiSelect label="Engine Value Stream" value={evs} onChange={setEvs} options={data.summary.unique_evs} width="10rem" />
+          <MultiSelect label="Status" value={status} onChange={setStatus} options={data.summary.unique_statuses} width="10rem" />
+          <MultiSelect label="Maturity" value={maturity} onChange={setMaturity} options={data.summary.unique_maturities} />
+          <MultiSelect label="Restructure" value={rtype} onChange={setRtype} options={data.summary.unique_restructure_types} width="9rem" />
           <HopperCustomizeSheet pinned={pinned} onChange={updatePinned} onReset={resetPinned} />
-          {[region, customer, evs, status, maturity, rtype].some((v) => v !== "__all__") ? (
+          {[region, customer, evs, status, maturity, rtype].some((v) => v.length > 0) ? (
             <button
               onClick={() => {
-                setRegion("__all__")
-                setCustomer("__all__")
-                setEvs("__all__")
-                setStatus("__all__")
-                setMaturity("__all__")
-                setRtype("__all__")
+                setRegion([])
+                setCustomer([])
+                setEvs([])
+                setStatus([])
+                setMaturity([])
+                setRtype([])
               }}
               className="h-8 self-end rounded border border-white/20 bg-white/5 px-3 text-xs font-medium hover:bg-white/10 transition-colors"
             >
@@ -241,7 +243,7 @@ export function GlobalHopperVisualizer({ data, filename, onFiltersChange }: Glob
           <HopperChip label="Opportunities" value={`${fmtCount(filtered.length)} / ${fmtCount(data.opportunities.length)}`} />
           <HopperChip label="Customers" value={fmtCount(new Set(filtered.map((o) => o.customer)).size)} />
           <HopperChip label="Regions" value={regionsInView.join(" · ") || "—"} />
-          <HopperChip label="EVS Types" value={fmtCount(new Set(filtered.map((o) => o.engine_value_stream)).size)} />
+          <HopperChip label="Engine Value Streams" value={fmtCount(new Set(filtered.map((o) => o.engine_value_stream)).size)} />
         </div>
 
         {/* Secondary KPIs */}
@@ -260,7 +262,12 @@ export function GlobalHopperVisualizer({ data, filename, onFiltersChange }: Glob
 
         {/* Charts (pinned only — manage via Customize button in the filter row) */}
         {(() => {
-          const visible = CHART_DEFS.filter((d) => pinned.has(d.id))
+          // When the data is scoped to a single region the "CRP by Region"
+          // donut is redundant (one slice) — drop it from the grid.
+          const singleRegion = new Set(filtered.map((o) => o.region)).size <= 1
+          const visible = CHART_DEFS.filter(
+            (d) => pinned.has(d.id) && !(singleRegion && d.id === "crp-by-region"),
+          )
           if (visible.length === 0) {
             return (
               <div className="rounded-lg border border-dashed border-white/15 bg-white/[0.02] p-10 text-center">
@@ -299,39 +306,6 @@ export function GlobalHopperVisualizer({ data, filename, onFiltersChange }: Glob
 }
 
 /* ---------- Scoped dark helpers ---------- */
-
-function HopperSelect({
-  label,
-  value,
-  onChange,
-  options,
-  width = "7rem",
-}: {
-  label: string
-  value: string
-  onChange: (v: string) => void
-  options: readonly string[]
-  width?: string
-}) {
-  return (
-    <label className="flex flex-col gap-1 text-xs">
-      <span className="font-medium text-white/60">{label}</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-8 rounded border border-white/15 bg-white/5 px-2 text-xs text-white"
-        style={{ minWidth: width }}
-      >
-        <option value="__all__" className="bg-[oklch(0.22_0.04_165)]">All</option>
-        {options.map((o) => (
-          <option key={o} value={o} className="bg-[oklch(0.22_0.04_165)]">
-            {o}
-          </option>
-        ))}
-      </select>
-    </label>
-  )
-}
 
 function HopperChip({ label, value }: { label: string; value: React.ReactNode }) {
   if (value === null || value === undefined || value === "") return null

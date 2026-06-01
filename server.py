@@ -528,38 +528,9 @@ def export_pdf():
         else:
             selected_files = list(stored.keys())
 
-    # -- sections_to_include (legacy list) OR sections (new object) ----------
-    #
-    # The new frontend sends an abstract sections object:
-    #   { summary, charts, tables, insights }
-    # Translate to the canonical section names each generator understands.
-    sections_to_include = data.get("sections_to_include")
-    if not sections_to_include:
-        sections_obj = data.get("sections")
-        if isinstance(sections_obj, dict):
-            sections_to_include = []
-            if sections_obj.get("summary"):
-                sections_to_include.append("summary")
-            if sections_obj.get("charts"):
-                sections_to_include.append("charts")
-            if sections_obj.get("tables"):
-                # Spread "tables" across every per-type table section the
-                # generators support. Unknown names are ignored by each
-                # generator, so this is forward-compatible.
-                sections_to_include.extend([
-                    "customer_analysis", "engine_analysis",
-                    "pipeline", "restructure",
-                    "top_opportunities", "customer_breakdown",
-                ])
-            # "insights" has no backend-side rendering today — gracefully ignored.
-            if not sections_to_include:
-                # All four checkboxes unchecked: deliver a minimal one-page
-                # title-only report rather than an empty section list (which
-                # the generator would interpret as "default = render all").
-                sections_to_include = ["summary"]
-        else:
-            # No sections specified at all -> let each generator pick its default.
-            sections_to_include = None
+    # The export is always the full executive briefing — the per-section
+    # selection UI was removed, so the generators render every section.
+    sections_to_include = None
 
     # Resolve the active file (tolerate filename not matching any stored key).
     first_key = selected_files[0] if selected_files else list(stored.keys())[0]
@@ -608,29 +579,51 @@ def export_pdf():
             traceback.print_exc()
             return jsonify({"error": f"Opp Tracker PDF generation failed: {str(e)}"}), 500
 
-    # Fallback to legacy SOA export
+    # Fallback to SOA export. The SOA parser returns ``sections`` as a list of
+    # {name, section_type, items[], total, overdue} dicts (each item carries
+    # lowercase keys: reference/doc_date/due_date/amount/days_late/...), so we
+    # normalise here into the (metadata, grand_totals, filtered_df,
+    # sections_summary) shape the generator expects.
     metadata = first_parsed.get("metadata", {})
-    grand_totals = first_parsed.get("grand_totals", {})
-    all_items = first_parsed.get("all_items", [])
+    grand_totals = dict(first_parsed.get("grand_totals", {}) or {})
+
+    raw_sections = first_parsed.get("sections", [])
+    if isinstance(raw_sections, dict):
+        raw_sections = [{"name": k, **(v or {})} for k, v in raw_sections.items()]
+
     sections_summary = {}
-
-    if isinstance(all_items, list):
-        filtered_df = pd.DataFrame(all_items)
-    else:
-        filtered_df = all_items
-
-    for sec_name, sec_data in first_parsed.get("sections", {}).items():
-        sec_rows = sec_data.get("rows", [])
-        sec_charges = sum(r.get("Amount", 0) for r in sec_rows if r.get("Amount", 0) > 0)
-        sec_credits = sum(r.get("Amount", 0) for r in sec_rows if r.get("Amount", 0) < 0)
-        sections_summary[sec_name] = {
-            "total": sec_data.get("totals", {}).get("total", sec_charges + sec_credits),
-            "charges": sec_charges,
-            "credits": sec_credits,
-            "overdue": sec_data.get("totals", {}).get("overdue", 0),
-            "items": len(sec_rows),
+    normalised_items = []
+    total_charges = 0.0
+    item_count = 0
+    for sec in (raw_sections or []):
+        name = sec.get("name", "Section")
+        sec_items = sec.get("items") or sec.get("rows") or []
+        charges = sum(_v for it in sec_items if (_v := (it.get("amount") or 0)) > 0)
+        credits = sum(_v for it in sec_items if (_v := (it.get("amount") or 0)) < 0)
+        total_charges += charges
+        item_count += len(sec_items)
+        sections_summary[name] = {
+            "total": sec.get("total") if sec.get("total") is not None else (charges + credits),
+            "charges": charges,
+            "credits": credits,
+            "overdue": sec.get("overdue") or 0,
+            "items": len(sec_items),
         }
+        for it in sec_items:
+            normalised_items.append({
+                "Section": name,
+                "Reference": it.get("reference"),
+                "Document Date": it.get("doc_date"),
+                "Due Date": it.get("due_date"),
+                "Amount": it.get("amount"),
+                "Status": it.get("customer_comments") or it.get("rr_comments"),
+                "Entry Type": sec.get("section_type") or it.get("text"),
+                "Days Late": it.get("days_late"),
+            })
 
+    grand_totals.setdefault("total_charges", total_charges)
+    grand_totals.setdefault("item_count", item_count)
+    filtered_df = pd.DataFrame(normalised_items)
     source_files = selected_files if len(selected_files) > 1 else None
 
     try:

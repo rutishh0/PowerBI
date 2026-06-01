@@ -261,7 +261,7 @@ function AggregateBody({
     if (frame.rows.length === 1) {
       return <SingleRowDetail row={frame.rows[0]} />
     }
-    return <CompactRowList rows={frame.rows} metric={frame.metric} />
+    return <CompactRowList rows={frame.rows} metric={frame.metric} onPush={onPush} />
   }
 
   function handleDrill(dim: DrilldownBreakdownDef, name: string) {
@@ -387,16 +387,36 @@ function BreakdownPanel({
 
 /* ---------- Compact rows list (used when breakdowns are exhausted) ---------- */
 
-function CompactRowList({ rows, metric }: { rows: HopperOpp[]; metric: DrilldownMetric }) {
+function CompactRowList({
+  rows,
+  metric,
+  onPush,
+}: {
+  rows: HopperOpp[]
+  metric: DrilldownMetric
+  onPush: (frame: DrilldownFrame) => void
+}) {
   return (
     <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-1">
       <div className="text-[9px] uppercase tracking-[0.14em] text-white/55">
-        {rows.length === 1 ? "Single matching row" : `${rows.length} matching opportunities`}
+        {rows.length === 1
+          ? "Single matching row"
+          : `${rows.length} matching opportunities · click to open`}
       </div>
       {rows.slice(0, 12).map((r, i) => (
-        <div
+        <button
           key={i}
-          className="rounded border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[10px]"
+          type="button"
+          onClick={() =>
+            onPush({
+              kind: "single-row",
+              segmentLabel: r.customer || r.engine_value_stream || "Opportunity",
+              segmentValue: formatMetric(metric, aggregateValue(metric, r)),
+              row: r,
+            })
+          }
+          className="w-full text-left rounded border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[10px] hover:bg-white/[0.07] hover:border-white/20 transition-colors cursor-pointer"
+          title={`Open ${r.customer || "opportunity"}`}
         >
           <div className="flex items-center justify-between gap-2">
             <span className="font-medium text-white truncate" title={r.customer}>
@@ -409,7 +429,7 @@ function CompactRowList({ rows, metric }: { rows: HopperOpp[]; metric: Drilldown
           <div className="text-white/55 truncate mt-0.5">
             {r.region} · {r.engine_value_stream} · {r.status}
           </div>
-        </div>
+        </button>
       ))}
       {rows.length > 12 && (
         <div className="text-[9px] text-white/45 italic">
@@ -434,7 +454,7 @@ function SingleRowDetail({ row }: { row: HopperOpp }) {
     ["Onerous Type", row.onerous_type],
     ["Status", row.status],
     ["Expected Year", row.expected_year != null ? String(row.expected_year) : "—"],
-    ["Signature AP", row.signature_ap],
+    ["Expected Signature", row.signature_ap],
   ]
 
   const profitYears: ReadonlyArray<readonly [string, string]> = [

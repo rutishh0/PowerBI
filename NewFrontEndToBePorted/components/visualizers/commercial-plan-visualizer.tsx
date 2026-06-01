@@ -31,6 +31,7 @@ import { InfoChip } from "@/components/shared/info-chip"
 import { SectionHeader } from "@/components/shared/section-header"
 import { ChartCard } from "@/components/shared/chart-card"
 import { DataTable, type DataTableColumn } from "@/components/shared/data-table"
+import { MultiSelect, inSel } from "@/components/shared/multi-select"
 import { fmtCount, fmtMoney } from "@/lib/format"
 import { palette, seriesColors } from "@/lib/chart-palette"
 
@@ -72,9 +73,10 @@ export function CommercialPlanVisualizer({
   const fiveYP = data.five_year_spe_sales
   const annual = data.annual_summary
 
-  const [ownerFilter, setOwnerFilter] = useState<string>("__all__")
-  const [yearFilter, setYearFilter] = useState<string>("__all__")
-  const [customerFilter, setCustomerFilter] = useState<string>("__all__")
+  // Filters are multi-select: an empty array means "All".
+  const [ownerFilter, setOwnerFilter] = useState<string[]>([])
+  const [yearFilter, setYearFilter] = useState<string[]>([])
+  const [customerFilter, setCustomerFilter] = useState<string[]>([])
 
   /* ---------------- KPI derivation ---------------- */
 
@@ -157,9 +159,9 @@ export function CommercialPlanVisualizer({
 
   const filteredActionLog = useMemo(() => {
     let rows = oneYP.items
-    if (ownerFilter !== "__all__") {
-      rows = rows.filter(
-        (r) => (r.owner || "Unassigned").toString().trim() === ownerFilter,
+    if (ownerFilter.length) {
+      rows = rows.filter((r) =>
+        inSel(ownerFilter, (r.owner || "Unassigned").toString().trim()),
       )
     }
     return rows
@@ -179,12 +181,8 @@ export function CommercialPlanVisualizer({
 
   const filteredPipeline = useMemo(() => {
     return fiveYP.items.filter((r) => {
-      if (yearFilter !== "__all__" && String(r.year ?? "") !== yearFilter) return false
-      if (
-        customerFilter !== "__all__" &&
-        (r.customer || "").toString().trim() !== customerFilter
-      )
-        return false
+      if (!inSel(yearFilter, String(r.year ?? ""))) return false
+      if (!inSel(customerFilter, (r.customer || "").toString().trim())) return false
       return true
     })
   }, [fiveYP.items, yearFilter, customerFilter])
@@ -483,23 +481,14 @@ export function CommercialPlanVisualizer({
               <Filter className="h-3.5 w-3.5" />
               <span className="font-medium uppercase tracking-[0.1em]">Filters</span>
             </div>
-            <label className="flex flex-col gap-1 text-xs">
-              <span className="font-medium text-muted-foreground">Owner</span>
-              <select
-                value={ownerFilter}
-                onChange={(e) => setOwnerFilter(e.target.value)}
-                className="h-8 rounded border border-input bg-background px-2 text-xs min-w-[8rem]"
-              >
-                <option value="__all__">All</option>
-                {Array.from(uniqueOwners)
-                  .sort()
-                  .map((o) => (
-                    <option key={o} value={o}>
-                      {o}
-                    </option>
-                  ))}
-              </select>
-            </label>
+            <MultiSelect
+              label="Owner"
+              tone="light"
+              width="8rem"
+              value={ownerFilter}
+              onChange={setOwnerFilter}
+              options={Array.from(uniqueOwners).sort()}
+            />
           </div>
         )}
         <DataTable
@@ -526,36 +515,22 @@ export function CommercialPlanVisualizer({
                 <Filter className="h-3.5 w-3.5" />
                 <span className="font-medium uppercase tracking-[0.1em]">Filters</span>
               </div>
-              <label className="flex flex-col gap-1 text-xs">
-                <span className="font-medium text-muted-foreground">Year</span>
-                <select
-                  value={yearFilter}
-                  onChange={(e) => setYearFilter(e.target.value)}
-                  className="h-8 rounded border border-input bg-background px-2 text-xs min-w-[6rem]"
-                >
-                  <option value="__all__">All</option>
-                  {fiveYearYears.map((y) => (
-                    <option key={y} value={y}>
-                      {y}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex flex-col gap-1 text-xs">
-                <span className="font-medium text-muted-foreground">Customer</span>
-                <select
-                  value={customerFilter}
-                  onChange={(e) => setCustomerFilter(e.target.value)}
-                  className="h-8 rounded border border-input bg-background px-2 text-xs min-w-[10rem]"
-                >
-                  <option value="__all__">All</option>
-                  {fiveYearCustomers.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <MultiSelect
+                label="Year"
+                tone="light"
+                width="6rem"
+                value={yearFilter}
+                onChange={setYearFilter}
+                options={fiveYearYears}
+              />
+              <MultiSelect
+                label="Customer"
+                tone="light"
+                width="10rem"
+                value={customerFilter}
+                onChange={setCustomerFilter}
+                options={fiveYearCustomers}
+              />
             </div>
           )}
           <DataTable

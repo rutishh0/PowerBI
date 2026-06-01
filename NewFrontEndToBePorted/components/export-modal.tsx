@@ -15,7 +15,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Spinner } from "@/components/ui/spinner"
 import { Badge } from "@/components/ui/badge"
 
@@ -51,26 +50,9 @@ const FORMATS: { id: ExportFormat; label: string; description: string; icon: typ
   },
 ]
 
-const SECTIONS: { id: "summary" | "charts" | "tables" | "insights"; label: string; description: string }[] = [
-  { id: "summary", label: "Executive summary", description: "Headline KPIs, meta strip and filter context." },
-  { id: "charts", label: "Charts & visuals", description: "Pipeline · region donut · annual profit forecast." },
-  { id: "tables", label: "Data tables", description: "Customer / EVS / pipeline / restructure breakdowns + Top 25 register." },
-  { id: "insights", label: "AI insights", description: "Auto-generated commentary (planned — not yet in the PDF generator)." },
-]
-
 export function ExportModal({ open, onOpenChange, activeFile, filters }: Props) {
   const [format, setFormat] = useState<ExportFormat>("pdf")
-  const [sections, setSections] = useState<Record<typeof SECTIONS[number]["id"], boolean>>({
-    summary: true,
-    charts: true,
-    tables: true,
-    insights: true,
-  })
   const [busy, setBusy] = useState(false)
-
-  function toggleSection(id: typeof SECTIONS[number]["id"]) {
-    setSections((s) => ({ ...s, [id]: !s[id] }))
-  }
 
   async function handleExport() {
     if (!activeFile) return
@@ -80,7 +62,6 @@ export function ExportModal({ open, onOpenChange, activeFile, filters }: Props) 
         filename: activeFile.name,
         file_type: activeFile.file_type,
         format,
-        sections,
         filters: filters && Object.keys(filters).length > 0 ? filters : undefined,
       })
       const url = URL.createObjectURL(blob)
@@ -207,34 +188,6 @@ export function ExportModal({ open, onOpenChange, activeFile, filters }: Props) 
                     <div className="text-xs text-white/55 mt-0.5 text-pretty">{f.description}</div>
                   </div>
                 </button>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Sections */}
-        <div className="space-y-2">
-          <div className="text-[11px] uppercase tracking-[0.14em] text-white/55 font-semibold">
-            Include sections
-          </div>
-          <div className="grid gap-1.5">
-            {SECTIONS.map((s) => {
-              const checked = sections[s.id]
-              return (
-                <label
-                  key={s.id}
-                  className="flex items-start gap-3 rounded border border-white/10 bg-white/[0.03] px-3 py-2 cursor-pointer hover:border-white/25 hover:bg-white/[0.06] transition-colors"
-                >
-                  <Checkbox
-                    checked={checked}
-                    onCheckedChange={() => toggleSection(s.id)}
-                    className="mt-0.5 border-white/40 data-[state=checked]:bg-[var(--chart-2)] data-[state=checked]:border-[var(--chart-2)]"
-                  />
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium text-white">{s.label}</div>
-                    <div className="text-xs text-white/55 mt-0.5 text-pretty">{s.description}</div>
-                  </div>
-                </label>
               )
             })}
           </div>

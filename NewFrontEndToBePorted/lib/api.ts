@@ -359,15 +359,10 @@ export interface ExportPayload {
   filename: string
   file_type: FileType
   format: "pdf" | "pptx" | "png"
-  sections: {
-    summary?: boolean
-    charts?: boolean
-    tables?: boolean
-    insights?: boolean
-  }
   /** Filters mirroring the on-screen filter bar (omitted keys = no filter
    * on that dimension). Optional — generators that don't recognise a key
-   * silently ignore it. */
+   * silently ignore it. The report is always the full executive briefing;
+   * section selection was removed. */
   filters?: Record<string, string>
 }
 
