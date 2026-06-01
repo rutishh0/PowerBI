@@ -1095,24 +1095,34 @@ def generate_opp_pdf_report(
 # warmer gold accent on top to match the var(--chart-2) used in the UI.
 HOPPER_NAVY      = '#0a1d2e'   # panel/header background
 HOPPER_NAVY_RGB  = (10, 29, 46)
-HOPPER_GOLD      = '#c9a961'   # primary accent (CRP, 2026/27 profit)
-HOPPER_GOLD_RGB  = (201, 169, 97)
-HOPPER_BLUE      = '#2563eb'   # secondary (top customers, 2028 profit)
-HOPPER_BLUE_RGB  = (37, 99, 235)
-HOPPER_COPPER    = '#d97706'   # tertiary (EVS distribution, 2029/30 profit)
-HOPPER_COPPER_RGB = (217, 119, 6)
-HOPPER_GREEN     = '#10b981'   # success (mature, not-onerous)
-HOPPER_GREEN_RGB = (16, 185, 129)
-HOPPER_RED       = '#dc2626'   # warning (onerous, immature)
-HOPPER_RED_RGB   = (220, 38, 38)
+# Professional blue-led palette. A single deep corporate blue carries every
+# data series; gold is reserved as a restrained accent (header rule, headline
+# KPI). This replaces the previous gold/copper/blue mix which clashed.
+HOPPER_PRIMARY      = '#1f4e79'   # deep corporate blue — all bars / primary series
+HOPPER_PRIMARY_RGB  = (31, 78, 121)
+HOPPER_PRIMARY_LT   = '#3a6ea5'   # lighter blue — secondary / long-term shading
+HOPPER_PRIMARY_LT_RGB = (58, 110, 165)
+HOPPER_TEAL      = '#2a7f8e'
+HOPPER_SLATE     = '#94a3b8'
+HOPPER_GOLD      = '#b08d57'   # restrained gold accent (header rule, headline KPI)
+HOPPER_GOLD_RGB  = (176, 141, 87)
+HOPPER_BLUE      = '#1f4e79'   # alias kept; now same as primary
+HOPPER_BLUE_RGB  = (31, 78, 121)
+HOPPER_COPPER    = '#3a6ea5'   # alias kept; now a blue shade (no orange)
+HOPPER_COPPER_RGB = (58, 110, 165)
+HOPPER_GREEN     = '#2f8a5b'   # success (mature, not-onerous)
+HOPPER_GREEN_RGB = (47, 138, 91)
+HOPPER_RED       = '#b3452f'   # warning (onerous, immature)
+HOPPER_RED_RGB   = (179, 69, 47)
 HOPPER_TEXT_DARK = (17, 24, 39)
 HOPPER_TEXT_MUTE = (107, 114, 128)
 HOPPER_BG_LIGHT  = (249, 250, 251)
 HOPPER_BG_ALT    = (243, 244, 246)
 HOPPER_BORDER    = (229, 231, 235)
 
-DONUT_PALETTE = [HOPPER_GOLD, HOPPER_BLUE, HOPPER_GREEN, HOPPER_COPPER,
-                 HOPPER_RED, '#6366f1', '#0891b2', '#a16207']
+# Cohesive blue-led series palette (used for donuts / multi-series charts).
+DONUT_PALETTE = ['#1f4e79', '#3a6ea5', '#2a7f8e', '#6b8fb5',
+                 '#b08d57', '#5b8a72', '#8a6d3b', '#7f8aa3']
 
 
 def _fmtM_gbp(val):
@@ -1151,15 +1161,17 @@ def _pct(part, whole):
 # =============================================================================
 
 def _generate_hopper_charts(filtered, summary):
-    """Three-chart hero strip for page 1 (Pipeline / Region / Annual Profit).
+    """Hero chart strip for page 1.
 
-    Returns a BytesIO PNG sized for landscape A4 page width.
+    Renders Pipeline-by-Status + Annual-Profit, and a CRP-by-Region donut in
+    the middle *only* when more than one region is present (a single-region
+    donut is just a 100% ring and adds no information). Returns a BytesIO PNG
+    sized for landscape A4 page width.
     """
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
 
-    # Canonical pipeline order — matches the React dashboard
     PIPELINE_ORDER = [
         "Initial idea", "ICT formed", "Strategy Approved",
         "Financial Modelling Started", "Financial Modelling Complete",
@@ -1168,92 +1180,102 @@ def _generate_hopper_charts(filtered, summary):
         "Contracting Concluded",
     ]
 
+    # Region data first, to decide whether the donut is worth showing.
+    by_region = {}
+    for r in filtered:
+        rgn = str(r.get('region', 'Unknown')).strip() or 'Unknown'
+        by_region[rgn] = by_region.get(rgn, 0) + _val(r.get('crp_term_benefit'))
+    show_region = len([k for k in by_region]) > 1
+
     plt.style.use('default')
-    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(13, 3.8), dpi=160,
-                                         gridspec_kw={'width_ratios': [1.4, 1, 1]})
+    if show_region:
+        fig, axes = plt.subplots(1, 3, figsize=(13, 5.6), dpi=160,
+                                 gridspec_kw={'width_ratios': [1.5, 1, 1]})
+        ax1, ax2, ax3 = axes
+    else:
+        fig, axes = plt.subplots(1, 2, figsize=(13, 5.6), dpi=160,
+                                 gridspec_kw={'width_ratios': [1.5, 1]})
+        ax1, ax3 = axes
+        ax2 = None
     fig.patch.set_facecolor('white')
 
     def style_axes(ax):
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_color('#e5e7eb')
+        ax.spines['left'].set_visible(False)
         ax.spines['bottom'].set_color('#e5e7eb')
         ax.tick_params(colors='#374151', labelsize=8)
+        ax.set_yticks([])
         ax.title.set_color(HOPPER_NAVY)
-        ax.title.set_fontsize(10)
+        ax.title.set_fontsize(11)
         ax.title.set_weight('bold')
-        ax.grid(True, axis='y', linestyle='--', alpha=0.25, color='#6b7280')
 
-    # -- CHART 1: Pipeline by Status (gold bars) ---------------------------
-    pipeline_map = {s: 0.0 for s in PIPELINE_ORDER}
+    # -- CHART 1: Pipeline by Status. Include every status actually present
+    # (canonical order first, then any others — e.g. data spelling variants),
+    # so no stage's value is silently dropped. Zero-CRP stages are kept.
+    status_crp = {}
     for r in filtered:
-        st = str(r.get('status', '')).strip()
-        if st in pipeline_map:
-            pipeline_map[st] += _val(r.get('crp_term_benefit'))
-    p_vals = [pipeline_map[s] for s in PIPELINE_ORDER]
+        st = str(r.get('status', '')).strip() or 'Unknown'
+        status_crp[st] = status_crp.get(st, 0) + _val(r.get('crp_term_benefit'))
+    stages = [s for s in PIPELINE_ORDER if s in status_crp] + \
+             sorted((s for s in status_crp if s not in PIPELINE_ORDER),
+                    key=lambda s: status_crp[s], reverse=True)
+    p_vals = [status_crp[s] for s in stages]
 
     style_axes(ax1)
-    if sum(p_vals) > 0:
-        bars = ax1.bar(range(len(PIPELINE_ORDER)), p_vals, color=HOPPER_GOLD, width=0.65)
-        ax1.set_xticks(range(len(PIPELINE_ORDER)))
-        ax1.set_xticklabels([s.replace(" ", "\n", 1) if " " in s else s
-                              for s in PIPELINE_ORDER],
-                             fontsize=6.5, rotation=30, ha='right',
-                             color='#374151')
+    if stages:
+        bars = ax1.bar(range(len(stages)), p_vals, color=HOPPER_PRIMARY, width=0.62)
+        ax1.set_xticks(range(len(stages)))
+        _fs = 7.5 if len(stages) <= 7 else (6.5 if len(stages) <= 9 else 5.6)
+        ax1.set_xticklabels([s.replace(" ", "\n", 1) if " " in s else s for s in stages],
+                             fontsize=_fs, rotation=30, ha='right', color='#374151')
         ax1.tick_params(axis='x', pad=2)
-        # Label the tallest bars
-        max_val = max(p_vals)
         for bar, v in zip(bars, p_vals):
-            if v >= max_val * 0.15:
+            if v > 0:
                 ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height(),
                          f"£{v:,.0f}m", ha='center', va='bottom',
-                         fontsize=6, color=HOPPER_NAVY, weight='bold')
-    ax1.set_title("Pipeline by Status — CRP £m")
-    ax1.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'£{int(x)}m'))
+                         fontsize=7.5, color=HOPPER_NAVY, weight='bold')
+        ax1.margins(y=0.16)
+    ax1.set_title("Pipeline by Status — CRP £m", loc='left', pad=8)
 
-    # -- CHART 2: CRP by Region (donut with gold-led palette) -------------
-    by_region = {}
-    for r in filtered:
-        rgn = str(r.get('region', 'Unknown')).strip() or 'Unknown'
-        by_region[rgn] = by_region.get(rgn, 0) + _val(r.get('crp_term_benefit'))
-    r_sorted = sorted(by_region.items(), key=lambda x: x[1], reverse=True)
-    r_labels = [x[0] for x in r_sorted]
-    r_vals = [x[1] for x in r_sorted]
+    # -- CHART 2: CRP by Region donut (only when >1 region) ---------------
+    if ax2 is not None:
+        r_sorted = sorted(by_region.items(), key=lambda x: x[1], reverse=True)
+        r_labels = [x[0] for x in r_sorted]
+        r_vals = [x[1] for x in r_sorted]
+        if sum(r_vals) > 0:
+            colors = [DONUT_PALETTE[i % len(DONUT_PALETTE)] for i in range(len(r_labels))]
+            wedges, _t, autot = ax2.pie(
+                r_vals, labels=None,
+                autopct=lambda p: f"{p:.0f}%" if p >= 5 else "",
+                colors=colors, startangle=90, pctdistance=0.78,
+                textprops={'color': 'white', 'fontsize': 8, 'weight': 'bold'},
+                wedgeprops={'width': 0.40, 'edgecolor': 'white', 'linewidth': 2},
+            )
+            ax2.legend(wedges, [l[:16] for l in r_labels], loc='center left',
+                       bbox_to_anchor=(0.92, 0.5), fontsize=8, frameon=False)
+        ax2.set_title("CRP by Region", loc='left', pad=8)
+        ax2.axis('equal')
 
-    if sum(r_vals) > 0:
-        colors = [DONUT_PALETTE[i % len(DONUT_PALETTE)] for i in range(len(r_labels))]
-        wedges, _texts, autotexts = ax2.pie(
-            r_vals, labels=[l[:14] for l in r_labels], autopct='%1.0f%%',
-            colors=colors, startangle=90,
-            pctdistance=0.78,
-            textprops={'color': HOPPER_NAVY, 'fontsize': 8, 'weight': 'bold'},
-            wedgeprops={'width': 0.38, 'edgecolor': 'white', 'linewidth': 2},
-        )
-        for autotext in autotexts:
-            autotext.set_color('white')
-            autotext.set_weight('bold')
-            autotext.set_fontsize(7)
-    ax2.set_title("CRP by Region")
-
-    # -- CHART 3: Annual Profit Forecast (matches dashboard year colors) ---
+    # -- CHART 3: Annual Profit Forecast (two-tone blue) ------------------
     years = ['2026', '2027', '2028', '2029', '2030']
     year_totals = [sum(_val(r.get(f'profit_{y}')) for r in filtered) for y in years]
     style_axes(ax3)
-    # Color scheme: 2026 & 2027 gold (near term), 2028 blue (mid),
-    # 2029 & 2030 copper (long term) — same as the React chart.
-    year_colors = [HOPPER_GOLD, HOPPER_GOLD, HOPPER_BLUE, HOPPER_COPPER, HOPPER_COPPER]
+    # Near-term (26-27) deep blue, longer-term (28-30) lighter blue.
+    year_colors = [HOPPER_PRIMARY, HOPPER_PRIMARY, HOPPER_PRIMARY_LT,
+                   HOPPER_PRIMARY_LT, HOPPER_PRIMARY_LT]
     if any(abs(t) > 0 for t in year_totals):
-        bars = ax3.bar(years, year_totals, color=year_colors, width=0.62)
+        bars = ax3.bar(years, year_totals, color=year_colors, width=0.64)
         for bar, v in zip(bars, year_totals):
             if v != 0:
                 ax3.text(bar.get_x() + bar.get_width()/2, bar.get_height(),
                          f"£{v:,.0f}m", ha='center',
                          va='bottom' if v >= 0 else 'top',
-                         fontsize=7, color=HOPPER_NAVY, weight='bold')
-    ax3.set_title("Annual Profit Forecast — £m")
-    ax3.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'£{int(x)}m'))
+                         fontsize=8, color=HOPPER_NAVY, weight='bold')
+        ax3.margins(y=0.16)
+    ax3.set_title("Annual Profit Forecast — £m", loc='left', pad=8)
 
-    plt.tight_layout(pad=1.8)
+    plt.tight_layout(pad=2.0)
     buf = io.BytesIO()
     plt.savefig(buf, format='png', bbox_inches='tight', dpi=160, facecolor='white')
     plt.close(fig)
@@ -1261,8 +1283,9 @@ def _generate_hopper_charts(filtered, summary):
     return buf
 
 
-def _generate_customer_chart(filtered, top_n=12):
-    """Horizontal bar chart: top N customers by CRP (matches dashboard style)."""
+def _generate_customer_chart(filtered, top_n=20):
+    """Large horizontal bar chart of customers by CRP. Zero-CRP customers are
+    kept (shown as a labelled £0.0m bar) — they are still live opportunities."""
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
@@ -1277,25 +1300,27 @@ def _generate_customer_chart(filtered, top_n=12):
     items.reverse()
     if not items:
         return None
-    names = [n[:22] for n, _ in items]
+    names = [n[:26] for n, _ in items]
     vals = [v for _, v in items]
 
-    fig, ax = plt.subplots(figsize=(11, 3.6), dpi=160)
+    # Taller figure so the (now sole) chart fills the page after the table is
+    # removed; height scales with the number of customers.
+    h = max(4.5, min(8.0, 0.5 * len(items) + 1.6))
+    fig, ax = plt.subplots(figsize=(13, h), dpi=160)
     fig.patch.set_facecolor('white')
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['left'].set_color('#e5e7eb')
-    ax.spines['bottom'].set_color('#e5e7eb')
-    ax.tick_params(colors='#374151', labelsize=8)
-    ax.grid(True, axis='x', linestyle='--', alpha=0.25, color='#6b7280')
-    bars = ax.barh(names, vals, color=HOPPER_BLUE, height=0.62)
+    ax.spines['bottom'].set_visible(False)
+    ax.tick_params(colors='#374151', labelsize=10)
+    ax.set_xticks([])
+    bars = ax.barh(names, vals, color=HOPPER_PRIMARY, height=0.66)
+    span = max(vals) if vals else 0
     for bar, v in zip(bars, vals):
-        ax.text(bar.get_width(), bar.get_y() + bar.get_height()/2,
+        ax.text(bar.get_width() + span * 0.005, bar.get_y() + bar.get_height()/2,
                 f"  £{v:,.1f}m", va='center', ha='left',
-                fontsize=7, color=HOPPER_NAVY, weight='bold')
-    ax.set_title(f"Top {len(items)} Customers — CRP £m",
-                 fontsize=10, weight='bold', color=HOPPER_NAVY, loc='left', pad=8)
-    ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'£{int(x)}m'))
+                fontsize=9, color=HOPPER_NAVY, weight='bold')
+    ax.margins(x=0.12)
     plt.tight_layout(pad=1.5)
     buf = io.BytesIO()
     plt.savefig(buf, format='png', bbox_inches='tight', dpi=160, facecolor='white')
@@ -1328,7 +1353,7 @@ def _generate_evs_chart(filtered, top_n=10):
     ax.spines['bottom'].set_color('#e5e7eb')
     ax.tick_params(colors='#374151', labelsize=8)
     ax.grid(True, axis='y', linestyle='--', alpha=0.25, color='#6b7280')
-    bars = ax.bar(names, counts, color=HOPPER_COPPER, width=0.6)
+    bars = ax.bar(names, counts, color=HOPPER_PRIMARY, width=0.6)
     for bar, c in zip(bars, counts):
         ax.text(bar.get_x() + bar.get_width()/2, bar.get_height(),
                 str(c), ha='center', va='bottom',
@@ -1337,6 +1362,87 @@ def _generate_evs_chart(filtered, top_n=10):
                  fontsize=10, weight='bold', color=HOPPER_NAVY, loc='left', pad=8)
     plt.xticks(rotation=20, ha='right')
     plt.tight_layout(pad=1.5)
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', bbox_inches='tight', dpi=160, facecolor='white')
+    plt.close(fig)
+    buf.seek(0)
+    return buf
+
+
+def _generate_structure_charts(filtered):
+    """Page-4 visuals: restructure-type CRP bar + maturity & onerous donuts.
+
+    Maturity/onerous donuts are by opportunity COUNT (not CRP) so categories
+    that carry zero CRP are still represented."""
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+
+    # Restructure type by CRP (keep all types, including zero-CRP)
+    rtype = {}
+    rtype_n = {}
+    for r in filtered:
+        k = str(r.get('restructure_type', '')).strip() or 'Unknown'
+        rtype[k] = rtype.get(k, 0) + _val(r.get('crp_term_benefit'))
+        rtype_n[k] = rtype_n.get(k, 0) + 1
+    rt_items = sorted(rtype.items(), key=lambda x: x[1])  # ascending for barh
+    rt_names = [k[:26] for k, _ in rt_items]
+    rt_vals = [v for _, v in rt_items]
+    rt_counts = [rtype_n[k] for k, _ in rt_items]
+
+    # Maturity & onerous by count
+    mat = {}
+    oner = {}
+    for r in filtered:
+        m = str(r.get('maturity', '')).strip() or 'Unknown'
+        mat[m] = mat.get(m, 0) + 1
+        o = str(r.get('onerous_type', '')).strip() or 'Unknown'
+        oner[o] = oner.get(o, 0) + 1
+
+    plt.style.use('default')
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(13, 3.4), dpi=160,
+                                        gridspec_kw={'width_ratios': [1.6, 1, 1]})
+    fig.patch.set_facecolor('white')
+
+    # ax1: restructure type horizontal bar
+    ax1.spines['top'].set_visible(False)
+    ax1.spines['right'].set_visible(False)
+    ax1.spines['left'].set_color('#e5e7eb')
+    ax1.spines['bottom'].set_visible(False)
+    ax1.tick_params(colors='#374151', labelsize=8)
+    ax1.set_xticks([])
+    if rt_vals:
+        bars = ax1.barh(rt_names, rt_vals, color=HOPPER_PRIMARY, height=0.6)
+        span = max(rt_vals) if rt_vals else 0
+        for bar, v, n in zip(bars, rt_vals, rt_counts):
+            ax1.text(bar.get_width() + span * 0.01, bar.get_y() + bar.get_height()/2,
+                     f"  £{v:,.0f}m  ·  {n} opps", va='center', ha='left', fontsize=8,
+                     color=HOPPER_NAVY, weight='bold')
+        ax1.margins(x=0.22)
+    ax1.set_title("Restructure Type — CRP £m", fontsize=10, weight='bold',
+                  color=HOPPER_NAVY, loc='left', pad=8)
+
+    def _donut(ax, data, title, palette):
+        items = sorted(data.items(), key=lambda x: x[1], reverse=True)
+        labels = [k for k, _ in items]
+        vals = [v for _, v in items]
+        if sum(vals) > 0:
+            colors = [palette[i % len(palette)] for i in range(len(labels))]
+            wedges, _t, autot = ax.pie(
+                vals, labels=None, autopct=lambda p: f"{p:.0f}%" if p >= 5 else "",
+                colors=colors, startangle=90, pctdistance=0.76,
+                textprops={'color': 'white', 'fontsize': 8, 'weight': 'bold'},
+                wedgeprops={'width': 0.42, 'edgecolor': 'white', 'linewidth': 2})
+            ax.legend(wedges, [f"{l[:16]} ({v})" for l, v in zip(labels, vals)],
+                      loc='center', bbox_to_anchor=(0.5, -0.12), fontsize=8,
+                      frameon=False, ncol=1)
+        ax.set_title(title, fontsize=10, weight='bold', color=HOPPER_NAVY, loc='center', pad=8)
+        ax.axis('equal')
+
+    _donut(ax2, mat, "Maturity (opps)", [HOPPER_GREEN, HOPPER_SLATE, HOPPER_PRIMARY_LT])
+    _donut(ax3, oner, "Onerous Type (opps)", [HOPPER_PRIMARY, HOPPER_RED, HOPPER_SLATE])
+
+    plt.tight_layout(pad=1.8)
     buf = io.BytesIO()
     plt.savefig(buf, format='png', bbox_inches='tight', dpi=160, facecolor='white')
     plt.close(fig)
@@ -1763,17 +1869,17 @@ def generate_hopper_pdf_report(
         x += card_w + 4
 
         pdf._kpi_card(x, y, card_w, 22, "Profit 2026",
-                      _fmtM_gbp(totals_year[2026]), HOPPER_GOLD_RGB,
+                      _fmtM_gbp(totals_year[2026]), HOPPER_PRIMARY_RGB,
                       f"Near-term: {_fmtM_gbp(totals_year[2026] + totals_year[2027])} (26-27)")
         x += card_w + 4
 
         pdf._kpi_card(x, y, card_w, 22, "Profit 2027",
-                      _fmtM_gbp(totals_year[2027]), HOPPER_BLUE_RGB)
+                      _fmtM_gbp(totals_year[2027]), HOPPER_PRIMARY_RGB)
         x += card_w + 4
 
         long_term = totals_year[2028] + totals_year[2029] + totals_year[2030]
         pdf._kpi_card(x, y, card_w, 22, "Profit 2028-30",
-                      _fmtM_gbp(long_term), HOPPER_COPPER_RGB,
+                      _fmtM_gbp(long_term), HOPPER_PRIMARY_RGB,
                       f"Avg/year: {_fmtM_gbp(long_term / 3)}")
 
         pdf.set_y(y + 24)
@@ -1811,13 +1917,16 @@ def generate_hopper_pdf_report(
     # Customer & Engine analysis — chart strip + tables
     if "customer_analysis" in sections or "engine_analysis" in sections:
         pdf.add_page()
-        pdf._page_header("Customer & Engine Analysis")
+        pdf._page_header("Customer Analysis — CRP term benefit by customer")
 
         # -- Top customers chart + table (side-by-side feels cramped on
         # landscape A4 once axis labels are included; render stacked.)
+        # Customer analysis is now a single large chart (the redundant
+        # Top-15 table was removed). All customers are shown, including those
+        # carrying zero CRP.
         if "customer_analysis" in sections:
             try:
-                cbuf = _generate_customer_chart(filtered, top_n=12)
+                cbuf = _generate_customer_chart(filtered, top_n=20)
                 if cbuf is not None:
                     pdf.image(cbuf, x=pdf.MARGIN_L,
                               w=pdf.PAGE_W - pdf.MARGIN_L - pdf.MARGIN_R)
@@ -1825,37 +1934,11 @@ def generate_hopper_pdf_report(
             except Exception:
                 pass
 
-            by_cust = _aggregate(filtered, "customer")
-            cust_count = _aggregate(filtered, "customer", count=True)
-            top_custs = sorted(by_cust.items(), key=lambda x: x[1], reverse=True)[:15]
-            if top_custs:
-                pdf._section_header("Top 15 Customers — by CRP term benefit")
-                headers = ["#", "Customer", "Opportunities", "CRP Term (GBP m)", "% of Total"]
-                widths = [10, 110, 35, 60, 35]
-                rows = []
-                for i, (cust, crp) in enumerate(top_custs, 1):
-                    rows.append([
-                        str(i),
-                        _trunc(cust, 60),
-                        str(cust_count.get(cust, 0)),
-                        _fmtM_gbp(crp),
-                        _pct(crp, total_crp),
-                    ])
-                top_total = sum(v for _, v in top_custs)
-                totals = [
-                    "", f"Top {len(top_custs)} subtotal",
-                    str(sum(cust_count.get(c, 0) for c, _ in top_custs)),
-                    _fmtM_gbp(top_total),
-                    _pct(top_total, total_crp),
-                ]
-                pdf._table(headers, rows, widths,
-                           right_align_idx={2, 3, 4}, totals_row=totals)
-
-        # -- EVS distribution chart + table
+        # -- EVS distribution chart + table (always on its own page so the
+        # expanded customer chart has the full page above)
         if "engine_analysis" in sections:
-            if pdf.get_y() > pdf.PAGE_H - 90:
-                pdf.add_page()
-                pdf._page_header("Customer & Engine Analysis (continued)")
+            pdf.add_page()
+            pdf._page_header("Engine Value Stream Analysis")
 
             try:
                 ebuf = _generate_evs_chart(filtered, top_n=10)
@@ -1932,100 +2015,22 @@ def generate_hopper_pdf_report(
                                        _fmtM_gbp(total_crp), "100.0%"])
 
         if "restructure" in sections:
-            if pdf.get_y() > pdf.PAGE_H - 60:
+            # Structure & risk is now visual: a restructure-type CRP bar (with
+            # opportunity counts) plus maturity and onerous donuts. The
+            # standalone restructure table is dropped (the chart conveys it).
+            # Keep the header together with its charts (need ~92mm).
+            if pdf.get_y() + 92 > pdf.PAGE_H - 16:
                 pdf.add_page()
-                pdf._page_header("Pipeline & Restructure Breakdown (continued)")
-
-            # Restructure type table
-            by_rtype_count = _aggregate(filtered, "restructure_type", count=True)
-            by_rtype_crp = _aggregate(filtered, "restructure_type")
-            rtype_sorted = sorted(by_rtype_crp.items(), key=lambda x: x[1], reverse=True)
-            if rtype_sorted:
-                pdf._section_header("Restructure Type")
-                headers = ["Restructure Type", "Opportunities", "CRP Term (GBP m)", "% of CRP"]
-                widths = [130, 40, 55, 30]
-                rows = []
-                for rt, crp in rtype_sorted:
-                    rows.append([
-                        _trunc(rt, 60),
-                        str(by_rtype_count.get(rt, 0)),
-                        _fmtM_gbp(crp),
-                        _pct(crp, total_crp),
-                    ])
-                pdf._table(headers, rows, widths,
-                           right_align_idx={1, 2, 3},
-                           totals_row=["TOTAL", str(total_opps),
-                                       _fmtM_gbp(total_crp), "100.0%"])
-
-            # Maturity / Onerous side-by-side mini tables
-            if pdf.get_y() > pdf.PAGE_H - 50:
-                pdf.add_page()
-                pdf._page_header("Pipeline & Restructure Breakdown (continued)")
-
-            pdf._section_header("Maturity & Onerous Split")
-            by_mat = _aggregate(filtered, "maturity")
-            by_mat_count = _aggregate(filtered, "maturity", count=True)
-            by_oner = _aggregate(filtered, "onerous_type")
-            by_oner_count = _aggregate(filtered, "onerous_type", count=True)
-
-            # Render two compact tables side-by-side using a manual layout.
-            # Each table: 120mm wide, 4 columns: tag/opps/crp/%
-            block_w = (pdf.PAGE_W - pdf.MARGIN_L - pdf.MARGIN_R - 6) / 2
-            block_left_x = pdf.MARGIN_L
-            block_right_x = pdf.MARGIN_L + block_w + 6
-            y_start = pdf.get_y()
-
-            # Left: Maturity
-            pdf.set_xy(block_left_x, y_start)
-            pdf.set_font("Helvetica", "B", 8)
-            pdf.set_text_color(*HOPPER_NAVY_RGB)
-            pdf.cell(block_w, 5, "MATURITY", 0, 1, "L")
-            mat_y = pdf.get_y()
-            pdf.set_xy(block_left_x, mat_y)
-            pdf.set_fill_color(*HOPPER_NAVY_RGB)
-            pdf.set_text_color(*WHITE)
-            pdf.set_font("Helvetica", "B", 7)
-            for label, w in [("TAG", block_w * 0.45), ("OPPS", block_w * 0.18),
-                             ("CRP (GBP m)", block_w * 0.22), ("%", block_w * 0.15)]:
-                pdf.cell(w, 5.5, label, 0, 0, "C", True)
-            pdf.ln(5.5)
-            for tag, crp in sorted(by_mat.items(), key=lambda x: x[1], reverse=True):
-                pdf.set_x(block_left_x)
-                pdf.set_text_color(*HOPPER_TEXT_DARK)
-                pdf.set_font("Helvetica", "", 7)
-                pdf.cell(block_w * 0.45, 5, _trunc(tag, 30), 0, 0, "L")
-                pdf.cell(block_w * 0.18, 5, str(by_mat_count.get(tag, 0)), 0, 0, "R")
-                pdf.cell(block_w * 0.22, 5, _fmtM_short(crp), 0, 0, "R")
-                pdf.cell(block_w * 0.15, 5, _pct(crp, total_crp), 0, 0, "R")
-                pdf.ln(5)
-            mat_y_end = pdf.get_y()
-
-            # Right: Onerous
-            pdf.set_xy(block_right_x, y_start)
-            pdf.set_font("Helvetica", "B", 8)
-            pdf.set_text_color(*HOPPER_NAVY_RGB)
-            pdf.cell(block_w, 5, "ONEROUS TYPE", 0, 1, "L")
-            pdf.set_xy(block_right_x, mat_y)
-            pdf.set_fill_color(*HOPPER_NAVY_RGB)
-            pdf.set_text_color(*WHITE)
-            pdf.set_font("Helvetica", "B", 7)
-            for label, w in [("TAG", block_w * 0.45), ("OPPS", block_w * 0.18),
-                             ("CRP (GBP m)", block_w * 0.22), ("%", block_w * 0.15)]:
-                pdf.cell(w, 5.5, label, 0, 0, "C", True)
-            pdf.ln(5.5)
-            for tag, crp in sorted(by_oner.items(), key=lambda x: x[1], reverse=True):
-                pdf.set_x(block_right_x)
-                pdf.set_text_color(*HOPPER_TEXT_DARK)
-                pdf.set_font("Helvetica", "", 7)
-                pdf.cell(block_w * 0.45, 5, _trunc(tag, 30), 0, 0, "L")
-                pdf.cell(block_w * 0.18, 5, str(by_oner_count.get(tag, 0)), 0, 0, "R")
-                pdf.cell(block_w * 0.22, 5, _fmtM_short(crp), 0, 0, "R")
-                pdf.cell(block_w * 0.15, 5, _pct(crp, total_crp), 0, 0, "R")
-                pdf.ln(5)
-            oner_y_end = pdf.get_y()
-
-            # Align cursor below the taller of the two blocks
-            pdf.set_y(max(mat_y_end, oner_y_end) + 2)
+                pdf._page_header("Structure & Risk")
+            pdf._section_header("Structure & Risk Profile")
+            try:
+                sbuf = _generate_structure_charts(filtered)
+                if sbuf is not None:
+                    pdf.image(sbuf, x=pdf.MARGIN_L,
+                              w=pdf.PAGE_W - pdf.MARGIN_L - pdf.MARGIN_R)
+                    pdf.ln(2)
+            except Exception:
+                pass
 
     # ============================================================ PAGE 4
     # Top Opportunities Register
@@ -2056,50 +2061,34 @@ def generate_hopper_pdf_report(
         pdf._table(headers, rows, widths,
                    right_align_idx={0, 7, 8, 9}, max_rows=25)
 
-    # ============================================================ PAGE 5
-    # Full Customer Breakdown
-    if "customer_breakdown" in sections:
+    # ============================================================ PAGE 6
+    # Opportunity Initiatives — the narrative behind each opportunity.
+    # Every opportunity with an initiative is listed (including zero-CRP ones).
+    init_opps = [r for r in sorted(filtered, key=lambda r: _val(r.get("crp_term_benefit")),
+                                   reverse=True)
+                 if str(r.get("initiative", "") or "").strip()]
+    if init_opps:
         pdf.add_page()
-        pdf._page_header("Customer Breakdown — all customers ranked by CRP")
-
-        by_cust = {}
-        for r in filtered:
-            c = str(r.get("customer", "")).strip() or "Unknown"
-            slot = by_cust.setdefault(c, {"count": 0, "crp": 0.0,
-                                          "p2026": 0.0, "p2027": 0.0,
-                                          "p2830": 0.0})
-            slot["count"] += 1
-            slot["crp"]   += _val(r.get("crp_term_benefit"))
-            slot["p2026"] += _val(r.get("profit_2026"))
-            slot["p2027"] += _val(r.get("profit_2027"))
-            slot["p2830"] += (_val(r.get("profit_2028")) +
-                              _val(r.get("profit_2029")) +
-                              _val(r.get("profit_2030")))
-
-        sorted_custs = sorted(by_cust.items(), key=lambda x: x[1]["crp"], reverse=True)
-
-        headers = ["#", "Customer", "Opps", "CRP Term (GBP m)",
-                   "Profit 2026", "Profit 2027", "Profit 2028-30", "% of CRP"]
-        widths = [8, 75, 18, 38, 32, 32, 38, 26]
-        rows = []
-        for i, (cust, d) in enumerate(sorted_custs, 1):
-            rows.append([
-                str(i),
-                _trunc(cust, 42),
-                str(d["count"]),
-                _fmtM_gbp(d["crp"]),
-                _fmtM_short(d["p2026"]),
-                _fmtM_short(d["p2027"]),
-                _fmtM_short(d["p2830"]),
-                _pct(d["crp"], total_crp),
-            ])
-        totals = ["", "TOTAL", str(total_opps), _fmtM_gbp(total_crp),
-                  _fmtM_short(totals_year[2026]),
-                  _fmtM_short(totals_year[2027]),
-                  _fmtM_short(totals_year[2028] + totals_year[2029] + totals_year[2030]),
-                  "100.0%"]
-        pdf._table(headers, rows, widths,
-                   right_align_idx={2, 3, 4, 5, 6, 7},
-                   totals_row=totals, max_rows=80)
+        pdf._page_header("Opportunity Initiatives")
+        body_w = pdf.PAGE_W - pdf.MARGIN_L - pdf.MARGIN_R
+        for r in init_opps:
+            init_text = str(r.get("initiative", "") or "").strip()
+            # Keep the heading with at least the first lines of its initiative.
+            if pdf.get_y() > pdf.PAGE_H - 34:
+                pdf.add_page()
+                pdf._page_header("Opportunity Initiatives (continued)")
+            cust = _safe(r.get("customer", "") or "-")
+            evs = _safe(r.get("engine_value_stream", r.get("top_level_evs", "")) or "-")
+            status = _safe(r.get("status", "") or "-")
+            crp = _fmtM_gbp(_val(r.get("crp_term_benefit")))
+            pdf.set_x(pdf.MARGIN_L)
+            pdf.set_font("Helvetica", "B", 8.5)
+            pdf.set_text_color(*HOPPER_PRIMARY_RGB)
+            pdf.cell(0, 5.2, _safe(f"{cust}   |   {evs}   |   {status}   |   CRP {crp}"), 0, 1, "L")
+            pdf.set_x(pdf.MARGIN_L)
+            pdf.set_font("Helvetica", "", 8)
+            pdf.set_text_color(*HOPPER_TEXT_DARK)
+            pdf.multi_cell(body_w, 4.6, _safe(init_text))
+            pdf.ln(2.5)
 
     return bytes(pdf.output())
