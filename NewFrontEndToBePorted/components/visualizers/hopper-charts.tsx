@@ -84,6 +84,38 @@ const BAR_LABEL_STYLE = { fill: "rgba(255,255,255,0.8)", fontSize: 9 } as const
 
 type Metric = "value" | "count"
 
+/* ---------- Principled colour system ----------
+ * Colour encodes meaning, not the individual chart, so the palette never
+ * looks arbitrary:
+ *   - VALUE (£ / CRP term benefit)  -> palette.accent  (the RR brand colour)
+ *   - COUNT (opportunity frequency) -> palette.blue
+ *   - categorical share (donuts)    -> seriesColorsLight (distinguishes slices)
+ *   - semantic risk (maturity /     -> green = healthy, amber = developing,
+ *     onerous status)                  red = at-risk
+ * Charts with a value/count toggle recolour to match the active metric, so the
+ * colour itself tells you what you're looking at. */
+const metricColor = (m: Metric) => (m === "value" ? palette.accent : palette.blue)
+
+/** Maturity is a risk signal: mature = ready (green), immature = still
+ *  developing (amber). `--warning` is a stable amber in both themes, unlike
+ *  the chart-palette hues which shuffle. Check "immature" first — it
+ *  contains "mature". */
+function maturityColor(name: string, i: number): string {
+  const n = name.toLowerCase()
+  if (n.includes("immature")) return "var(--warning)"
+  if (n.includes("mature")) return palette.success
+  return seriesColorsLight[i % seriesColorsLight.length]
+}
+
+/** Onerous status is a risk signal: not-onerous = good (green), onerous =
+ *  at-risk (red). Check "not" first — "Not Onerous" contains "onerous". */
+function onerousColor(name: string, i: number): string {
+  const n = name.toLowerCase()
+  if (n.includes("not")) return palette.success
+  if (n.includes("onerous")) return palette.danger
+  return seriesColorsLight[i % seriesColorsLight.length]
+}
+
 /** Compact value/count switch shown in the corner of toggle-able charts. */
 function MetricToggle({ metric, onChange }: { metric: Metric; onChange: (m: Metric) => void }) {
   return (
@@ -295,7 +327,7 @@ export function TopCustomersChart({ filtered }: HopperChartProps) {
           <Tooltip formatter={(v: number) => (metric === "value" ? fmtGBP(v) : `${v} opportunities`)} {...TOOLTIP_STYLE} />
           <Bar
             dataKey="value"
-            fill={palette.blue}
+            fill={metricColor(metric)}
             radius={[0, 3, 3, 0]}
             cursor="pointer"
             onClick={(d: { customer?: string }) => {
@@ -336,7 +368,7 @@ export function EvsDistributionChart({ filtered }: HopperChartProps) {
         <Tooltip {...TOOLTIP_STYLE} />
         <Bar
           dataKey="value"
-          fill={palette.copper}
+          fill={palette.blue}
           radius={[3, 3, 0, 0]}
           cursor="pointer"
           onClick={(d: { name?: string }) => {
@@ -387,11 +419,9 @@ export function AnnualProfitForecastChart({ filtered }: HopperChartProps) {
             const f = makeFrame(d.year, rows, { kind: "sum_profit_year", year }, "__year__")
             if (f) openFrame(f)
           }}
-        >
-          {data.map((_, i) => (
-            <Cell key={i} fill={i < 2 ? palette.accent : i === 2 ? palette.blue : palette.copper} />
-          ))}
-        </Bar>
+        />
+        {/* Single accent colour — every bar is a £ value, so the per-year
+            rainbow carried no meaning. */}
       </BarChart>
     </ResponsiveContainer>
   )
@@ -399,82 +429,51 @@ export function AnnualProfitForecastChart({ filtered }: HopperChartProps) {
 
 export function RestructureTypeSplitChart({ filtered }: HopperChartProps) {
   const { openFrame, drilldownView } = useChartDrilldown("Restructure Type Split")
+  const [metric, setMetric] = useState<Metric>("value")
   const data = useMemo(() => {
     const map = new Map<string, number>()
-    for (const o of filtered) map.set(o.restructure_type, (map.get(o.restructure_type) ?? 0) + o.crp_term_benefit)
+    for (const o of filtered)
+      map.set(o.restructure_type, (map.get(o.restructure_type) ?? 0) + (metric === "value" ? o.crp_term_benefit : 1))
+    // Keep zero-CRP types — they're still active restructure work.
     return Array.from(map.entries())
       .map(([name, value]) => ({ name, value: +value.toFixed(1) }))
-      .filter((r) => r.value > 0)
-  }, [filtered])
-
-  if (drilldownView) return drilldownView
-
-  return (
-    <ResponsiveContainer width="100%" height="100%">
-      <PieChart>
-        <Pie
-          data={data}
-          dataKey="value"
-          nameKey="name"
-          innerRadius="55%"
-          outerRadius="85%"
-          paddingAngle={2}
-          strokeWidth={0}
-          cursor="pointer"
-          onClick={(d: { name?: string }) => {
-            if (!d.name) return
-            const f = makeFrame(d.name, filtered.filter((o) => o.restructure_type === d.name), { kind: "sum_crp" }, "restructure_type")
-            if (f) openFrame(f)
-          }}
-        >
-          {data.map((_, i) => (
-            <Cell key={i} fill={seriesColorsLight[i % seriesColorsLight.length]} />
-          ))}
-        </Pie>
-        <Tooltip formatter={(v: number) => fmtGBP(v)} {...TOOLTIP_STYLE} />
-        <Legend iconSize={8} wrapperStyle={{ fontSize: 10 }} formatter={LEGEND_FORMATTER} />
-      </PieChart>
-    </ResponsiveContainer>
-  )
-}
-
-/** Item 6 twin: restructure-type FREQUENCY (count). Mirrors "Restructure Type
- *  Split" but counts opportunities — surfaces types that carry little/no CRP
- *  but are still active. Sorted descending by count. */
-export function RestructureTypeCountChart({ filtered }: HopperChartProps) {
-  const { openFrame, drilldownView } = useChartDrilldown("Restructure Type Count")
-  const data = useMemo(() => {
-    const map = new Map<string, number>()
-    for (const o of filtered) map.set(o.restructure_type, (map.get(o.restructure_type) ?? 0) + 1)
-    return Array.from(map.entries())
-      .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value)
-  }, [filtered])
+  }, [filtered, metric])
 
   if (drilldownView) return drilldownView
 
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={data} margin={{ top: 16, right: 10, left: 0, bottom: 40 }}>
-        <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" vertical={false} />
-        <XAxis dataKey="name" tick={{ fontSize: 9, fill: "rgba(255,255,255,0.6)" }} interval={0} angle={-18} height={60} textAnchor="end" />
-        <YAxis tick={{ fontSize: 10, fill: "rgba(255,255,255,0.6)" }} allowDecimals={false} />
-        <Tooltip formatter={(v: number) => `${v} opportunities`} {...TOOLTIP_STYLE} />
-        <Bar
-          dataKey="value"
-          fill={palette.copper}
-          radius={[3, 3, 0, 0]}
-          cursor="pointer"
-          onClick={(d: { name?: string }) => {
-            if (!d.name) return
-            const f = makeFrame(d.name, filtered.filter((o) => o.restructure_type === d.name), { kind: "count" }, "restructure_type")
-            if (f) openFrame(f)
-          }}
-        >
-          <LabelList dataKey="value" position="top" style={BAR_LABEL_STYLE} />
-        </Bar>
-      </BarChart>
-    </ResponsiveContainer>
+    <ChartWithControl control={<MetricToggle metric={metric} onChange={setMetric} />}>
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data} layout="vertical" margin={{ top: 6, right: 12, left: 10, bottom: 6 }}>
+          <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" horizontal={false} />
+          <XAxis
+            type="number"
+            tick={{ fontSize: 10, fill: "rgba(255,255,255,0.6)" }}
+            tickFormatter={(v) => (metric === "value" ? `£${v}m` : `${v}`)}
+            allowDecimals={metric === "value"}
+          />
+          <YAxis dataKey="name" type="category" interval={0} tick={{ fontSize: 10, fill: "rgba(255,255,255,0.75)" }} width={150} />
+          <Tooltip formatter={(v: number) => (metric === "value" ? fmtGBP(v) : `${v} opportunities`)} {...TOOLTIP_STYLE} />
+          <Bar
+            dataKey="value"
+            fill={metricColor(metric)}
+            radius={[0, 3, 3, 0]}
+            cursor="pointer"
+            onClick={(d: { name?: string }) => {
+              if (!d.name) return
+              const f = makeFrame(
+                d.name,
+                filtered.filter((o) => o.restructure_type === d.name),
+                { kind: metric === "value" ? "sum_crp" : "count" },
+                "restructure_type",
+              )
+              if (f) openFrame(f)
+            }}
+          />
+        </BarChart>
+      </ResponsiveContainer>
+    </ChartWithControl>
   )
 }
 
@@ -646,7 +645,7 @@ export function TopVpOwnersChart({ filtered }: HopperChartProps) {
           <Tooltip formatter={(v: number) => (metric === "value" ? fmtGBP(v) : `${v} opportunities`)} {...TOOLTIP_STYLE} />
           <Bar
             dataKey="value"
-            fill={palette.success}
+            fill={metricColor(metric)}
             radius={[0, 3, 3, 0]}
             cursor="pointer"
             onClick={(d: { vp_owner?: string }) => {
@@ -741,8 +740,8 @@ export function MaturityMixChart({ filtered }: HopperChartProps) {
             if (f) openFrame(f)
           }}
         >
-          {data.map((_, i) => (
-            <Cell key={i} fill={seriesColorsLight[i % seriesColorsLight.length]} />
+          {data.map((d, i) => (
+            <Cell key={i} fill={maturityColor(d.name, i)} />
           ))}
         </Pie>
         <Tooltip formatter={(v: number) => fmtGBP(v)} {...TOOLTIP_STYLE} />
@@ -782,8 +781,8 @@ export function OnerousMixChart({ filtered }: HopperChartProps) {
             if (f) openFrame(f)
           }}
         >
-          {data.map((_, i) => (
-            <Cell key={i} fill={seriesColorsLight[i % seriesColorsLight.length]} />
+          {data.map((d, i) => (
+            <Cell key={i} fill={onerousColor(d.name, i)} />
           ))}
         </Pie>
         <Tooltip formatter={(v: number) => fmtGBP(v)} {...TOOLTIP_STYLE} />
@@ -853,20 +852,11 @@ export const CHART_DEFS: HopperChartDef[] = [
   {
     id: "restructure-type-split",
     title: "Restructure Type Split",
-    subtitle: "CRP term benefit (£m)",
+    subtitle: "CRP value or opportunity count by restructure type",
     category: "structural",
-    description: "Donut split of CRP by restructure type.",
+    description: "Bar chart of restructure types with a value/count toggle.",
     defaultPinned: true,
     Component: RestructureTypeSplitChart,
-  },
-  {
-    id: "restructure-type-count",
-    title: "Restructure Type Count",
-    subtitle: "Number of opportunities per restructure type",
-    category: "structural",
-    description: "Frequency of each restructure type, including those carrying little/no CRP.",
-    defaultPinned: true,
-    Component: RestructureTypeCountChart,
   },
   {
     id: "pipeline-conversion-funnel",
