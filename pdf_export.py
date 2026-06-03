@@ -1776,6 +1776,10 @@ class HopperPDF(FPDF):
 
     def _page_header(self, title):
         """Compact section header for pages 2+ (no navy band)."""
+        # Remember the base page title (sans any "(continued)" suffix) so a
+        # table that spills onto the next page can repeat a meaningful heading.
+        if "continued" not in title.lower():
+            self._page_title_base = title
         self.set_y(8)
         self.set_x(self.MARGIN_L)
         self.set_font("Helvetica", "B", 11)
@@ -1864,30 +1868,14 @@ class HopperPDF(FPDF):
         totals_row : list, optional
             A pre-formatted last row to render in bold with a top border.
         """
-        # -- Header
-        x_start = self.MARGIN_L
-        self.set_fill_color(*HOPPER_NAVY_RGB)
-        self.set_text_color(*WHITE)
-        self.set_font("Helvetica", "B", 7.5)
-        x = x_start
-        for i, h in enumerate(headers):
-            self.set_xy(x, self.get_y())
-            self.cell(col_widths[i], 6.5, _safe(h).upper(), 0, 0, "C", True)
-            x += col_widths[i]
-        self.ln(6.5)
+        # -- Per-column alignment. Headers are aligned the SAME way as their
+        # data column so a right-aligned number sits directly under its header
+        # (avoids the "centred header over left/right data" misalignment).
+        def _col_align(idx):
+            if right_align_idx is not None:
+                return "R" if idx in right_align_idx else "L"
+            return "L"
 
-        def _draw_header():
-            self.set_fill_color(*HOPPER_NAVY_RGB)
-            self.set_text_color(*WHITE)
-            self.set_font("Helvetica", "B", 7.5)
-            xx = x_start
-            for ii, hh in enumerate(headers):
-                self.set_xy(xx, self.get_y())
-                self.cell(col_widths[ii], 6.5, _safe(hh).upper(), 0, 0, "C", True)
-                xx += col_widths[ii]
-            self.ln(6.5)
-
-        # -- Data rows
         def _cell_align(idx, val):
             if right_align_idx is not None:
                 return "R" if idx in right_align_idx else "L"
@@ -1896,12 +1884,38 @@ class HopperPDF(FPDF):
                 return "R"
             return "L"
 
+        # Small horizontal padding so right-aligned text doesn't touch the
+        # column edge and left-aligned text doesn't hug the previous column.
+        PAD = 1.2
+
+        def _draw_header():
+            self.set_fill_color(*HOPPER_NAVY_RGB)
+            self.set_text_color(*WHITE)
+            self.set_font("Helvetica", "B", 7.5)
+            xx = x_start
+            for ii, hh in enumerate(headers):
+                self.set_xy(xx, self.get_y())
+                a = _col_align(ii)
+                self.cell(col_widths[ii] - PAD, 6.5, _safe(hh).upper(), 0, 0, a, True)
+                # paint the padding strip with the same fill so the band is solid
+                self.set_xy(xx + col_widths[ii] - PAD, self.get_y())
+                self.cell(PAD, 6.5, "", 0, 0, "L", True)
+                xx += col_widths[ii]
+            self.ln(6.5)
+
+        # -- Header
+        x_start = self.MARGIN_L
+        _draw_header()
+
+        # -- Data rows
         self.set_font("Helvetica", "", 7)
         for idx_row, row in enumerate(rows[:max_rows]):
-            # Page-break safe
-            if self.get_y() > self.PAGE_H - 22:
+            # Break BEFORE a row would cross the auto page-break trigger, so the
+            # continued rows always carry a repeated column header (never bleed
+            # onto a bare page).
+            if self.get_y() + 6 > self.PAGE_H - 20:
                 self.add_page()
-                self._page_header("(continued)")
+                self._page_header(f"{getattr(self, '_page_title_base', 'Table')} (continued)")
                 _draw_header()
                 self.set_font("Helvetica", "", 7)
 
@@ -1915,16 +1929,18 @@ class HopperPDF(FPDF):
             x = x_start
             for i, cell_val in enumerate(row):
                 self.set_xy(x, self.get_y())
-                self.cell(col_widths[i], 5.8, _safe(str(cell_val)),
+                self.cell(col_widths[i] - PAD, 5.8, _safe(str(cell_val)),
                           0, 0, _cell_align(i, cell_val), True)
+                self.set_xy(x + col_widths[i] - PAD, self.get_y())
+                self.cell(PAD, 5.8, "", 0, 0, "L", True)
                 x += col_widths[i]
             self.ln(5.8)
 
         # -- Optional totals row
         if totals_row:
-            if self.get_y() > self.PAGE_H - 22:
+            if self.get_y() + 8 > self.PAGE_H - 20:
                 self.add_page()
-                self._page_header("(continued)")
+                self._page_header(f"{getattr(self, '_page_title_base', 'Table')} (continued)")
                 _draw_header()
             # Top border
             y_now = self.get_y()
@@ -1939,8 +1955,10 @@ class HopperPDF(FPDF):
             x = x_start
             for i, cell_val in enumerate(totals_row):
                 self.set_xy(x, self.get_y())
-                self.cell(col_widths[i], 6, _safe(str(cell_val)),
+                self.cell(col_widths[i] - PAD, 6, _safe(str(cell_val)),
                           0, 0, _cell_align(i, cell_val), True)
+                self.set_xy(x + col_widths[i] - PAD, self.get_y())
+                self.cell(PAD, 6, "", 0, 0, "L", True)
                 x += col_widths[i]
             self.ln(6)
 
@@ -2269,8 +2287,15 @@ def generate_hopper_pdf_report(
     if "top_opportunities" in sections:
         pdf.add_page()
         pdf._page_header("Global Top 25 Opportunities by CRP Term Benefit")
+        pdf.set_x(pdf.MARGIN_L)
+        pdf.set_font("Helvetica", "I", 8)
+        pdf.set_text_color(*HOPPER_TEXT_MUTE)
+        pdf.cell(0, 4, _safe("Highest-value opportunities portfolio-wide, ranked by CRP term benefit "
+                             "(all regions — not limited by the report filters)."), 0, 1, "L")
+        pdf.ln(1)
 
-        top_sorted = sorted(filtered, key=lambda r: _val(r.get("crp_term_benefit")),
+        global_opps = parsed_data.get("opportunities", []) or filtered
+        top_sorted = sorted(global_opps, key=lambda r: _val(r.get("crp_term_benefit")),
                             reverse=True)[:25]
         headers = ["#", "Region", "Customer", "Engine VS", "Restructure",
                    "Status", "Maturity", "CRP", "2026", "2027", "VP/Owner"]
@@ -2437,6 +2462,272 @@ def _chart_hbar(pairs, title, value_fmt, color=VALUE_HEX, top_n=15):
     return _finish_fig(fig, pad=1.5)
 
 
+def _chart_concentration(values, title):
+    """Pareto of CRP term benefit by individual opportunity (ranked desc):
+    gold value bars + a navy cumulative-share line on a right-hand % axis with
+    an 80% reference line and the count of opportunities needed to reach it.
+    A portfolio concentration view not shown on any other page."""
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    vals = sorted([float(v) for v in values if v and float(v) > 0], reverse=True)
+    if len(vals) < 2:
+        return None
+    total = sum(vals)
+    cum, run = [], 0.0
+    for v in vals:
+        run += v
+        cum.append(run / total * 100.0)
+    n = len(vals)
+    n80 = next((i + 1 for i, c in enumerate(cum) if c >= 80.0), n)
+
+    fig, ax = plt.subplots(figsize=(13, 3.5), dpi=160)
+    xs = list(range(1, n + 1))
+    ax.bar(xs, vals, color=VALUE_HEX, width=0.85, zorder=2)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.spines['bottom'].set_color('#e5e7eb')
+    ax.grid(True, axis='y', **GRID_KW)
+    ax.set_axisbelow(True)
+    ax.tick_params(axis='y', left=False, labelleft=False)
+    ax.tick_params(axis='x', colors='#374151', labelsize=8, length=0)
+    ax.set_xlim(0.3, n + 0.7)
+    ax.set_xlabel("Opportunities ranked by CRP term benefit (highest to lowest)",
+                  fontsize=8, color='#6b7280')
+
+    ax2 = ax.twinx()
+    ax2.plot(xs, cum, color=HOPPER_PRIMARY, linewidth=2.0, marker='o',
+             markersize=3, zorder=3)
+    ax2.axhline(80, color=HOPPER_SLATE, linewidth=1.0, linestyle='--', zorder=1)
+    ax2.set_ylim(0, 106)
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_color('#e5e7eb')
+    ax2.tick_params(axis='y', colors=HOPPER_PRIMARY, labelsize=8, length=0)
+    ax2.set_yticks([0, 20, 40, 60, 80, 100])
+    ax2.set_yticklabels(["0%", "20%", "40%", "60%", "80%", "100%"])
+    ax2.annotate(
+        f"{n80} of {n} opportunities ({n80 / n * 100:.0f}%) drive 80% of CRP term benefit",
+        xy=(n80, 80), xytext=(min(n80 + 1, max(2, n - 1)), 50),
+        fontsize=8.5, color=HOPPER_NAVY, weight='bold',
+        arrowprops=dict(arrowstyle='->', color=HOPPER_SLATE, lw=1))
+    ax.set_title(title, loc='left', pad=8, color=HOPPER_NAVY, fontsize=12, fontweight='bold')
+
+    fig.patch.set_facecolor('white')
+    try:
+        plt.tight_layout(pad=1.4)
+    except Exception:
+        pass
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', bbox_inches='tight', dpi=160, facecolor='white')
+    plt.close(fig)
+    buf.seek(0)
+    return buf
+
+
+# Deterministic donut layout (data-space half-extent and wedge mid-radius) so
+# the maturity donut's wedges can be mapped to exact page coordinates for the
+# interactive hover panels in _inject_maturity_rollovers.
+_DONUT_HALF = 1.35
+_DONUT_MIDR = 0.79
+
+
+def _maturity_donut(mat_n, mat_crp, total_crp):
+    """Square maturity donut (no embedded legend) drawn with a fixed layout so
+    each wedge's mid-angle maps to a known page position. Returns
+    ``(png_buf, wedges)``; each wedge dict carries its mid-angle (degrees, math
+    convention) and the breakdown lines shown on hover."""
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    items = [(k, v) for k, v in sorted(mat_n.items(), key=lambda x: x[1], reverse=True)
+             if v and v > 0]
+    if not items:
+        return None, []
+    total = sum(v for _, v in items) or 1
+    sem = {"mature": HOPPER_GREEN, "immature": "#c98a2e"}
+    palette = [sem.get(str(k).strip().lower(), HOPPER_SLATE) for k, _ in items]
+
+    fig = plt.figure(figsize=(4.6, 4.6), dpi=200)
+    ax = fig.add_axes([0, 0, 1, 1])   # axes fills the whole (square) figure
+    ax.set_aspect('equal')
+    ax.axis('off')
+    ax.pie([v for _, v in items], radius=1.0, startangle=90, counterclock=False,
+           colors=palette, autopct=lambda p: f"{p:.0f}%" if p >= 5 else "",
+           pctdistance=0.79,
+           textprops=dict(color='white', fontsize=13, fontweight='bold'),
+           wedgeprops=dict(width=0.42, edgecolor='white', linewidth=2))
+    ax.set_xlim(-_DONUT_HALF, _DONUT_HALF)
+    ax.set_ylim(-_DONUT_HALF, _DONUT_HALF)
+    ax.text(0, 0, "MATURITY", ha='center', va='center', fontsize=8.5,
+            color=HOPPER_NAVY, fontweight='bold')
+    # NOTE: no bbox_inches='tight' — we need the full square frame intact so
+    # the fraction->page-coordinate mapping below stays valid.
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', dpi=200, facecolor='white')
+    plt.close(fig)
+    buf.seek(0)
+
+    wedges, a = [], 90.0
+    for (k, v), col in zip(items, palette):
+        frac = v / total
+        mid = a - frac * 180.0
+        a -= frac * 360.0
+        crp = mat_crp.get(k, 0)
+        rgb = _hex_to_rgb(col)
+        wedges.append({
+            "label": str(k),
+            "mid_deg": mid,
+            "accent": (rgb[0] / 255.0, rgb[1] / 255.0, rgb[2] / 255.0),
+            "lines": [
+                f"{int(round(v))} opportunities  ({v / total * 100:.0f}% of opportunities)",
+                f"CRP term benefit: {_fmtM_gbp(crp)}",
+                f"Share of CRP term benefit: {_pct(crp, total_crp)}",
+            ],
+        })
+    return buf, wedges
+
+
+def _mm_to_pt(mm):
+    return mm * 72.0 / 25.4
+
+
+def _inject_maturity_rollovers(pdf_bytes, page_index, img_x, img_y, side, wedges,
+                               page_w_mm=297, page_h_mm=210):
+    """Add hover-reveal detail panels over each maturity donut wedge so the PDF
+    becomes interactive (pop-up on hover, works in Adobe Acrobat / Reader). The
+    panel for the hovered wedge is shown via /AA Hide actions — no JavaScript.
+
+    Best-effort: returns ``pdf_bytes`` unchanged if pikepdf is unavailable or
+    anything goes wrong (the report is still valid, just non-interactive)."""
+    if not wedges:
+        return pdf_bytes
+    try:
+        import math
+        import pikepdf
+        from pikepdf import Name, Dictionary, Array, String, Stream
+    except Exception:
+        return pdf_bytes
+
+    def esc(s):
+        return str(s).replace("\\", r"\\").replace("(", r"\(").replace(")", r"\)")
+
+    try:
+        pdf = pikepdf.open(io.BytesIO(bytes(pdf_bytes)))
+        if page_index < 0 or page_index >= len(pdf.pages):
+            return pdf_bytes
+        helv = pdf.make_indirect(Dictionary(Type=Name.Font, Subtype=Name.Type1,
+                                             BaseFont=Name.Helvetica))
+        helvb = pdf.make_indirect(Dictionary(Type=Name.Font, Subtype=Name.Type1,
+                                              BaseFont=Name("/Helvetica-Bold")))
+        font_res = Dictionary(Font=Dictionary(Helv=helv, HeBo=helvb))
+        page = pdf.pages[page_index]
+        if "/Annots" not in page.obj:
+            page.obj.Annots = pdf.make_indirect(Array())
+        annots = page.obj.Annots
+        fields = []
+        counter = [0]
+
+        def uname():
+            counter[0] += 1
+            return f"mzdonut{counter[0]}"
+
+        def make_ap(w, h, content):
+            st = Stream(pdf, content)
+            st.Type = Name.XObject
+            st.Subtype = Name.Form
+            st.FormType = 1
+            st.BBox = Array([0, 0, w, h])
+            st.Resources = Dictionary(Font=Dictionary(Helv=helv, HeBo=helvb))
+            return pdf.make_indirect(st)
+
+        # Shared panel rectangle (points), placed to the right of the donut.
+        pw_mm, ph_mm = 120.0, 38.0
+        px0_mm = img_x + side + 8
+        if px0_mm + pw_mm > page_w_mm - 10:
+            px0_mm = page_w_mm - 10 - pw_mm
+        py_top_mm = img_y + 2
+        panel_x0 = _mm_to_pt(px0_mm)
+        panel_x1 = _mm_to_pt(px0_mm + pw_mm)
+        panel_y1 = _mm_to_pt(page_h_mm) - _mm_to_pt(py_top_mm)
+        panel_y0 = _mm_to_pt(page_h_mm) - _mm_to_pt(py_top_mm + ph_mm)
+        pw_pt, ph_pt = panel_x1 - panel_x0, panel_y1 - panel_y0
+
+        for w in wedges:
+            r, g, b = w["accent"]
+            ops = [
+                "0.972 0.976 0.984 rg 0 0 %.1f %.1f re f" % (pw_pt, ph_pt),
+                "%.3f %.3f %.3f rg 0 0 4 %.1f re f" % (r, g, b, ph_pt),
+                "0.80 0.82 0.86 RG 0.8 w 0 0 %.1f %.1f re S" % (pw_pt, ph_pt),
+            ]
+            ty = ph_pt - 17
+            ops.append("BT /HeBo 12 Tf 0.039 0.114 0.180 rg 12 %.1f Td (%s) Tj ET"
+                       % (ty, esc(w["label"].upper())))
+            ty -= 16
+            for ln in w["lines"]:
+                ops.append("BT /Helv 9.5 Tf 0.16 0.18 0.22 rg 12 %.1f Td (%s) Tj ET"
+                           % (ty, esc(ln)))
+                ty -= 12.5
+            panel_ap = make_ap(pw_pt, ph_pt, ("\n".join(ops) + "\n").encode("latin-1"))
+            pname = uname()
+            panel = pdf.make_indirect(Dictionary(
+                Type=Name.Annot, Subtype=Name.Widget, FT=Name.Btn, Ff=65536,
+                T=String(pname), F=2,   # hidden until hover
+                Rect=Array([panel_x0, panel_y0, panel_x1, panel_y1]),
+                AP=Dictionary(N=panel_ap), MK=Dictionary(),
+                BS=Dictionary(W=0, S=Name.S)))
+            panel.P = page.obj
+            annots.append(panel)
+            fields.append(panel)
+
+            show = pdf.make_indirect(Dictionary(Type=Name.Action, S=Name.Hide,
+                                                T=String(pname), H=False))
+            hide = pdf.make_indirect(Dictionary(Type=Name.Action, S=Name.Hide,
+                                                T=String(pname), H=True))
+
+            mid = math.radians(w["mid_deg"])
+            fx = (_DONUT_MIDR * math.cos(mid) + _DONUT_HALF) / (2 * _DONUT_HALF)
+            fy = (_DONUT_MIDR * math.sin(mid) + _DONUT_HALF) / (2 * _DONUT_HALF)
+            cx_mm = img_x + fx * side
+            cy_mm = img_y + (1 - fy) * side   # page-y grows downward
+            hb = 14.0                          # half-box (mm) -> 28mm hotspot
+            hx0 = _mm_to_pt(cx_mm - hb)
+            hx1 = _mm_to_pt(cx_mm + hb)
+            hy1 = _mm_to_pt(page_h_mm) - _mm_to_pt(cy_mm - hb)
+            hy0 = _mm_to_pt(page_h_mm) - _mm_to_pt(cy_mm + hb)
+            hot = pdf.make_indirect(Dictionary(
+                Type=Name.Annot, Subtype=Name.Widget, FT=Name.Btn, Ff=65536,
+                T=String(uname()), F=4,
+                Rect=Array([hx0, hy0, hx1, hy1]),
+                AP=Dictionary(N=make_ap(hx1 - hx0, hy1 - hy0, b"")),
+                AA=Dictionary(E=show, X=hide),
+                MK=Dictionary(), BS=Dictionary(W=0, S=Name.S)))
+            hot.P = page.obj
+            annots.append(hot)
+            fields.append(hot)
+
+        # AcroForm lets the Hide actions resolve panels by name. NEVER set
+        # NeedAppearances — it would clobber our custom appearance streams.
+        if "/AcroForm" in pdf.Root:
+            acro = pdf.Root.AcroForm
+            if "/Fields" not in acro:
+                acro.Fields = Array(fields)
+            else:
+                for f in fields:
+                    acro.Fields.append(f)
+            acro.DR = font_res
+            acro.DA = String("/Helv 0 Tf 0 g")
+        else:
+            pdf.Root.AcroForm = pdf.make_indirect(Dictionary(
+                Fields=Array(fields), DA=String("/Helv 0 Tf 0 g"), DR=font_res))
+
+        out = io.BytesIO()
+        pdf.save(out)
+        return out.getvalue()
+    except Exception:
+        return pdf_bytes
+
+
 # =============================================================================
 # DETAILED Hopper report — long-form, every analysis, respects filters
 # =============================================================================
@@ -2518,13 +2809,17 @@ def generate_hopper_detailed_pdf_report(parsed_data: dict, sections_to_include: 
         ("Regions", str(len(regions)),
          ", ".join(sorted(regions)[:3]) + ("..." if len(regions) > 3 else ""), HOPPER_GOLD_RGB),
     ], h=20)
-    if cust_sorted:
-        top_c, top_v = cust_sorted[0]
-        top3 = sum(v for _, v in cust_sorted[:3])
-        pdf._narrative(
-            f"Insight - value is concentrated: {top_c} alone holds {_pct(top_v, total_crp)} of CRP term benefit, "
-            f"and the top three customers account for {_pct(top3, total_crp)}. "
-            f"{mature} of {total_opps} opportunities are mature; {onerous} sit within onerous contracts.")
+    # Fill the lower half with a portfolio concentration (Pareto) view — a
+    # cumulative-share curve that appears on no other page.
+    conc_vals = [_val(r.get("crp_term_benefit")) for r in filtered]
+    try:
+        kbuf = _chart_concentration(conc_vals, "Value concentration - cumulative share of CRP term benefit")
+        if kbuf is not None:
+            pdf._section_header("Portfolio value concentration")
+            max_h = (pdf.PAGE_H - 20) - pdf.get_y() - 2
+            _embed_fit(pdf, kbuf, pdf.MARGIN_L, avail_w, max(70, max_h))
+    except Exception:
+        pass
 
     # ---- Pipeline by Status (value + count) ----
     pdf.add_page()
@@ -2547,11 +2842,6 @@ def generate_hopper_detailed_pdf_report(parsed_data: dict, sections_to_include: 
     pdf._table(["Stage", "Opportunities", "CRP Term (GBP m)", "% of CRP"], rows, [130, 40, 55, 30],
                right_align_idx={1, 2, 3},
                totals_row=["TOTAL", str(total_opps), _fmtM_gbp(total_crp), "100.0%"])
-    LATE = {"Negotiations Started", "Negotations Started", "Negotiations Concluded",
-            "Contracting Started", "Contracting Concluded"}
-    late = sum(v for s, v in by_status_crp.items() if s in LATE)
-    pdf._narrative(f"Insight - {_pct(late, total_crp)} of CRP term benefit sits in late-stage "
-                   f"(negotiation / contracting) opportunities, indicating pipeline maturity.")
 
     # ---- Annual Profit Forecast ----
     pdf.add_page()
@@ -2569,30 +2859,26 @@ def generate_hopper_detailed_pdf_report(parsed_data: dict, sections_to_include: 
     pdf._section_header("Annual profit")
     pdf._table(["Year", "Profit (GBP m)", "% of Forecast"], rows, [40, 60, 40], right_align_idx={1, 2},
                totals_row=["TOTAL", _fmtM_gbp(allp), "100.0%"])
-    pdf._narrative(f"Insight - near-term profit (2026-27) of {_fmtM_gbp(near_term)} is "
-                   f"{_pct(near_term, allp)} of the five-year forecast — a front-loaded return profile.")
 
-    # ---- Regional Analysis ----
-    pdf.add_page()
-    pdf._page_header("Regional Analysis")
-    by_region = _aggregate(filtered, "region")
-    reg_n = _aggregate(filtered, "region", count=True)
-    reg_sorted = sorted(by_region.items(), key=lambda x: x[1], reverse=True)
+    # ---- Regional Analysis (only when the data spans more than one region) ----
     if len(regions) > 1:
+        pdf.add_page()
+        pdf._page_header("Regional Analysis")
+        by_region = _aggregate(filtered, "region")
+        reg_n = _aggregate(filtered, "region", count=True)
+        reg_sorted = sorted(by_region.items(), key=lambda x: x[1], reverse=True)
         try:
             buf = _chart_donut(reg_sorted, "CRP by region")
             _embed_fit(pdf, buf, pdf.MARGIN_L, avail_w, 92)
             pdf.ln(2)
         except Exception:
             pass
-    else:
-        pdf._narrative(f"This report is scoped to a single region ({sorted(regions)[0] if regions else '-'}); "
-                       f"the regional split below therefore shows one row.")
-    rows = [[_trunc(r, 40), str(reg_n.get(r, 0)), _fmtM_gbp(v), _pct(v, total_crp)] for r, v in reg_sorted]
-    pdf._section_header("Region breakdown")
-    pdf._table(["Region", "Opportunities", "CRP Term (GBP m)", "% of CRP"], rows, [120, 45, 55, 45],
-               right_align_idx={1, 2, 3},
-               totals_row=["TOTAL", str(total_opps), _fmtM_gbp(total_crp), "100.0%"])
+        rows = [[_trunc(r, 40), str(reg_n.get(r, 0)), _fmtM_gbp(v), _pct(v, total_crp)]
+                for r, v in reg_sorted]
+        pdf._section_header("Region breakdown")
+        pdf._table(["Region", "Opportunities", "CRP Term (GBP m)", "% of CRP"], rows, [120, 45, 55, 45],
+                   right_align_idx={1, 2, 3},
+                   totals_row=["TOTAL", str(total_opps), _fmtM_gbp(total_crp), "100.0%"])
 
     # ---- Customer Analysis (chart + full breakdown w/ profit columns) ----
     pdf.add_page()
@@ -2666,21 +2952,44 @@ def generate_hopper_detailed_pdf_report(parsed_data: dict, sections_to_include: 
                [130, 40, 55, 30], right_align_idx={1, 2, 3},
                totals_row=["TOTAL", str(total_opps), _fmtM_gbp(total_crp), "100.0%"])
 
-    # ---- Maturity & Risk (two donuts + tables) ----
+    # ---- Maturity & Risk (interactive donut + tables) ----
+    maturity_inject = None   # (page_no, img_x, img_y, side, wedges) for post-processing
     pdf.add_page()
     pdf._page_header("Maturity & Risk Profile")
     mat_crp = _aggregate(filtered, "maturity")
     mat_n = _aggregate(filtered, "maturity", count=True)
     on_crp = _aggregate(filtered, "onerous_type")
     on_n = _aggregate(filtered, "onerous_type", count=True)
+    d_x, d_y, d_side = pdf.MARGIN_L + 4, 24, 84
     try:
-        mbuf = _chart_donut(sorted(mat_n.items(), key=lambda x: x[1], reverse=True),
-                            "Maturity (by opportunities)",
-                            palette=[HOPPER_GREEN, '#c98a2e', HOPPER_SLATE])
-        _embed_fit(pdf, mbuf, pdf.MARGIN_L, avail_w, 78)
-        pdf.ln(2)
+        mbuf, mwedges = _maturity_donut(mat_n, mat_crp, total_crp)
+        if mbuf is not None:
+            pdf.image(mbuf, x=d_x, y=d_y, w=d_side, h=d_side)
+            # Static key + interactivity hint to the right of the donut.
+            sem = {"mature": HOPPER_GREEN, "immature": "#c98a2e"}
+            lx, ly = d_x + d_side + 12, d_y + d_side - 30
+            mat_total = sum(mat_n.values()) or 1
+            for k, v in sorted(mat_n.items(), key=lambda x: x[1], reverse=True):
+                if not v:
+                    continue
+                rgb = _hex_to_rgb(sem.get(str(k).strip().lower(), HOPPER_SLATE))
+                pdf.set_fill_color(*rgb)
+                pdf.rect(lx, ly, 4, 4, "F")
+                pdf.set_xy(lx + 6, ly - 0.6)
+                pdf.set_font("Helvetica", "B", 9)
+                pdf.set_text_color(*HOPPER_TEXT_DARK)
+                pdf.cell(60, 5, _safe(f"{k}  -  {v / mat_total * 100:.0f}%"), 0, 0, "L")
+                ly += 7
+            pdf.set_xy(lx, ly + 1)
+            pdf.set_font("Helvetica", "I", 7.5)
+            pdf.set_text_color(*HOPPER_TEXT_MUTE)
+            pdf.cell(0, 4, "Hover a segment for its breakdown (interactive in Adobe Acrobat / Reader).",
+                     0, 1, "L")
+            if mwedges:
+                maturity_inject = (pdf.page_no(), d_x, d_y, d_side, mwedges)
+            pdf.set_y(d_y + d_side + 4)
     except Exception:
-        pass
+        pdf.set_y(d_y + d_side + 4)
     pdf._section_header("Maturity breakdown")
     rows = [[_trunc(k, 40), str(mat_n.get(k, 0)), _fmtM_gbp(v), _pct(v, total_crp)]
             for k, v in sorted(mat_crp.items(), key=lambda x: x[1], reverse=True)]
@@ -2694,35 +3003,17 @@ def generate_hopper_detailed_pdf_report(parsed_data: dict, sections_to_include: 
     pdf._narrative(f"Insight - {_pct(onerous, total_opps)} of opportunities are onerous and "
                    f"{_pct(immature, total_opps)} are immature — the principal execution risks to the forecast.")
 
-    # ---- Ownership (VP / Owner) ----
-    vp_crp = {}
-    vp_n = {}
-    for r in filtered:
-        v = str(r.get("vp_owner", "")).strip()
-        if not v:
-            continue
-        vp_crp[v] = vp_crp.get(v, 0) + _val(r.get("crp_term_benefit"))
-        vp_n[v] = vp_n.get(v, 0) + 1
-    if vp_crp:
-        pdf.add_page()
-        pdf._page_header("Ownership — VP / Owner")
-        try:
-            vbuf = _chart_hbar(list(vp_crp.items()), "Top owners by CRP term benefit (£m)",
-                               lambda v: f"£{v:,.1f}m", color=VALUE_HEX, top_n=12)
-            _embed_fit(pdf, vbuf, pdf.MARGIN_L, avail_w, 95)
-            pdf.ln(2)
-        except Exception:
-            pass
-        rows = [[_trunc(k, 50), str(vp_n.get(k, 0)), _fmtM_gbp(v), _pct(v, total_crp)]
-                for k, v in sorted(vp_crp.items(), key=lambda x: x[1], reverse=True)]
-        pdf._section_header("Owner breakdown")
-        pdf._table(["VP / Owner", "Opportunities", "CRP Term (GBP m)", "% of CRP"], rows,
-                   [120, 45, 55, 45], right_align_idx={1, 2, 3}, max_rows=40)
-
-    # ---- Top 25 register ----
+    # ---- Global Top 25 (across ALL regions, ignoring filters) ----
     pdf.add_page()
     pdf._page_header("Global Top 25 Opportunities by CRP Term Benefit")
-    top_sorted = sorted(filtered, key=lambda r: _val(r.get("crp_term_benefit")), reverse=True)[:25]
+    pdf.set_x(pdf.MARGIN_L)
+    pdf.set_font("Helvetica", "I", 8)
+    pdf.set_text_color(*HOPPER_TEXT_MUTE)
+    pdf.cell(0, 4, _safe("Highest-value opportunities portfolio-wide, ranked by CRP term benefit "
+                         "(all regions — not limited by the report filters)."), 0, 1, "L")
+    pdf.ln(1)
+    global_opps = parsed_data.get("opportunities", []) or filtered
+    top_sorted = sorted(global_opps, key=lambda r: _val(r.get("crp_term_benefit")), reverse=True)[:25]
     rows = []
     for i, r in enumerate(top_sorted, 1):
         rows.append([str(i), _trunc(r.get("region", ""), 12), _trunc(r.get("customer", ""), 18),
@@ -2735,26 +3026,12 @@ def generate_hopper_detailed_pdf_report(parsed_data: dict, sections_to_include: 
                 "CRP", "2026", "2027", "VP/Owner"], rows,
                [8, 22, 35, 30, 30, 28, 18, 22, 18, 18, 35], right_align_idx={0, 7, 8, 9}, max_rows=25)
 
-    # ---- Full opportunities register (all rows) ----
-    pdf.add_page()
-    pdf._page_header("Full Opportunities Register")
-    rows = []
-    for i, r in enumerate(top_sorted_all := sorted(filtered, key=lambda r: _val(r.get("crp_term_benefit")),
-                                                   reverse=True), 1):
-        rows.append([str(i), _trunc(r.get("region", ""), 12), _trunc(r.get("customer", ""), 18),
-                     _trunc(r.get("engine_value_stream", r.get("top_level_evs", "")), 16),
-                     _trunc(r.get("restructure_type", ""), 16), _trunc(r.get("status", ""), 14),
-                     _trunc(r.get("maturity", ""), 9), _fmtM_short(_val(r.get("crp_term_benefit"))),
-                     _trunc(r.get("vp_owner", ""), 20)])
-    pdf._table(["#", "Region", "Customer", "Engine VS", "Restructure", "Status", "Maturity",
-                "CRP", "VP/Owner"], rows,
-               [8, 24, 38, 32, 32, 30, 20, 24, 40], right_align_idx={0, 7}, max_rows=400)
-
     # ---- Opportunities (initiatives) ----
-    init_opps = [r for r in top_sorted_all if str(r.get("initiative", "") or "").strip()]
+    init_opps = [r for r in sorted(filtered, key=lambda r: _val(r.get("crp_term_benefit")), reverse=True)
+                 if str(r.get("initiative", "") or "").strip()]
     if init_opps:
         pdf.add_page()
-        pdf._page_header("Opportunities")
+        pdf._page_header("Opportunities")  # detailed-report initiatives
         body_w = pdf.PAGE_W - pdf.MARGIN_L - pdf.MARGIN_R
         for idx, r in enumerate(init_opps):
             init_text = str(r.get("initiative", "") or "").strip()
@@ -2781,4 +3058,9 @@ def generate_hopper_detailed_pdf_report(parsed_data: dict, sections_to_include: 
             pdf.multi_cell(body_w, 5.2, _safe(init_text))
             pdf.ln(3)
 
-    return bytes(pdf.output())
+    out = bytes(pdf.output())
+    # Make the maturity donut interactive: hover a wedge to reveal its details.
+    if maturity_inject:
+        page_no, ix, iy, side, wedges = maturity_inject
+        out = _inject_maturity_rollovers(out, page_no - 1, ix, iy, side, wedges)
+    return out
