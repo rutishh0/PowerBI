@@ -123,14 +123,68 @@ def init_db():
             """
             cursor.execute(create_r2_table)
 
+            # Generic key→JSON store (used by the holidays editor, etc.)
+            create_kv_table = """
+            CREATE TABLE IF NOT EXISTS app_kv (
+                key VARCHAR(128) PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+            cursor.execute(create_kv_table)
+
             connection.commit()
-            print("Database initialized successfully (file_uploads + r2_file_uploads).")
+            print("Database initialized successfully (file_uploads + r2_file_uploads + app_kv).")
         except Error as e:
             print(f"Error initializing database: {e}")
         finally:
             return_db_connection(connection)
     else:
         print("Failed to connect to database during initialization.")
+
+
+# ─────────────────────────────────────────────────────────────
+# POSTGRES — generic key→JSON store (app_kv)
+# ─────────────────────────────────────────────────────────────
+
+def kv_get(key):
+    """Return the stored string value for ``key`` (or None if absent / DB down)."""
+    connection = get_db_connection()
+    if not connection:
+        return None
+    try:
+        cursor = connection.cursor()
+        cursor.execute("SELECT value FROM app_kv WHERE key = %s", (key,))
+        row = cursor.fetchone()
+        return row[0] if row else None
+    except Error as e:
+        print(f"kv_get error for '{key}': {e}")
+        return None
+    finally:
+        return_db_connection(connection)
+
+
+def kv_set(key, value):
+    """Upsert ``key`` → ``value`` (a string). Returns True on success."""
+    connection = get_db_connection()
+    if not connection:
+        return False
+    try:
+        cursor = connection.cursor()
+        cursor.execute(
+            """
+            INSERT INTO app_kv (key, value, updated_at) VALUES (%s, %s, CURRENT_TIMESTAMP)
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP
+            """,
+            (key, value),
+        )
+        connection.commit()
+        return True
+    except Error as e:
+        print(f"kv_set error for '{key}': {e}")
+        return False
+    finally:
+        return_db_connection(connection)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -352,6 +406,39 @@ def download_from_r2(r2_key):
     except ClientError as e:
         print(f"R2 download error for {r2_key}: {e}")
         return None
+
+
+def r2_get_text(key):
+    """Read a small text/JSON object from R2 by key. Returns str or None
+    (None also when the key doesn't exist yet — that's normal)."""
+    client = get_r2_client()
+    if not client:
+        return None
+    try:
+        r = client.get_object(Bucket=R2_BUCKET_NAME, Key=key)
+        return r["Body"].read().decode("utf-8")
+    except ClientError as e:
+        code = e.response.get("Error", {}).get("Code")
+        if code not in ("NoSuchKey", "404", "NoSuchBucket"):
+            print(f"R2 get_text error for {key}: {e}")
+        return None
+    except Exception as e:
+        print(f"R2 get_text error for {key}: {e}")
+        return None
+
+
+def r2_put_text(key, text, content_type="application/json"):
+    """Write a small text/JSON object to R2 under key. Returns True on success."""
+    client = get_r2_client()
+    if not client:
+        return False
+    try:
+        client.put_object(Bucket=R2_BUCKET_NAME, Key=key,
+                          Body=text.encode("utf-8"), ContentType=content_type)
+        return True
+    except Exception as e:
+        print(f"R2 put_text error for {key}: {e}")
+        return False
 
 
 def delete_from_r2(r2_key):

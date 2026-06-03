@@ -1,0 +1,741 @@
+{
+ "UAE": {
+  "holidays": [
+   {
+    "date": "2026-01-01",
+    "name": "New Year's Day",
+    "note": null
+   },
+   {
+    "date": "2026-03-20",
+    "name": "Eid Al Fitr",
+    "note": "From 01 to 03 Shawwal"
+   },
+   {
+    "date": "2026-03-21",
+    "name": "Eid Al Fitr",
+    "note": null
+   },
+   {
+    "date": "2026-03-22",
+    "name": "Eid Al Fitr",
+    "note": null
+   },
+   {
+    "date": "2026-05-26",
+    "name": "Arafat Day",
+    "note": "9 Thu Al-Hijjah"
+   },
+   {
+    "date": "2026-05-27",
+    "name": "Eid Al Adha",
+    "note": "From 10 to 12 Dhu Al-Hijjah"
+   },
+   {
+    "date": "2026-05-28",
+    "name": "Eid Al Adha",
+    "note": null
+   },
+   {
+    "date": "2026-05-29",
+    "name": "Eid Al Adha",
+    "note": null
+   },
+   {
+    "date": "2026-06-16",
+    "name": "Al Hijri Islamic New Year",
+    "note": "1 Muharram 1448"
+   },
+   {
+    "date": "2026-08-25",
+    "name": "Prophet's Birthday",
+    "note": "12 Rabi' Al Awal"
+   },
+   {
+    "date": "2026-12-02",
+    "name": "UAE National Day",
+    "note": null
+   },
+   {
+    "date": "2026-12-03",
+    "name": "UAE National Day",
+    "note": null
+   },
+   {
+    "date": "2026-12-25",
+    "name": "Christmas Day",
+    "note": null
+   }
+  ],
+  "notes": [
+   "Ramadan is on 18 Feb 2026.",
+   "*As most holidays follow the Islamic calendar, final dates will be confirmed by government authorities."
+  ]
+ },
+ "Oman": {
+  "holidays": [
+   {
+    "date": "2026-01-11",
+    "name": "Accession Day",
+    "note": null
+   },
+   {
+    "date": "2026-01-17",
+    "name": "Al Isra'a a Wal Mi'raj",
+    "note": "Sultan's Ascension Day"
+   },
+   {
+    "date": "2026-03-20",
+    "name": "Eid Al Fitr",
+    "note": null
+   },
+   {
+    "date": "2026-03-21",
+    "name": "Eid Al Fitr",
+    "note": null
+   },
+   {
+    "date": "2026-03-22",
+    "name": "Eid Al Fitr",
+    "note": null
+   },
+   {
+    "date": "2026-03-23",
+    "name": "Eid Al Fitr",
+    "note": null
+   },
+   {
+    "date": "2026-05-26",
+    "name": "Arafat Day",
+    "note": null
+   },
+   {
+    "date": "2026-05-27",
+    "name": "Eid Al Adha",
+    "note": null
+   },
+   {
+    "date": "2026-05-28",
+    "name": "Eid Al Adha",
+    "note": null
+   },
+   {
+    "date": "2026-05-29",
+    "name": "Eid Al Adha",
+    "note": null
+   },
+   {
+    "date": "2026-05-30",
+    "name": "Eid Al Adha",
+    "note": null
+   },
+   {
+    "date": "2026-06-16",
+    "name": "Al Hijri Islamic New Year",
+    "note": "1 Muharram 1448"
+   },
+   {
+    "date": "2026-08-25",
+    "name": "Prophet's Birthday",
+    "note": "12 Rabi' Al Awal"
+   },
+   {
+    "date": "2026-11-20",
+    "name": "Birthday of HM Sultan Qaboos & Oman National Day",
+    "note": null
+   },
+   {
+    "date": "2026-11-21",
+    "name": "Birthday of HM Sultan Qaboos & Oman National Day",
+    "note": null
+   },
+   {
+    "date": "2026-12-25",
+    "name": "Christmas Day",
+    "note": null
+   }
+  ],
+  "notes": [
+   "Ramadan is on 19 Feb 2026.",
+   "*As most holidays follow the Islamic calendar, final dates will be confirmed by government authorities."
+  ]
+ },
+ "Qatar": {
+  "holidays": [
+   {
+    "date": "2026-02-10",
+    "name": "National Sports Day",
+    "note": null
+   },
+   {
+    "date": "2026-03-20",
+    "name": "Eid Al Fitr",
+    "note": null
+   },
+   {
+    "date": "2026-03-21",
+    "name": "Eid Al Fitr",
+    "note": null
+   },
+   {
+    "date": "2026-03-22",
+    "name": "Eid Al Fitr",
+    "note": null
+   },
+   {
+    "date": "2026-03-23",
+    "name": "Eid Al Fitr",
+    "note": null
+   },
+   {
+    "date": "2026-05-26",
+    "name": "Arafat Day",
+    "note": null
+   },
+   {
+    "date": "2026-05-27",
+    "name": "Eid Al Adha",
+    "note": null
+   },
+   {
+    "date": "2026-05-28",
+    "name": "Eid Al Adha",
+    "note": null
+   },
+   {
+    "date": "2026-12-18",
+    "name": "National Day",
+    "note": null
+   },
+   {
+    "date": "2026-12-25",
+    "name": "Christmas Day",
+    "note": null
+   }
+  ],
+  "notes": [
+   "Ramadan is on 18 Feb 2026.",
+   "*As most holidays follow the Islamic calendar, final dates will be confirmed by government authorities."
+  ]
+ },
+ "Bahrain": {
+  "holidays": [
+   {
+    "date": "2026-01-01",
+    "name": "New Year's Day",
+    "note": null
+   },
+   {
+    "date": "2026-03-20",
+    "name": "Eid Al Fitr",
+    "note": null
+   },
+   {
+    "date": "2026-03-21",
+    "name": "Eid Al Fitr",
+    "note": null
+   },
+   {
+    "date": "2026-03-22",
+    "name": "Eid Al Fitr",
+    "note": null
+   },
+   {
+    "date": "2026-05-01",
+    "name": "Labour Day",
+    "note": null
+   },
+   {
+    "date": "2026-05-26",
+    "name": "Arafat Day",
+    "note": null
+   },
+   {
+    "date": "2026-05-27",
+    "name": "Eid Al Adha",
+    "note": null
+   },
+   {
+    "date": "2026-05-28",
+    "name": "Eid Al Adha",
+    "note": null
+   },
+   {
+    "date": "2026-05-29",
+    "name": "Eid Al Adha",
+    "note": null
+   },
+   {
+    "date": "2026-06-16",
+    "name": "Al Hijri Islamic New Year",
+    "note": "1 Muharram 1448"
+   },
+   {
+    "date": "2026-06-25",
+    "name": "Ashoora",
+    "note": null
+   },
+   {
+    "date": "2026-06-26",
+    "name": "Ashoora",
+    "note": null
+   },
+   {
+    "date": "2026-08-25",
+    "name": "Prophet's Birthday",
+    "note": "12 Rabi' Al Awal"
+   },
+   {
+    "date": "2026-12-16",
+    "name": "National Day",
+    "note": null
+   },
+   {
+    "date": "2026-12-17",
+    "name": "National Day",
+    "note": null
+   }
+  ],
+  "notes": [
+   "Ramadan is on 18 Feb 2026.",
+   "*As most holidays follow the Islamic calendar, final dates will be confirmed by government authorities."
+  ]
+ },
+ "KSA": {
+  "holidays": [
+   {
+    "date": "2026-02-22",
+    "name": "Founding Day",
+    "note": null
+   },
+   {
+    "date": "2026-03-15",
+    "name": "Eid Al Fitr",
+    "note": null
+   },
+   {
+    "date": "2026-03-16",
+    "name": "Eid Al Fitr",
+    "note": null
+   },
+   {
+    "date": "2026-03-17",
+    "name": "Eid Al Fitr",
+    "note": null
+   },
+   {
+    "date": "2026-03-18",
+    "name": "Eid Al Fitr",
+    "note": null
+   },
+   {
+    "date": "2026-03-19",
+    "name": "Eid Al Fitr",
+    "note": null
+   },
+   {
+    "date": "2026-03-20",
+    "name": "Eid Al Fitr",
+    "note": null
+   },
+   {
+    "date": "2026-03-21",
+    "name": "Eid Al Fitr",
+    "note": null
+   },
+   {
+    "date": "2026-03-22",
+    "name": "Eid Al Fitr",
+    "note": null
+   },
+   {
+    "date": "2026-03-23",
+    "name": "Eid Al Fitr",
+    "note": null
+   },
+   {
+    "date": "2026-03-24",
+    "name": "Eid Al Fitr",
+    "note": null
+   },
+   {
+    "date": "2026-05-24",
+    "name": "Arafat Day",
+    "note": null
+   },
+   {
+    "date": "2026-05-25",
+    "name": "Eid Al Adha",
+    "note": null
+   },
+   {
+    "date": "2026-05-26",
+    "name": "Eid Al Adha",
+    "note": null
+   },
+   {
+    "date": "2026-05-27",
+    "name": "Eid Al Adha",
+    "note": null
+   },
+   {
+    "date": "2026-05-28",
+    "name": "Eid Al Adha",
+    "note": null
+   },
+   {
+    "date": "2026-05-29",
+    "name": "Eid Al Adha",
+    "note": null
+   },
+   {
+    "date": "2026-05-30",
+    "name": "Eid Al Adha",
+    "note": null
+   },
+   {
+    "date": "2026-05-31",
+    "name": "Eid Al Adha",
+    "note": null
+   },
+   {
+    "date": "2026-06-01",
+    "name": "Eid Al Adha",
+    "note": null
+   },
+   {
+    "date": "2026-09-23",
+    "name": "National Day",
+    "note": null
+   },
+   {
+    "date": "2026-09-24",
+    "name": "National Day",
+    "note": null
+   }
+  ],
+  "notes": [
+   "Ramadan is on 18 Feb 2026.",
+   "*As most holidays follow the Islamic calendar, final dates will be confirmed by government authorities."
+  ]
+ },
+ "Egypt": {
+  "holidays": [
+   {
+    "date": "2026-01-07",
+    "name": "Orthodox Christmas Day",
+    "note": null
+   },
+   {
+    "date": "2026-01-25",
+    "name": "Revolution and National Police Day",
+    "note": null
+   },
+   {
+    "date": "2026-03-21",
+    "name": "Eid Al Fitr",
+    "note": null
+   },
+   {
+    "date": "2026-03-22",
+    "name": "Eid Al Fitr",
+    "note": null
+   },
+   {
+    "date": "2026-03-23",
+    "name": "Eid Al Fitr",
+    "note": null
+   },
+   {
+    "date": "2026-03-24",
+    "name": "Eid Al Fitr",
+    "note": null
+   },
+   {
+    "date": "2026-04-13",
+    "name": "Sham El Nessim",
+    "note": null
+   },
+   {
+    "date": "2026-04-25",
+    "name": "Sinai Liberation Day",
+    "note": null
+   },
+   {
+    "date": "2026-05-01",
+    "name": "Labour Day",
+    "note": null
+   },
+   {
+    "date": "2026-05-26",
+    "name": "Arafat Day",
+    "note": null
+   },
+   {
+    "date": "2026-05-27",
+    "name": "Eid Al Adha",
+    "note": null
+   },
+   {
+    "date": "2026-05-28",
+    "name": "Eid Al Adha",
+    "note": null
+   },
+   {
+    "date": "2026-05-29",
+    "name": "Eid Al Adha",
+    "note": null
+   },
+   {
+    "date": "2026-05-30",
+    "name": "Eid Al Adha",
+    "note": null
+   },
+   {
+    "date": "2026-06-16",
+    "name": "Al Hijri Islamic New Year",
+    "note": "1 Muharram 1448"
+   },
+   {
+    "date": "2026-06-30",
+    "name": "June 30 Revolution",
+    "note": null
+   },
+   {
+    "date": "2026-08-25",
+    "name": "Prophet's Birthday",
+    "note": null
+   },
+   {
+    "date": "2026-10-06",
+    "name": "Armed Forces Day",
+    "note": null
+   }
+  ],
+  "notes": [
+   "Ramadan is on 19 Feb 2026.",
+   "*As most holidays follow the Islamic calendar, final dates will be confirmed by government authorities."
+  ]
+ },
+ "South Africa": {
+  "holidays": [
+   {
+    "date": "2026-01-01",
+    "name": "New Year's Day",
+    "note": null
+   },
+   {
+    "date": "2026-03-21",
+    "name": "Human Rights Day",
+    "note": null
+   },
+   {
+    "date": "2026-04-03",
+    "name": "Good Friday",
+    "note": null
+   },
+   {
+    "date": "2026-04-06",
+    "name": "Family Day",
+    "note": null
+   },
+   {
+    "date": "2026-04-27",
+    "name": "Freedom Day",
+    "note": null
+   },
+   {
+    "date": "2026-05-01",
+    "name": "International Worker's Day",
+    "note": null
+   },
+   {
+    "date": "2026-06-16",
+    "name": "Youth Day",
+    "note": null
+   },
+   {
+    "date": "2026-08-09",
+    "name": "National Women's Day",
+    "note": null
+   },
+   {
+    "date": "2026-09-24",
+    "name": "Heritage Day",
+    "note": null
+   },
+   {
+    "date": "2026-12-16",
+    "name": "Day of Reconciliation",
+    "note": null
+   },
+   {
+    "date": "2026-12-25",
+    "name": "Christmas Day",
+    "note": null
+   },
+   {
+    "date": "2026-12-26",
+    "name": "Day of Goodwill",
+    "note": null
+   }
+  ],
+  "notes": [
+   "Ramadan is on 19 Feb 2026."
+  ]
+ },
+ "Ethiopia": {
+  "holidays": [
+   {
+    "date": "2026-01-07",
+    "name": "Ethiopian Christmas Day",
+    "note": null
+   },
+   {
+    "date": "2026-01-19",
+    "name": "Ephiphany/Timkat",
+    "note": null
+   },
+   {
+    "date": "2026-03-02",
+    "name": "Adwa Victory Day",
+    "note": null
+   },
+   {
+    "date": "2026-03-20",
+    "name": "Eid Al Fitr",
+    "note": null
+   },
+   {
+    "date": "2026-04-10",
+    "name": "Good Friday",
+    "note": null
+   },
+   {
+    "date": "2026-04-12",
+    "name": "Fasika",
+    "note": null
+   },
+   {
+    "date": "2026-05-01",
+    "name": "International Labour Day",
+    "note": null
+   },
+   {
+    "date": "2026-05-05",
+    "name": "Patriots Day",
+    "note": null
+   },
+   {
+    "date": "2026-05-27",
+    "name": "Eid-Al Adha",
+    "note": null
+   },
+   {
+    "date": "2026-05-28",
+    "name": "Derg Downfall Day",
+    "note": null
+   },
+   {
+    "date": "2026-08-26",
+    "name": "Prophet's Birthday",
+    "note": null
+   },
+   {
+    "date": "2026-09-27",
+    "name": "Meskel",
+    "note": null
+   },
+   {
+    "date": "2026-10-26",
+    "name": "Defense Day",
+    "note": null
+   }
+  ],
+  "notes": [
+   "Ramadan is on 18 Feb 2026."
+  ]
+ },
+ "Lebanon": {
+  "holidays": [
+   {
+    "date": "2026-01-01",
+    "name": "New Year's Day",
+    "note": null
+   },
+   {
+    "date": "2026-01-06",
+    "name": "Christmas Day - Armenian Orthdox",
+    "note": null
+   },
+   {
+    "date": "2026-02-09",
+    "name": "St. Maroun Day",
+    "note": null
+   },
+   {
+    "date": "2026-03-20",
+    "name": "Eid Al Fitr",
+    "note": null
+   },
+   {
+    "date": "2026-03-21",
+    "name": "Eid Al Fitr",
+    "note": null
+   },
+   {
+    "date": "2026-03-25",
+    "name": "Annunciation Day",
+    "note": null
+   },
+   {
+    "date": "2026-04-03",
+    "name": "Good Friday",
+    "note": null
+   },
+   {
+    "date": "2026-04-06",
+    "name": "Easter Monday",
+    "note": "or 13 April"
+   },
+   {
+    "date": "2026-05-01",
+    "name": "International Worker's Day",
+    "note": null
+   },
+   {
+    "date": "2026-06-16",
+    "name": "Al Hijri Islamic New Year",
+    "note": "1 Muharram 1448"
+   },
+   {
+    "date": "2026-07-05",
+    "name": "Commemoration of Ashoura",
+    "note": null
+   },
+   {
+    "date": "2026-08-25",
+    "name": "Prophet's Birthday",
+    "note": "12 Rabi' Al Awal"
+   },
+   {
+    "date": "2026-11-22",
+    "name": "Independence Day",
+    "note": null
+   },
+   {
+    "date": "2026-12-24",
+    "name": "Christmas Eve",
+    "note": null
+   },
+   {
+    "date": "2026-12-25",
+    "name": "Christmas Day",
+    "note": null
+   }
+  ],
+  "notes": [
+   "Ramadan is on 18 Feb 2026."
+  ]
+ }
+}

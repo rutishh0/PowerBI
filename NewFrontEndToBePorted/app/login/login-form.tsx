@@ -101,10 +101,6 @@ export function LoginForm() {
           </>
         )}
       </Button>
-
-      <p className="text-[11px] text-sidebar-foreground/40 text-center">
-        Default demo code: <span className="font-mono text-sidebar-foreground/60">rollsroyce</span>
-      </p>
     </form>
   )
 }

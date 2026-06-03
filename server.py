@@ -12,6 +12,7 @@ Usage:
 
 import io
 import os
+import json
 import uuid
 import math
 import base64
@@ -30,7 +31,7 @@ from parser import parse_file
 from parser import parse_soa_workbook, serialize_parsed_data, aging_bucket, fmt_currency, AGING_ORDER, AGING_COLORS
 from pdf_export import generate_pdf_report
 from ai_chat import build_system_prompt, call_openrouter
-from storage import init_db, save_file_to_db
+from storage import init_db, save_file_to_db, kv_get, kv_set, r2_get_text, r2_put_text
 from storage import (
     download_from_r2, delete_from_r2,
     generate_r2_key, create_multipart_upload, upload_part,
@@ -201,7 +202,7 @@ def api_login():
     """JSON login endpoint. Body: {password}. Sets the Flask session cookie on success."""
     data = request.get_json(silent=True) or {}
     password = data.get("password") or ""
-    expected_password = os.environ.get("APP_PASSWORD", "rollsroyce")
+    expected_password = os.environ.get("APP_PASSWORD", "RRAM2026")
     if password != expected_password:
         return jsonify({"ok": False, "error": "Invalid access code"}), 401
     session["authenticated"] = True
@@ -315,6 +316,119 @@ def beta_legacy_subpath(subpath):
 @app.route("/holidays/", methods=["GET", "HEAD"])
 def holidays_page():
     return send_from_directory(STATIC_PAGES_DIR, "ME_A_Holidays_2026.html")
+
+
+# ── Holidays editor API (powers the public /holidays page) ──────────────────
+# Persistence: Cloudflare R2 (object holidays_2026.json) is the primary store;
+# Postgres app_kv is a fallback if R2 isn't configured. Either survives restarts
+# and is shared across visitors.
+HOLIDAYS_R2_KEY = "app/holidays_2026.json"
+HOLIDAYS_KV_KEY = "holidays_2026"
+HOLIDAYS_EDIT_PASSWORD = os.environ.get("HOLIDAYS_EDIT_PASSWORD", "RRAM2026")
+_HOLIDAYS_DEFAULT_PATH = os.path.join(STATIC_PAGES_DIR, "holidays_2026_default.json")
+
+
+def _holidays_load_raw():
+    """Load the saved holidays JSON string: R2 first, then Postgres KV."""
+    try:
+        raw = r2_get_text(HOLIDAYS_R2_KEY)
+    except Exception:
+        raw = None
+    if raw:
+        return raw
+    try:
+        return kv_get(HOLIDAYS_KV_KEY)
+    except Exception:
+        return None
+
+
+def _holidays_save_raw(text):
+    """Persist the holidays JSON string: try R2, then Postgres KV."""
+    try:
+        if r2_put_text(HOLIDAYS_R2_KEY, text):
+            return True
+    except Exception:
+        pass
+    try:
+        return kv_set(HOLIDAYS_KV_KEY, text)
+    except Exception:
+        return False
+
+
+def _holidays_default():
+    try:
+        with open(_HOLIDAYS_DEFAULT_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _sanitize_holidays(data):
+    """Coerce posted data into {market: {holidays:[{date,name,note}], notes:[...]}}."""
+    if not isinstance(data, dict):
+        raise ValueError("data must be an object keyed by market")
+    out = {}
+    for market, rec in list(data.items())[:50]:
+        market = str(market).strip()[:60]
+        if not market or not isinstance(rec, dict):
+            continue
+        hols = []
+        for h in (rec.get("holidays") or [])[:300]:
+            if not isinstance(h, dict):
+                continue
+            date = str(h.get("date") or "").strip()[:10]
+            name = str(h.get("name") or "").strip()[:140]
+            note = h.get("note")
+            note = (str(note).strip()[:300] or None) if note not in (None, "") else None
+            if date and name:
+                hols.append({"date": date, "name": name, "note": note})
+        hols.sort(key=lambda x: x["date"])
+        notes = [str(n).strip()[:300] for n in (rec.get("notes") or [])[:20] if str(n).strip()]
+        out[market] = {"holidays": hols, "notes": notes}
+    if not out:
+        raise ValueError("no valid markets in data")
+    return out
+
+
+@app.route("/api/holidays", methods=["GET"])
+def holidays_get():
+    """Public — current holidays data (saved override if present, else bundled default)."""
+    raw = _holidays_load_raw()
+    payload, source = None, "default"
+    if raw:
+        try:
+            payload = json.loads(raw)
+            source = "db"
+        except Exception:
+            payload = None
+    if payload is None:
+        payload = _holidays_default()
+    # Manual dump so market insertion order is preserved (jsonify sorts keys).
+    return app.response_class(
+        json.dumps({"data": payload, "source": source}, ensure_ascii=False),
+        mimetype="application/json")
+
+
+@app.route("/api/holidays/verify", methods=["POST"])
+def holidays_verify():
+    """Check the edit password (so the page can unlock edit mode)."""
+    data = request.get_json(silent=True) or {}
+    return jsonify({"ok": (data.get("password") or "") == HOLIDAYS_EDIT_PASSWORD})
+
+
+@app.route("/api/holidays", methods=["POST"])
+def holidays_save():
+    """Persist edited holidays. Requires the edit password."""
+    data = request.get_json(silent=True) or {}
+    if (data.get("password") or "") != HOLIDAYS_EDIT_PASSWORD:
+        return jsonify({"ok": False, "error": "Invalid edit password"}), 401
+    try:
+        clean = _sanitize_holidays(data.get("data"))
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Invalid data: {e}"}), 400
+    if not _holidays_save_raw(json.dumps(clean, ensure_ascii=False)):
+        return jsonify({"ok": False, "error": "Could not persist (storage unavailable)."}), 503
+    return jsonify({"ok": True, "markets": len(clean)})
 
 
 # Catch-all front-end serve. GET/HEAD only — POSTs are reserved for the
