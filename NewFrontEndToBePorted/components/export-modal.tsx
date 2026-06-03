@@ -117,9 +117,10 @@ export function ExportModal({ open, onOpenChange, activeFile, filters }: Props) 
       let status = "queued"
       let note: string | null = null
       let serverName: string | null = null
-      // Poll up to ~5 min (the model + render can take a couple of minutes).
-      for (let i = 0; i < 150; i++) {
-        await new Promise((r) => setTimeout(r, 2000))
+      // Poll up to ~10 min — kimi-k2.6 is slow and a full report (esp. HTML)
+      // can take several minutes.
+      for (let i = 0; i < 240; i++) {
+        await new Promise((r) => setTimeout(r, 2500))
         const s = await getAiReportStatus(job_id)
         setAiProgress(s.progress || s.status)
         status = s.status

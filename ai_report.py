@@ -62,6 +62,15 @@ KIMI_MODEL = "moonshotai/kimi-k2.6"
 
 MODES = ("catalog", "charts", "html")
 
+# kimi-k2.6 is a slow thinking model. We STREAM with thinking on (keeps NVIDIA's
+# gateway alive on long generations — avoids the 504 a long non-streaming request
+# hits — and lets us report live progress). If streaming is blocked (some proxies
+# silently buffer text/event-stream) or returns nothing, we fall back to a fast
+# NON-streaming call with thinking disabled and a capped budget.
+BLUEPRINT_MAX_TOKENS = 24000
+HTML_MAX_TOKENS = 32000
+THINKING_OFF = {"chat_template_kwargs": {"thinking": False}}
+
 # Bound the report so a single generation can't run away on cost / pages.
 MAX_SECTIONS = 8
 MAX_VISUALS_PER_SECTION = 3
@@ -370,69 +379,108 @@ svg {{ max-width: 100%; }}
 # 3. KIMI CLIENT (NVIDIA)  — raw text, streaming-accumulate, JSON repair
 # =============================================================================
 
+class _EmptyCompletion(RuntimeError):
+    """Raised when the model streamed no answer `content` (e.g. a thinking model
+    that spent its whole output budget on reasoning)."""
+
+
 def call_kimi_raw(system_prompt: str, user_prompt: str, *, max_tokens: int = 16384,
-                  temperature: float = 0.45, response_json: bool = False) -> str:
+                  temperature: float = 0.45, response_json: bool = False,
+                  extra: dict = None, progress=None) -> str:
     """Call Kimi K2.6 via NVIDIA and return the raw assistant text.
 
-    Mirrors ``ai_chat.call_nvidia``'s streaming-accumulate loop (the NVIDIA Kimi
-    endpoint requires ``stream=True``) but returns raw text so the caller can
-    parse its own JSON. Raises RuntimeError on transport / empty-response errors.
+    Primary: STREAMING with thinking on (matches ai_chat.call_nvidia; keeps the
+    gateway alive on long generations and reports live progress via ``progress``).
+    Fallback: if streaming is blocked/silent (some proxies buffer SSE) or yields
+    no answer, retry NON-streaming with thinking disabled and a capped budget —
+    fast, proxy-safe and 504-safe.
     """
     if not NVIDIA_API_KEY:
         raise RuntimeError("NVIDIA_API_KEY is not set — cannot reach the Kimi endpoint.")
 
-    headers = {
-        "Authorization": f"Bearer {NVIDIA_API_KEY}",
-        "Content-Type": "application/json",
-        "Accept": "text/event-stream",
-    }
-    payload = {
+    base = {
         "model": KIMI_MODEL,
         "messages": [{"role": "system", "content": system_prompt},
                      {"role": "user", "content": user_prompt}],
-        "max_tokens": max_tokens,
         "temperature": temperature,
         "top_p": 1.0,
-        "stream": True,
+        "max_tokens": max_tokens,
     }
     if response_json:
-        payload["response_format"] = {"type": "json_object"}
+        base["response_format"] = {"type": "json_object"}
+    if extra:
+        base.update(extra)
 
-    def _do(pl):
-        resp = requests.post(NVIDIA_URL, headers=headers, json=pl, timeout=600, stream=True)
+    def _headers(accept):
+        return {"Authorization": f"Bearer {NVIDIA_API_KEY}",
+                "Content-Type": "application/json", "Accept": accept}
+
+    def _report(label):
+        if progress:
+            try:
+                progress(label)
+            except Exception:
+                pass
+
+    def _stream(pl):
+        # Per-chunk read timeout: if NVIDIA streams nothing for this long (blocked
+        # proxy, or a very long silent reasoning phase) we give up and fall back.
+        resp = requests.post(NVIDIA_URL, headers=_headers("text/event-stream"),
+                             json={**pl, "stream": True}, timeout=(15, 90), stream=True)
         if resp.status_code != 200:
             raise RuntimeError(f"NVIDIA API error ({resp.status_code}): {resp.text[:300]}")
-        parts = []
+        content, reasoning, fr = [], [], None
+        clen = rlen = last = 0
         for line in resp.iter_lines():
             if not line:
                 continue
             s = line.decode("utf-8").strip()
-            if not s.startswith("data: "):
+            if not s.startswith("data:"):
                 continue
-            body = s[6:]
+            body = s[5:].strip()
             if body == "[DONE]":
                 break
             try:
-                chunk = json.loads(body)
-                choices = chunk.get("choices") or []
-                if choices:
-                    parts.append(choices[0].get("delta", {}).get("content", "") or "")
+                ch = (json.loads(body).get("choices") or [{}])[0]
             except json.JSONDecodeError:
                 continue
-        return "".join(parts).strip()
+            delta = ch.get("delta") or {}
+            if delta.get("content"):
+                content.append(delta["content"]); clen += len(delta["content"])
+            if delta.get("reasoning_content"):
+                reasoning.append(delta["reasoning_content"]); rlen += len(delta["reasoning_content"])
+            if ch.get("finish_reason"):
+                fr = ch["finish_reason"]
+            if clen + rlen - last >= 1200:   # throttle progress updates
+                last = clen + rlen
+                _report(f"Writing report… {clen:,} chars" if clen else f"Thinking… {rlen:,} chars")
+        text = "".join(content).strip()
+        if not text:
+            raise _EmptyCompletion(f"Kimi streamed no answer (finish_reason={fr}, {rlen} reasoning chars).")
+        return text
 
+    def _nonstream(pl):
+        resp = requests.post(NVIDIA_URL, headers=_headers("application/json"),
+                             json={**pl, "stream": False}, timeout=300)
+        if resp.status_code != 200:
+            raise RuntimeError(f"NVIDIA API error ({resp.status_code}): {resp.text[:300]}")
+        choice = (resp.json().get("choices") or [{}])[0]
+        msg = choice.get("message") or {}
+        text = (msg.get("content") or msg.get("text") or "").strip()
+        if not text:
+            rc = len(msg.get("reasoning_content") or "")
+            raise _EmptyCompletion(f"Kimi returned no answer (finish_reason="
+                                   f"{choice.get('finish_reason')}, {rc} reasoning chars).")
+        return text
+
+    # 1) streaming + thinking (the server/Render path)
     try:
-        text = _do(payload)
-    except RuntimeError:
-        # Some models reject response_format; retry once without it.
-        if response_json:
-            payload.pop("response_format", None)
-            text = _do(payload)
-        else:
-            raise
-    if not text:
-        raise RuntimeError("Empty response from Kimi/NVIDIA.")
-    return text
+        return _stream(base)
+    except (_EmptyCompletion, requests.exceptions.RequestException, RuntimeError):
+        pass
+    # 2) fallback: non-streaming, thinking OFF, capped budget (fast, 504-safe)
+    _report("Finalising report…")
+    return _nonstream({**base, **THINKING_OFF, "max_tokens": min(max_tokens, 18000)})
 
 
 def _extract_json(text: str) -> dict:
@@ -530,10 +578,16 @@ def validate_blueprint(bp: dict, pack: dict, mode: str) -> dict:
 # 5. PROMPTS
 # =============================================================================
 
-def _pack_for_prompt(pack: dict) -> str:
+def _pack_for_prompt(pack: dict, slim: bool = False) -> str:
+    datasets = pack["datasets"]
+    if slim:
+        # HTML mode renders aggregates/tables, not the full raw register — drop the
+        # big row arrays to leave more of the budget for generation.
+        datasets = {k: v for k, v in datasets.items()
+                    if k not in ("opportunities", "global_opportunities")}
+    schemas = {k: v for k, v in pack["schemas"].items() if k in datasets}
     return json.dumps({"meta": pack["meta"], "facts": pack["facts"],
-                       "schemas": pack["schemas"], "datasets": pack["datasets"]},
-                      ensure_ascii=False)
+                       "schemas": schemas, "datasets": datasets}, ensure_ascii=False)
 
 
 def _blueprint_prompt(pack: dict, mode: str) -> tuple:
@@ -585,10 +639,12 @@ def _html_prompt(pack: dict) -> tuple:
         "and sized to fit the page width.\n"
         "- Start with a <div class='rr-cover'> cover (wordmark 'ROLLS-ROYCE', tag 'GLOBAL HOPPER — AI', "
         "title, subtitle). Then sections with headings, KPI rows, charts, tables and short insights.\n"
-        "- Use ONLY the supplied figures; never invent numbers. Currency GBP millions."
+        "- Use ONLY the supplied figures; never invent numbers. Currency GBP millions.\n"
+        "- Keep it focused: 4-7 sections. Output the HTML immediately and directly — do NOT "
+        "write any analysis, planning or commentary before the document."
     )
-    user = ("Build the report HTML from this analytics pack. Respond with the HTML document only.\n\n"
-            + _pack_for_prompt(pack))
+    user = ("Build the report HTML from this analytics pack. Output ONLY the HTML document, "
+            "starting with <!DOCTYPE html> — no preamble.\n\n" + _pack_for_prompt(pack, slim=True))
     return system, user
 
 
@@ -1055,7 +1111,8 @@ def generate_ai_report(parsed_data: dict, filters: dict = None, mode: str = "cat
                                    "this server. Use the Charts or Catalog mode.")
             _say("Designing report (HTML)…")
             system, user = _html_prompt(pack)
-            html = call_kimi_raw(system, user, max_tokens=16384, temperature=0.6)
+            html = call_kimi_raw(system, user, max_tokens=HTML_MAX_TOKENS, temperature=0.5,
+                                 progress=progress)
             # strip an accidental code fence
             m = re.search(r"```(?:html)?\s*\n(.*?)\n```", html, re.DOTALL)
             if m:
@@ -1065,8 +1122,8 @@ def generate_ai_report(parsed_data: dict, filters: dict = None, mode: str = "cat
         else:
             _say("Designing report…")
             system, user = _blueprint_prompt(pack, mode)
-            raw = call_kimi_raw(system, user, max_tokens=16384, temperature=0.45,
-                                response_json=True)
+            raw = call_kimi_raw(system, user, max_tokens=BLUEPRINT_MAX_TOKENS, temperature=0.45,
+                                response_json=True, progress=progress)
             try:
                 bp = validate_blueprint(_extract_json(raw), pack, mode)
             except Exception as e1:
@@ -1074,8 +1131,8 @@ def generate_ai_report(parsed_data: dict, filters: dict = None, mode: str = "cat
                 repair = (f"Your previous output could not be used ({e1}). Return ONLY a valid "
                           f"JSON object matching the required schema. Use only datasets/fields "
                           f"from the pack.\n\n{user}")
-                raw2 = call_kimi_raw(system, repair, max_tokens=16384, temperature=0.3,
-                                     response_json=True)
+                raw2 = call_kimi_raw(system, repair, max_tokens=BLUEPRINT_MAX_TOKENS, temperature=0.3,
+                                     response_json=True, progress=progress)
                 bp = validate_blueprint(_extract_json(raw2), pack, mode)
             _say("Rendering charts & building PDF…")
             pdf_bytes = _assemble_pdf(bp, pack, mode, progress=progress)
