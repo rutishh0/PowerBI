@@ -1868,6 +1868,15 @@ class HopperPDF(FPDF):
         totals_row : list, optional
             A pre-formatted last row to render in bold with a top border.
         """
+        # Scale the columns to span the full content width so the table is not
+        # left-hugging with a large empty gap on the right. Widths keep their
+        # relative proportions; an already full-width table is unchanged.
+        avail_full = self.PAGE_W - self.MARGIN_L - self.MARGIN_R
+        _tot = sum(col_widths)
+        if _tot > 0 and _tot < avail_full - 0.5:
+            _scale = avail_full / _tot
+            col_widths = [w * _scale for w in col_widths]
+
         # -- Per-column alignment. Headers are aligned the SAME way as their
         # data column so a right-aligned number sits directly under its header
         # (avoids the "centred header over left/right data" misalignment).
@@ -2040,6 +2049,46 @@ def _aggregate(rows, key, value_fn=None, count=False):
             v = value_fn(r) if value_fn else _val(r.get("crp_term_benefit"))
             out[k] = out.get(k, 0) + v
     return out
+
+
+def _hopper_top25_page(pdf, opps, title, subtitle=None):
+    """Render a 'Top 25 opportunities by CRP term benefit' page (ranked
+    descending). Shared by the filtered (e.g. MEA) and the global versions."""
+    pdf.add_page()
+    pdf._page_header(title)
+    if subtitle:
+        pdf.set_x(pdf.MARGIN_L)
+        pdf.set_font("Helvetica", "I", 8)
+        pdf.set_text_color(*HOPPER_TEXT_MUTE)
+        pdf.cell(0, 4, _safe(subtitle), 0, 1, "L")
+        pdf.ln(1)
+    top = sorted(opps, key=lambda r: _val(r.get("crp_term_benefit")), reverse=True)[:25]
+    rows = []
+    for i, r in enumerate(top, 1):
+        rows.append([str(i), _trunc(r.get("region", ""), 12), _trunc(r.get("customer", ""), 18),
+                     _trunc(r.get("engine_value_stream", r.get("top_level_evs", "")), 16),
+                     _trunc(r.get("restructure_type", ""), 16), _trunc(r.get("status", ""), 14),
+                     _trunc(r.get("maturity", ""), 9), _fmtM_short(_val(r.get("crp_term_benefit"))),
+                     _fmtM_short(_val(r.get("profit_2026"))), _fmtM_short(_val(r.get("profit_2027"))),
+                     _trunc(r.get("vp_owner", ""), 18)])
+    pdf._table(["#", "Region", "Customer", "Engine VS", "Restructure", "Status", "Maturity",
+                "CRP", "2026", "2027", "VP/Owner"], rows,
+               [8, 22, 35, 30, 30, 28, 18, 22, 18, 18, 35], right_align_idx={0, 7, 8, 9}, max_rows=25)
+
+
+def _top25_titles(filters, region_set):
+    """Build the (filtered_title, filtered_subtitle) for the scoped Top-25 page
+    based on the active filters."""
+    region = (filters or {}).get("region")
+    if region:
+        return (f"{region} Top 25 Opportunities by CRP Term Benefit",
+                "Top opportunities within the current report filters, ranked by CRP term benefit.")
+    if len(region_set) == 1:
+        only = next(iter(region_set))
+        return (f"{only} Top 25 Opportunities by CRP Term Benefit",
+                "Top opportunities within the current report filters, ranked by CRP term benefit.")
+    return ("Top 25 Opportunities by CRP Term Benefit (Filtered selection)",
+            "Top opportunities within the current report filters, ranked by CRP term benefit.")
 
 
 def generate_hopper_pdf_report(
@@ -2283,40 +2332,19 @@ def generate_hopper_pdf_report(
                 f"Insight - {top_rt[0]} accounts for {_pct(top_rt[1], total_crp)} of CRP term benefit. "
                 f"The value and volume views together show where restructuring effort and reward concentrate.")
 
-    # ============================================================ TOP 25 (own page)
+    # ============================================================ TOP 25 (own pages)
     if "top_opportunities" in sections:
-        pdf.add_page()
-        pdf._page_header("Global Top 25 Opportunities by CRP Term Benefit")
-        pdf.set_x(pdf.MARGIN_L)
-        pdf.set_font("Helvetica", "I", 8)
-        pdf.set_text_color(*HOPPER_TEXT_MUTE)
-        pdf.cell(0, 4, _safe("Highest-value opportunities portfolio-wide, ranked by CRP term benefit "
-                             "(all regions — not limited by the report filters)."), 0, 1, "L")
-        pdf.ln(1)
-
         global_opps = parsed_data.get("opportunities", []) or filtered
-        top_sorted = sorted(global_opps, key=lambda r: _val(r.get("crp_term_benefit")),
-                            reverse=True)[:25]
-        headers = ["#", "Region", "Customer", "Engine VS", "Restructure",
-                   "Status", "Maturity", "CRP", "2026", "2027", "VP/Owner"]
-        widths = [8, 22, 35, 30, 30, 28, 18, 22, 18, 18, 35]
-        rows = []
-        for i, r in enumerate(top_sorted, 1):
-            rows.append([
-                str(i),
-                _trunc(r.get("region", ""), 12),
-                _trunc(r.get("customer", ""), 18),
-                _trunc(r.get("engine_value_stream", r.get("top_level_evs", "")), 16),
-                _trunc(r.get("restructure_type", ""), 16),
-                _trunc(r.get("status", ""), 14),
-                _trunc(r.get("maturity", ""), 9),
-                _fmtM_short(_val(r.get("crp_term_benefit"))),
-                _fmtM_short(_val(r.get("profit_2026"))),
-                _fmtM_short(_val(r.get("profit_2027"))),
-                _trunc(r.get("vp_owner", ""), 18),
-            ])
-        pdf._table(headers, rows, widths,
-                   right_align_idx={0, 7, 8, 9}, max_rows=25)
+        # Scoped (filtered, e.g. MEA) Top 25 first — only when filters actually
+        # narrow the data (otherwise it would duplicate the global page).
+        if len(filtered) != len(global_opps):
+            f_title, f_sub = _top25_titles(filters, regions)
+            _hopper_top25_page(pdf, filtered, f_title, f_sub)
+        # Global Top 25 — across all regions, ignoring the report filters.
+        _hopper_top25_page(
+            pdf, global_opps, "Global Top 25 Opportunities by CRP Term Benefit",
+            "Highest-value opportunities portfolio-wide, ranked by CRP term benefit "
+            "(all regions — not limited by the report filters).")
 
     # ============================================================ PAGE 6
     # Opportunity Initiatives — the narrative behind each opportunity.
@@ -3003,28 +3031,15 @@ def generate_hopper_detailed_pdf_report(parsed_data: dict, sections_to_include: 
     pdf._narrative(f"Insight - {_pct(onerous, total_opps)} of opportunities are onerous and "
                    f"{_pct(immature, total_opps)} are immature — the principal execution risks to the forecast.")
 
-    # ---- Global Top 25 (across ALL regions, ignoring filters) ----
-    pdf.add_page()
-    pdf._page_header("Global Top 25 Opportunities by CRP Term Benefit")
-    pdf.set_x(pdf.MARGIN_L)
-    pdf.set_font("Helvetica", "I", 8)
-    pdf.set_text_color(*HOPPER_TEXT_MUTE)
-    pdf.cell(0, 4, _safe("Highest-value opportunities portfolio-wide, ranked by CRP term benefit "
-                         "(all regions — not limited by the report filters)."), 0, 1, "L")
-    pdf.ln(1)
+    # ---- Top 25 (scoped/filtered first, then global) ----
     global_opps = parsed_data.get("opportunities", []) or filtered
-    top_sorted = sorted(global_opps, key=lambda r: _val(r.get("crp_term_benefit")), reverse=True)[:25]
-    rows = []
-    for i, r in enumerate(top_sorted, 1):
-        rows.append([str(i), _trunc(r.get("region", ""), 12), _trunc(r.get("customer", ""), 18),
-                     _trunc(r.get("engine_value_stream", r.get("top_level_evs", "")), 16),
-                     _trunc(r.get("restructure_type", ""), 16), _trunc(r.get("status", ""), 14),
-                     _trunc(r.get("maturity", ""), 9), _fmtM_short(_val(r.get("crp_term_benefit"))),
-                     _fmtM_short(_val(r.get("profit_2026"))), _fmtM_short(_val(r.get("profit_2027"))),
-                     _trunc(r.get("vp_owner", ""), 18)])
-    pdf._table(["#", "Region", "Customer", "Engine VS", "Restructure", "Status", "Maturity",
-                "CRP", "2026", "2027", "VP/Owner"], rows,
-               [8, 22, 35, 30, 30, 28, 18, 22, 18, 18, 35], right_align_idx={0, 7, 8, 9}, max_rows=25)
+    if len(filtered) != len(global_opps):
+        f_title, f_sub = _top25_titles(filters, regions)
+        _hopper_top25_page(pdf, filtered, f_title, f_sub)
+    _hopper_top25_page(
+        pdf, global_opps, "Global Top 25 Opportunities by CRP Term Benefit",
+        "Highest-value opportunities portfolio-wide, ranked by CRP term benefit "
+        "(all regions — not limited by the report filters).")
 
     # ---- Opportunities (initiatives) ----
     init_opps = [r for r in sorted(filtered, key=lambda r: _val(r.get("crp_term_benefit")), reverse=True)
