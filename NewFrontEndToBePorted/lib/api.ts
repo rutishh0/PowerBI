@@ -392,6 +392,62 @@ export async function exportReport(payload: ExportPayload): Promise<Blob> {
   return await res.blob()
 }
 
+/* ---------- AI report (Kimi K2.6, background job) ---------- */
+
+export type AiReportMode = "catalog" | "charts" | "html"
+
+export interface AiReportStartPayload {
+  filename: string
+  file_type: FileType
+  /** Active dashboard filters (omitted keys = no filter on that dimension). */
+  filters?: Record<string, string>
+  /** Render architecture: AI Vega-Lite charts | AI full HTML | curated catalog. */
+  mode: AiReportMode
+}
+
+export interface AiReportStatus {
+  status: "queued" | "running" | "done" | "failed"
+  progress: string
+  error: string | null
+  /** Non-null when the deterministic fallback report was produced instead. */
+  note: string | null
+  filename: string | null
+  mode: AiReportMode
+}
+
+/** POST /api/ai-report — start a background AI report job. */
+export async function startAiReport(
+  payload: AiReportStartPayload,
+): Promise<{ job_id: string; mode: AiReportMode }> {
+  const res = await fetch("/api/ai-report", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+  return handle<{ job_id: string; mode: AiReportMode }>(res)
+}
+
+/** GET /api/ai-report/{id} — poll job status/progress. */
+export async function getAiReportStatus(jobId: string): Promise<AiReportStatus> {
+  const res = await fetch(`/api/ai-report/${jobId}`, { cache: "no-store" })
+  return handle<AiReportStatus>(res)
+}
+
+/** GET /api/ai-report/{id}/download — fetch the finished PDF (evicts the job). */
+export async function downloadAiReport(jobId: string): Promise<Blob> {
+  const res = await fetch(`/api/ai-report/${jobId}/download`)
+  if (!res.ok) {
+    let detail = ""
+    try {
+      detail = (await res.json()).error || ""
+    } catch {
+      detail = await res.text()
+    }
+    throw new ApiError(res.status, `Download failed: ${detail || res.statusText}`)
+  }
+  return await res.blob()
+}
+
 /* ---------- R2 archive (persistent file storage) ---------- */
 
 /** GET /api/r2/files — list everything in the R2 archive. */

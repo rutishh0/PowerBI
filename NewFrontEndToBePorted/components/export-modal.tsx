@@ -1,11 +1,14 @@
 "use client"
 
 import { useState } from "react"
-import { Download, FileText, Image as ImageIcon, Presentation, CheckCircle2 } from "lucide-react"
+import { Download, FileText, Image as ImageIcon, Presentation, CheckCircle2, Sparkles } from "lucide-react"
 import { toast } from "sonner"
 import type { UploadedFile } from "@/lib/types"
 import { FILE_TYPE_LABELS } from "@/lib/file-type-meta"
-import { exportReport, ApiError } from "@/lib/api"
+import {
+  exportReport, ApiError,
+  startAiReport, getAiReportStatus, downloadAiReport, type AiReportMode,
+} from "@/lib/api"
 import {
   Dialog,
   DialogContent,
@@ -50,9 +53,18 @@ const FORMATS: { id: ExportFormat; label: string; description: string; icon: typ
   },
 ]
 
+const AI_MODES: { id: AiReportMode; label: string; blurb: string }[] = [
+  { id: "charts", label: "Charts", blurb: "AI invents the visualizations (Vega-Lite), Rolls-Royce themed." },
+  { id: "html", label: "HTML", blurb: "AI writes the entire HTML/CSS layout — the most bespoke look." },
+  { id: "catalog", label: "Catalog", blurb: "AI picks from a curated RR chart set — the most reliable." },
+]
+
 export function ExportModal({ open, onOpenChange, activeFile, filters }: Props) {
   const [format, setFormat] = useState<ExportFormat>("pdf")
   const [busy, setBusy] = useState<null | "std" | "detailed">(null)
+  const [aiMode, setAiMode] = useState<AiReportMode>("charts")
+  const [aiBusy, setAiBusy] = useState(false)
+  const [aiProgress, setAiProgress] = useState("")
 
   const isHopper = activeFile?.file_type === "GLOBAL_HOPPER"
 
@@ -88,6 +100,62 @@ export function ExportModal({ open, onOpenChange, activeFile, filters }: Props) 
       toast.error("Export failed", { description: msg })
     } finally {
       setBusy(null)
+    }
+  }
+
+  async function handleAiExport() {
+    if (!activeFile) return
+    setAiBusy(true)
+    setAiProgress("Starting…")
+    try {
+      const { job_id } = await startAiReport({
+        filename: activeFile.name,
+        file_type: activeFile.file_type,
+        filters: filters && Object.keys(filters).length > 0 ? filters : undefined,
+        mode: aiMode,
+      })
+      let status = "queued"
+      let note: string | null = null
+      let serverName: string | null = null
+      // Poll up to ~5 min (the model + render can take a couple of minutes).
+      for (let i = 0; i < 150; i++) {
+        await new Promise((r) => setTimeout(r, 2000))
+        const s = await getAiReportStatus(job_id)
+        setAiProgress(s.progress || s.status)
+        status = s.status
+        note = s.note
+        serverName = s.filename
+        if (status === "done" || status === "failed") break
+      }
+      if (status === "failed") throw new Error("Generation failed on the server")
+      if (status !== "done") throw new Error("Timed out waiting for the report")
+
+      const blob = await downloadAiReport(job_id)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      const baseName = activeFile.name.replace(/\.[^.]+$/, "")
+      a.download = serverName || `${baseName}-ai-${aiMode}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+
+      if (note) {
+        toast.warning("AI report unavailable — fallback provided", { description: note })
+      } else {
+        toast.success("AI report ready", {
+          description: `${activeFile.name} · AI report (${aiMode}) downloaded.`,
+          icon: <CheckCircle2 className="h-4 w-4 text-success" />,
+        })
+      }
+      onOpenChange(false)
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : err instanceof Error ? err.message : "AI report failed"
+      toast.error("AI report failed", { description: msg })
+    } finally {
+      setAiBusy(false)
+      setAiProgress("")
     }
   }
 
@@ -203,11 +271,60 @@ export function ExportModal({ open, onOpenChange, activeFile, filters }: Props) 
           </p>
         ) : null}
 
+        {/* AI Report (Beta) — Kimi K2.6 designs a bespoke report dynamically. */}
+        {isHopper ? (
+          <div className="rounded-md border border-[var(--chart-2)]/30 bg-[var(--chart-2)]/[0.06] p-3 space-y-2.5">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-[var(--chart-2)]" />
+              <span className="text-sm font-medium text-white">AI Report</span>
+              <Badge
+                variant="outline"
+                className="text-[9px] uppercase tracking-wider border-[var(--chart-2)]/40 bg-[var(--chart-2)]/10 text-[var(--chart-2)]"
+              >
+                Beta · Kimi K2.6
+              </Badge>
+            </div>
+            <p className="text-[11px] text-white/55 text-pretty">
+              Kimi K2.6 designs a bespoke executive report from your data (respecting the filters above) —
+              dynamic structure, written insight and custom visualizations, Rolls-Royce themed. Takes ~1–2 minutes.
+            </p>
+            <div className="grid grid-cols-3 gap-1.5">
+              {AI_MODES.map((m) => {
+                const active = aiMode === m.id
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setAiMode(m.id)}
+                    disabled={aiBusy}
+                    className={`rounded-md border px-2 py-1.5 text-xs font-medium transition-colors ${
+                      active
+                        ? "border-[var(--chart-2)] bg-[var(--chart-2)]/15 text-white"
+                        : "border-white/10 bg-white/[0.03] text-white/70 hover:border-white/25 hover:bg-white/[0.06]"
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                )
+              })}
+            </div>
+            <p className="text-[10px] text-white/45">{AI_MODES.find((m) => m.id === aiMode)?.blurb}</p>
+            <Button
+              onClick={handleAiExport}
+              disabled={aiBusy || !!busy || !activeFile}
+              className="w-full gap-2 bg-[var(--chart-2)] text-[oklch(0.17_0.03_165)] hover:bg-[var(--chart-2)]/90"
+            >
+              {aiBusy ? <Spinner className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
+              {aiBusy ? aiProgress || "Generating…" : "Generate AI Report"}
+            </Button>
+          </div>
+        ) : null}
+
         <DialogFooter className="gap-2 sm:gap-2 pt-1">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
-            disabled={!!busy}
+            disabled={!!busy || aiBusy}
             className="border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white"
           >
             Cancel
@@ -216,7 +333,7 @@ export function ExportModal({ open, onOpenChange, activeFile, filters }: Props) 
             <Button
               variant="outline"
               onClick={() => handleExport(true)}
-              disabled={!!busy || !activeFile}
+              disabled={!!busy || aiBusy || !activeFile}
               className="gap-2 border-[var(--chart-2)]/60 bg-transparent text-[var(--chart-2)] hover:bg-[var(--chart-2)]/10 hover:text-[var(--chart-2)]"
             >
               {busy === "detailed" ? <Spinner className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
@@ -225,7 +342,7 @@ export function ExportModal({ open, onOpenChange, activeFile, filters }: Props) 
           ) : null}
           <Button
             onClick={() => handleExport(false)}
-            disabled={!!busy || !activeFile}
+            disabled={!!busy || aiBusy || !activeFile}
             className="gap-2 bg-[var(--chart-2)] text-[oklch(0.17_0.03_165)] hover:bg-[var(--chart-2)]/90"
           >
             {busy === "std" ? <Spinner className="h-4 w-4" /> : <Download className="h-4 w-4" />}

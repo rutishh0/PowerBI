@@ -16,6 +16,7 @@ import uuid
 import math
 import base64
 import time
+import threading
 import concurrent.futures
 
 import pandas as pd
@@ -131,6 +132,21 @@ _parsed_store = {}
 
 # In-memory store for chat history (keyed by session ID)
 _chat_history = {}
+
+# In-memory store for AI report generation jobs (keyed by job_id). Per-process,
+# like _parsed_store — the service must run effectively single-worker (gunicorn
+# --workers 1 --threads N). Jobs hold the finished PDF until downloaded.
+_ai_report_jobs = {}
+_ai_report_lock = threading.Lock()
+_AI_JOB_TTL = 1800  # seconds; prune finished/stale jobs older than this
+
+
+def _prune_ai_jobs():
+    now = time.time()
+    with _ai_report_lock:
+        for jid in [k for k, v in _ai_report_jobs.items()
+                    if now - v.get("created", now) > _AI_JOB_TTL]:
+            _ai_report_jobs.pop(jid, None)
 
 
 def _get_session_id():
@@ -668,6 +684,100 @@ def export_pdf():
         )
     except Exception as e:
         return jsonify({"error": f"PDF generation failed: {str(e)}"}), 500
+
+
+# ─────────────────────────────────────────────────────────────
+# AI REPORT (Kimi K2.6) — background job + polling
+# ─────────────────────────────────────────────────────────────
+
+@app.route("/api/ai-report", methods=["POST"])
+@login_required
+def ai_report_start():
+    """Kick off an AI-designed PDF report. Returns a job_id immediately; the
+    work runs in a background thread (poll /api/ai-report/<id>)."""
+    _prune_ai_jobs()
+    sid = _get_session_id()
+    stored = _parsed_store.get(sid, {})
+    if not stored:
+        return jsonify({"error": "No data available. Please upload files first."}), 400
+
+    data = request.get_json(silent=True) or {}
+    mode = data.get("mode", "catalog")
+    if mode not in ("catalog", "charts", "html"):
+        mode = "catalog"
+    filters = data.get("filters", {}) or {}
+
+    selected = data.get("filename")
+    keys = list(stored.keys())
+    first_key = selected if selected in stored else (keys[0] if keys else None)
+    if not first_key:
+        return jsonify({"error": "No data available."}), 400
+    first_parsed = stored[first_key]["parsed"]
+    ftype = data.get("file_type") or first_parsed.get("file_type")
+    if ftype != "GLOBAL_HOPPER":
+        return jsonify({"error": "AI reports currently support Global Hopper files only."}), 400
+
+    job_id = uuid.uuid4().hex
+    with _ai_report_lock:
+        _ai_report_jobs[job_id] = {
+            "status": "queued", "mode": mode, "progress": "Queued…",
+            "pdf": None, "filename": None, "error": None, "note": None,
+            "created": time.time(),
+        }
+
+    def _run(parsed_snapshot, flt, m):
+        with _ai_report_lock:
+            if job_id in _ai_report_jobs:
+                _ai_report_jobs[job_id]["status"] = "running"
+
+        def progress(msg):
+            with _ai_report_lock:
+                if job_id in _ai_report_jobs:
+                    _ai_report_jobs[job_id]["progress"] = msg
+
+        try:
+            from ai_report import generate_ai_report
+            pdf_bytes, filename, note = generate_ai_report(parsed_snapshot, flt, m, progress)
+            with _ai_report_lock:
+                if job_id in _ai_report_jobs:
+                    _ai_report_jobs[job_id].update(status="done", pdf=pdf_bytes,
+                                                   filename=filename, note=note, progress="Done")
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            with _ai_report_lock:
+                if job_id in _ai_report_jobs:
+                    _ai_report_jobs[job_id].update(status="failed", error=str(e), progress="Failed")
+
+    threading.Thread(target=_run, args=(first_parsed, filters, mode), daemon=True).start()
+    return jsonify({"job_id": job_id, "mode": mode})
+
+
+@app.route("/api/ai-report/<job_id>", methods=["GET"])
+@login_required
+def ai_report_status(job_id):
+    with _ai_report_lock:
+        job = _ai_report_jobs.get(job_id)
+        if not job:
+            return jsonify({"error": "Unknown job"}), 404
+        return jsonify({"status": job["status"], "progress": job["progress"],
+                        "error": job["error"], "note": job["note"],
+                        "filename": job["filename"], "mode": job["mode"]})
+
+
+@app.route("/api/ai-report/<job_id>/download", methods=["GET"])
+@login_required
+def ai_report_download(job_id):
+    with _ai_report_lock:
+        job = _ai_report_jobs.get(job_id)
+        if not job:
+            return jsonify({"error": "Unknown job"}), 404
+        if job["status"] != "done" or not job["pdf"]:
+            return jsonify({"error": "Report not ready"}), 409
+        pdf_bytes, filename = job["pdf"], (job["filename"] or "AI_Report.pdf")
+        _ai_report_jobs.pop(job_id, None)   # evict after download
+    return send_file(io.BytesIO(pdf_bytes), mimetype="application/pdf",
+                     as_attachment=True, download_name=filename)
 
 
 # ─────────────────────────────────────────────────────────────
