@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ME&A Public Holidays 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#16201f; --ink-soft:#46524f; --line:#e4ddd0; --paper:#f6f1e7;
+    --card:#fffdf8; --accent:#0b6b5e; --accent-soft:#d7ebe6; --accent-deep:#084b42;
+    --gold:#b08433; --wkend:#efe9dc; --shadow:0 1px 2px rgba(20,32,31,.04),0 8px 24px rgba(20,32,31,.06);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:
+      radial-gradient(120% 80% at 0% 0%, #f9f5ec 0%, var(--paper) 45%, #f1eadb 100%) fixed;
+      color:var(--ink); font-family:'DM Sans',system-ui,sans-serif; -webkit-font-smoothing:antialiased}
+  body{padding:clamp(16px,3vw,40px); line-height:1.5}
+  .wrap{max-width:1180px;margin:0 auto}
+
+  /* Header */
+  header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;
+    gap:20px;padding-bottom:22px;border-bottom:1.5px solid var(--line);margin-bottom:26px}
+  .titleblock .eyebrow{font-size:.72rem;letter-spacing:.22em;text-transform:uppercase;
+    color:var(--accent);font-weight:600}
+  .titleblock h1{font-family:'Fraunces',serif;font-weight:600;font-size:clamp(1.8rem,4vw,2.9rem);
+    line-height:1.02;letter-spacing:-.01em;margin-top:6px}
+  .titleblock h1 em{font-style:italic;color:var(--accent-deep)}
+  .titleblock .sub{color:var(--ink-soft);font-size:.92rem;margin-top:8px;max-width:46ch}
+
+  .controls{display:flex;flex-direction:column;gap:8px}
+  .controls label{font-size:.7rem;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft);font-weight:600}
+  .selwrap{position:relative}
+  select#country{appearance:none;font-family:'DM Sans',sans-serif;font-weight:600;font-size:1.05rem;
+    color:var(--ink);background:var(--card);border:1.5px solid var(--line);border-radius:13px;
+    padding:13px 46px 13px 18px;min-width:240px;cursor:pointer;box-shadow:var(--shadow);transition:.2s}
+  select#country:hover{border-color:var(--accent)}
+  select#country:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-soft)}
+  .selwrap::after{content:"";position:absolute;right:18px;top:50%;width:9px;height:9px;
+    border-right:2px solid var(--accent);border-bottom:2px solid var(--accent);
+    transform:translateY(-65%) rotate(45deg);pointer-events:none}
+
+  /* Stat strip */
+  .strip{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:26px}
+  .pill{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:11px 16px;
+    display:flex;align-items:baseline;gap:8px;box-shadow:var(--shadow)}
+  .pill b{font-family:'Fraunces',serif;font-size:1.35rem;color:var(--accent-deep);font-weight:600}
+  .pill span{font-size:.82rem;color:var(--ink-soft)}
+  .pill.next b{color:var(--gold)}
+
+  /* Calendar grid */
+  .cal{display:grid;grid-template-columns:repeat(auto-fill,minmax(248px,1fr));gap:16px}
+  .month{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px 16px 18px;
+    box-shadow:var(--shadow)}
+  .month h3{font-family:'Fraunces',serif;font-weight:600;font-size:1.12rem;letter-spacing:-.01em;
+    display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px}
+  .month h3 small{font-family:'DM Sans';font-weight:600;font-size:.7rem;color:var(--accent);
+    background:var(--accent-soft);padding:2px 8px;border-radius:20px;letter-spacing:.02em}
+  .dow,.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+  .dow{margin-bottom:5px}
+  .dow span{text-align:center;font-size:.62rem;font-weight:700;color:var(--ink-soft);
+    letter-spacing:.04em;text-transform:uppercase}
+  .grid .cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:.82rem;
+    border-radius:8px;position:relative;color:var(--ink)}
+  .grid .cell.pad{color:transparent}
+  .grid .cell.we{color:#9aa39f}
+  .grid .cell.hol{background:var(--accent);color:#fff;font-weight:700;cursor:pointer;
+    box-shadow:0 3px 8px rgba(11,107,94,.28)}
+  .grid .cell.hol:hover{background:var(--accent-deep)}
+  .grid .cell.hol.run{border-radius:8px}
+  .month.empty-pad{opacity:.55}
+
+  /* List */
+  .listwrap{margin-top:34px;background:var(--card);border:1px solid var(--line);border-radius:18px;
+    overflow:hidden;box-shadow:var(--shadow)}
+  .listwrap h2{font-family:'Fraunces',serif;font-weight:600;font-size:1.3rem;padding:20px 24px 4px;
+    display:flex;align-items:baseline;gap:10px}
+  .listwrap h2 span{font-family:'DM Sans';font-size:.8rem;font-weight:600;color:var(--ink-soft)}
+  table{width:100%;border-collapse:collapse;font-size:.92rem}
+  thead th{text-align:left;font-size:.68rem;letter-spacing:.13em;text-transform:uppercase;
+    color:var(--ink-soft);font-weight:700;padding:14px 24px;border-bottom:1.5px solid var(--line)}
+  tbody td{padding:13px 24px;border-bottom:1px solid var(--line);vertical-align:top}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover{background:#faf7f0}
+  td.date{white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:600}
+  td.date .dnum{font-family:'Fraunces',serif;font-size:1.05rem;color:var(--accent-deep)}
+  td.date .dow2{display:block;font-size:.72rem;color:var(--ink-soft);font-weight:500;text-transform:uppercase;letter-spacing:.06em}
+  td.name{font-weight:600}
+  td.note{color:var(--ink-soft);font-size:.85rem}
+  .tag-we{display:inline-block;font-size:.62rem;font-weight:700;color:var(--gold);
+    border:1px solid var(--gold);border-radius:20px;padding:1px 7px;margin-left:8px;vertical-align:middle;letter-spacing:.04em}
+
+  .notes{margin-top:20px;font-size:.82rem;color:var(--ink-soft);line-height:1.6}
+  .notes b{color:var(--ink)}
+  footer.foot{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);
+    font-size:.76rem;color:var(--ink-soft);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px}
+
+  @media (max-width:560px){
+    select#country{min-width:100%}
+    .controls{width:100%}
+    thead th:nth-child(3),tbody td.note{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="titleblock">
+      <div class="eyebrow">Middle East &amp; Africa &middot; Rolls-Royce</div>
+      <h1>Public Holidays <em>2026</em></h1>
+      <p class="sub">Select a market to view its statutory holidays across the year. Weekend days follow Fri&ndash;Sat in the Gulf markets.</p>
+    </div>
+    <div class="controls">
+      <label for="country">Market</label>
+      <div class="selwrap"><select id="country"></select></div>
+    </div>
+  </header>
+
+  <div class="strip" id="strip"></div>
+  <div class="cal" id="cal"></div>
+
+  <div class="listwrap">
+    <h2>Holiday schedule <span id="listmeta"></span></h2>
+    <table>
+      <thead><tr><th>Date</th><th>Holiday</th><th>Notes</th></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+  <div class="notes" id="notes"></div>
+
+  <footer class="foot">
+    <span>Generated from ME&amp;A Public Holidays 2026 workbook.</span>
+    <span>Islamic-calendar dates are provisional and subject to official confirmation.</span>
+  </footer>
+</div>
+
+<script>
+const DATA = {"UAE": {"holidays": [{"date": "2026-01-01", "name": "New Year's Day", "note": null}, {"date": "2026-03-20", "name": "Eid Al Fitr", "note": "From 01 to 03 Shawwal"}, {"date": "2026-03-21", "name": "Eid Al Fitr", "note": null}, {"date": "2026-03-22", "name": "Eid Al Fitr", "note": null}, {"date": "2026-05-26", "name": "Arafat Day", "note": "9 Thu Al-Hijjah"}, {"date": "2026-05-27", "name": "Eid Al Adha", "note": "From 10 to 12 Dhu Al-Hijjah"}, {"date": "2026-05-28", "name": "Eid Al Adha", "note": null}, {"date": "2026-05-29", "name": "Eid Al Adha", "note": null}, {"date": "2026-06-16", "name": "Al Hijri Islamic New Year", "note": "1 Muharram 1448"}, {"date": "2026-08-25", "name": "Prophet's Birthday", "note": "12 Rabi' Al Awal"}, {"date": "2026-12-02", "name": "UAE National Day", "note": null}, {"date": "2026-12-03", "name": "UAE National Day", "note": null}, {"date": "2026-12-25", "name": "Christmas Day", "note": null}], "notes": ["Ramadan is on 18 Feb 2026.", "*As most holidays follow the Islamic calendar, final dates will be confirmed by government authorities."]}, "Oman": {"holidays": [{"date": "2026-01-11", "name": "Accession Day", "note": null}, {"date": "2026-01-17", "name": "Al Isra'a a Wal Mi'raj", "note": "Sultan's Ascension Day"}, {"date": "2026-03-20", "name": "Eid Al Fitr", "note": null}, {"date": "2026-03-21", "name": "Eid Al Fitr", "note": null}, {"date": "2026-03-22", "name": "Eid Al Fitr", "note": null}, {"date": "2026-03-23", "name": "Eid Al Fitr", "note": null}, {"date": "2026-05-26", "name": "Arafat Day", "note": null}, {"date": "2026-05-27", "name": "Eid Al Adha", "note": null}, {"date": "2026-05-28", "name": "Eid Al Adha", "note": null}, {"date": "2026-05-29", "name": "Eid Al Adha", "note": null}, {"date": "2026-05-30", "name": "Eid Al Adha", "note": null}, {"date": "2026-06-16", "name": "Al Hijri Islamic New Year", "note": "1 Muharram 1448"}, {"date": "2026-08-25", "name": "Prophet's Birthday", "note": "12 Rabi' Al Awal"}, {"date": "2026-11-20", "name": "Birthday of HM Sultan Qaboos & Oman National Day", "note": null}, {"date": "2026-11-21", "name": "Birthday of HM Sultan Qaboos & Oman National Day", "note": null}, {"date": "2026-12-25", "name": "Christmas Day", "note": null}], "notes": ["Ramadan is on 19 Feb 2026.", "*As most holidays follow the Islamic calendar, final dates will be confirmed by government authorities."]}, "Qatar": {"holidays": [{"date": "2026-02-10", "name": "National Sports Day", "note": null}, {"date": "2026-03-20", "name": "Eid Al Fitr", "note": null}, {"date": "2026-03-21", "name": "Eid Al Fitr", "note": null}, {"date": "2026-03-22", "name": "Eid Al Fitr", "note": null}, {"date": "2026-03-23", "name": "Eid Al Fitr", "note": null}, {"date": "2026-05-26", "name": "Arafat Day", "note": null}, {"date": "2026-05-27", "name": "Eid Al Adha", "note": null}, {"date": "2026-05-28", "name": "Eid Al Adha", "note": null}, {"date": "2026-12-18", "name": "National Day", "note": null}, {"date": "2026-12-25", "name": "Christmas Day", "note": null}], "notes": ["Ramadan is on 18 Feb 2026.", "*As most holidays follow the Islamic calendar, final dates will be confirmed by government authorities."]}, "Bahrain": {"holidays": [{"date": "2026-01-01", "name": "New Year's Day", "note": null}, {"date": "2026-03-20", "name": "Eid Al Fitr", "note": null}, {"date": "2026-03-21", "name": "Eid Al Fitr", "note": null}, {"date": "2026-03-22", "name": "Eid Al Fitr", "note": null}, {"date": "2026-05-01", "name": "Labour Day", "note": null}, {"date": "2026-05-26", "name": "Arafat Day", "note": null}, {"date": "2026-05-27", "name": "Eid Al Adha", "note": null}, {"date": "2026-05-28", "name": "Eid Al Adha", "note": null}, {"date": "2026-05-29", "name": "Eid Al Adha", "note": null}, {"date": "2026-06-16", "name": "Al Hijri Islamic New Year", "note": "1 Muharram 1448"}, {"date": "2026-06-25", "name": "Ashoora", "note": null}, {"date": "2026-06-26", "name": "Ashoora", "note": null}, {"date": "2026-08-25", "name": "Prophet's Birthday", "note": "12 Rabi' Al Awal"}, {"date": "2026-12-16", "name": "National Day", "note": null}, {"date": "2026-12-17", "name": "National Day", "note": null}], "notes": ["Ramadan is on 18 Feb 2026.", "*As most holidays follow the Islamic calendar, final dates will be confirmed by government authorities."]}, "KSA": {"holidays": [{"date": "2026-02-22", "name": "Founding Day", "note": null}, {"date": "2026-03-15", "name": "Eid Al Fitr", "note": null}, {"date": "2026-03-16", "name": "Eid Al Fitr", "note": null}, {"date": "2026-03-17", "name": "Eid Al Fitr", "note": null}, {"date": "2026-03-18", "name": "Eid Al Fitr", "note": null}, {"date": "2026-03-19", "name": "Eid Al Fitr", "note": null}, {"date": "2026-03-20", "name": "Eid Al Fitr", "note": null}, {"date": "2026-03-21", "name": "Eid Al Fitr", "note": null}, {"date": "2026-03-22", "name": "Eid Al Fitr", "note": null}, {"date": "2026-03-23", "name": "Eid Al Fitr", "note": null}, {"date": "2026-03-24", "name": "Eid Al Fitr", "note": null}, {"date": "2026-05-24", "name": "Arafat Day", "note": null}, {"date": "2026-05-25", "name": "Eid Al Adha", "note": null}, {"date": "2026-05-26", "name": "Eid Al Adha", "note": null}, {"date": "2026-05-27", "name": "Eid Al Adha", "note": null}, {"date": "2026-05-28", "name": "Eid Al Adha", "note": null}, {"date": "2026-05-29", "name": "Eid Al Adha", "note": null}, {"date": "2026-05-30", "name": "Eid Al Adha", "note": null}, {"date": "2026-05-31", "name": "Eid Al Adha", "note": null}, {"date": "2026-06-01", "name": "Eid Al Adha", "note": null}, {"date": "2026-09-23", "name": "National Day", "note": null}, {"date": "2026-09-24", "name": "National Day", "note": null}], "notes": ["Ramadan is on 18 Feb 2026.", "*As most holidays follow the Islamic calendar, final dates will be confirmed by government authorities."]}, "Egypt": {"holidays": [{"date": "2026-01-07", "name": "Orthodox Christmas Day", "note": null}, {"date": "2026-01-25", "name": "Revolution and National Police Day", "note": null}, {"date": "2026-03-21", "name": "Eid Al Fitr", "note": null}, {"date": "2026-03-22", "name": "Eid Al Fitr", "note": null}, {"date": "2026-03-23", "name": "Eid Al Fitr", "note": null}, {"date": "2026-03-24", "name": "Eid Al Fitr", "note": null}, {"date": "2026-04-13", "name": "Sham El Nessim", "note": null}, {"date": "2026-04-25", "name": "Sinai Liberation Day", "note": null}, {"date": "2026-05-01", "name": "Labour Day", "note": null}, {"date": "2026-05-26", "name": "Arafat Day", "note": null}, {"date": "2026-05-27", "name": "Eid Al Adha", "note": null}, {"date": "2026-05-28", "name": "Eid Al Adha", "note": null}, {"date": "2026-05-29", "name": "Eid Al Adha", "note": null}, {"date": "2026-05-30", "name": "Eid Al Adha", "note": null}, {"date": "2026-06-16", "name": "Al Hijri Islamic New Year", "note": "1 Muharram 1448"}, {"date": "2026-06-30", "name": "June 30 Revolution", "note": null}, {"date": "2026-08-25", "name": "Prophet's Birthday", "note": null}, {"date": "2026-10-06", "name": "Armed Forces Day", "note": null}], "notes": ["Ramadan is on 19 Feb 2026.", "*As most holidays follow the Islamic calendar, final dates will be confirmed by government authorities."]}, "South Africa": {"holidays": [{"date": "2026-01-01", "name": "New Year's Day", "note": null}, {"date": "2026-03-21", "name": "Human Rights Day", "note": null}, {"date": "2026-04-03", "name": "Good Friday", "note": null}, {"date": "2026-04-06", "name": "Family Day", "note": null}, {"date": "2026-04-27", "name": "Freedom Day", "note": null}, {"date": "2026-05-01", "name": "International Worker's Day", "note": null}, {"date": "2026-06-16", "name": "Youth Day", "note": null}, {"date": "2026-08-09", "name": "National Women's Day", "note": null}, {"date": "2026-09-24", "name": "Heritage Day", "note": null}, {"date": "2026-12-16", "name": "Day of Reconciliation", "note": null}, {"date": "2026-12-25", "name": "Christmas Day", "note": null}, {"date": "2026-12-26", "name": "Day of Goodwill", "note": null}], "notes": ["Ramadan is on 19 Feb 2026."]}, "Ethiopia": {"holidays": [{"date": "2026-01-07", "name": "Ethiopian Christmas Day", "note": null}, {"date": "2026-01-19", "name": "Ephiphany/Timkat", "note": null}, {"date": "2026-03-02", "name": "Adwa Victory Day", "note": null}, {"date": "2026-03-20", "name": "Eid Al Fitr", "note": null}, {"date": "2026-04-10", "name": "Good Friday", "note": null}, {"date": "2026-04-12", "name": "Fasika", "note": null}, {"date": "2026-05-01", "name": "International Labour Day", "note": null}, {"date": "2026-05-05", "name": "Patriots Day", "note": null}, {"date": "2026-05-27", "name": "Eid-Al Adha", "note": null}, {"date": "2026-05-28", "name": "Derg Downfall Day", "note": null}, {"date": "2026-08-26", "name": "Prophet's Birthday", "note": null}, {"date": "2026-09-27", "name": "Meskel", "note": null}, {"date": "2026-10-26", "name": "Defense Day", "note": null}], "notes": ["Ramadan is on 18 Feb 2026."]}, "Lebanon": {"holidays": [{"date": "2026-01-01", "name": "New Year's Day", "note": null}, {"date": "2026-01-06", "name": "Christmas Day - Armenian Orthdox", "note": null}, {"date": "2026-02-09", "name": "St. Maroun Day", "note": null}, {"date": "2026-03-20", "name": "Eid Al Fitr", "note": null}, {"date": "2026-03-21", "name": "Eid Al Fitr", "note": null}, {"date": "2026-03-25", "name": "Annunciation Day", "note": null}, {"date": "2026-04-03", "name": "Good Friday", "note": null}, {"date": "2026-04-06", "name": "Easter Monday", "note": "or 13 April"}, {"date": "2026-05-01", "name": "International Worker's Day", "note": null}, {"date": "2026-06-16", "name": "Al Hijri Islamic New Year", "note": "1 Muharram 1448"}, {"date": "2026-07-05", "name": "Commemoration of Ashoura", "note": null}, {"date": "2026-08-25", "name": "Prophet's Birthday", "note": "12 Rabi' Al Awal"}, {"date": "2026-11-22", "name": "Independence Day", "note": null}, {"date": "2026-12-24", "name": "Christmas Eve", "note": null}, {"date": "2026-12-25", "name": "Christmas Day", "note": null}], "notes": ["Ramadan is on 18 Feb 2026."]}};
+const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
+const DOW=["Su","Mo","Tu","We","Th","Fr","Sa"];
+const DOWFULL=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+// Gulf markets use Fri-Sat weekend; others Sat-Sun
+const GULF=new Set(["UAE","Oman","Qatar","Bahrain","KSA"]);
+
+const sel=document.getElementById('country');
+Object.keys(DATA).forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;sel.appendChild(o);});
+
+function fmt(iso){const d=new Date(iso+'T00:00:00');return d;}
+function isWeekend(d,country){
+  const wd=d.getDay(); // 0 Sun .. 6 Sat
+  return GULF.has(country) ? (wd===5||wd===6) : (wd===6||wd===0);
+}
+
+function render(country){
+  const rec=DATA[country];
+  const hols=rec.holidays;
+  const map={}; hols.forEach(h=>{ (map[h.date]=map[h.date]||[]).push(h); });
+
+  // strip stats
+  const total=Object.keys(map).length;
+  const today=new Date();
+  const upcoming=hols.map(h=>h.date).sort().find(d=>fmt(d)>=new Date(today.toDateString()));
+  let nextTxt='—';
+  if(upcoming){const u=map[upcoming][0];nextTxt=u.name+' · '+fmt(upcoming).toLocaleDateString('en-GB',{day:'numeric',month:'short'});}
+  const weStrip=hols.filter(h=>isWeekend(fmt(h.date),country)).length;
+  document.getElementById('strip').innerHTML=
+    `<div class="pill"><b>${total}</b><span>holiday day${total!==1?'s':''}</span></div>`+
+    `<div class="pill"><b>${hols.length}</b><span>entries incl. multi-day</span></div>`+
+    `<div class="pill"><b>${weStrip}</b><span>fall on a weekend</span></div>`+
+    `<div class="pill next"><b>${nextTxt.split(' · ')[1]||'—'}</b><span>next: ${(nextTxt.split(' · ')[0]||'')}</span></div>`;
+
+  // calendar
+  const cal=document.getElementById('cal');cal.innerHTML='';
+  for(let m=0;m<12;m++){
+    const first=new Date(2026,m,1);const startDow=first.getDay();
+    const days=new Date(2026,m+1,0).getDate();
+    const monthHols=hols.filter(h=>fmt(h.date).getMonth()===m);
+    const div=document.createElement('div');div.className='month'+(monthHols.length?'':' empty-pad');
+    let cells='';
+    for(let i=0;i<startDow;i++)cells+='<div class="cell pad"></div>';
+    for(let d=1;d<=days;d++){
+      const dt=new Date(2026,m,d);
+      const iso='2026-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+      const we=isWeekend(dt,country);
+      if(map[iso]){
+        const title=map[iso].map(x=>x.name).join(' · ');
+        cells+=`<div class="cell hol" title="${title.replace(/"/g,'&quot;')}">${d}</div>`;
+      }else{
+        cells+=`<div class="cell${we?' we':''}">${d}</div>`;
+      }
+    }
+    div.innerHTML=`<h3>${MONTHS[m]}${monthHols.length?`<small>${monthHols.length}</small>`:''}</h3>`+
+      `<div class="dow">${DOW.map(x=>`<span>${x}</span>`).join('')}</div>`+
+      `<div class="grid">${cells}</div>`;
+    cal.appendChild(div);
+  }
+
+  // list
+  const tb=document.getElementById('tbody');tb.innerHTML='';
+  hols.forEach(h=>{
+    const d=fmt(h.date);const we=isWeekend(d,country);
+    const tr=document.createElement('tr');
+    tr.innerHTML=
+      `<td class="date"><span class="dnum">${d.getDate()} ${MONTHS[d.getMonth()].slice(0,3)}</span>`+
+      `<span class="dow2">${DOWFULL[d.getDay()]}</span></td>`+
+      `<td class="name">${h.name}${we?'<span class="tag-we">weekend</span>':''}</td>`+
+      `<td class="note">${h.note?h.note:''}</td>`;
+    tb.appendChild(tr);
+  });
+  document.getElementById('listmeta').textContent='— '+country+', '+hols.length+' entries';
+
+  // notes
+  document.getElementById('notes').innerHTML = rec.notes.length
+    ? '<b>Notes.</b> '+rec.notes.map(n=>n.replace(/^\*/,'').trim()).join(' ')
+    : '';
+}
+
+sel.addEventListener('change',e=>render(e.target.value));
+render(sel.value);
+</script>
+</body>
+</html>

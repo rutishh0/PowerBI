@@ -236,6 +236,10 @@ NEXT_OUT_DIR = os.path.abspath(os.path.join(
     "out",
 ))
 
+# Hand-authored standalone HTML pages served at their own routes (kept OUTSIDE
+# the Next export's out/, which `pnpm build` wipes). e.g. /holidays.
+STATIC_PAGES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static_pages")
+
 # File extensions that are real assets — if missing, 404. (For non-asset
 # paths we fall through to the SPA root index.html so client-side
 # navigation works for any unknown route.)
@@ -303,6 +307,14 @@ def beta_legacy_root():
 def beta_legacy_subpath(subpath):
     query = ("?" + request.query_string.decode("utf-8", "ignore")) if request.query_string else ""
     return redirect(f"/{subpath}{query}", code=301)
+
+
+# Standalone hand-authored HTML page (public, no login). Literal route so it
+# takes precedence over the catch-all SPA serve below.
+@app.route("/holidays", methods=["GET", "HEAD"])
+@app.route("/holidays/", methods=["GET", "HEAD"])
+def holidays_page():
+    return send_from_directory(STATIC_PAGES_DIR, "ME_A_Holidays_2026.html")
 
 
 # Catch-all front-end serve. GET/HEAD only — POSTs are reserved for the
@@ -705,6 +717,9 @@ def ai_report_start():
     mode = data.get("mode", "catalog")
     if mode not in ("catalog", "charts", "html"):
         mode = "catalog"
+    provider = data.get("provider", "nvidia")
+    if provider not in ("nvidia", "aistudio"):
+        provider = "nvidia"
     filters = data.get("filters", {}) or {}
 
     selected = data.get("filename")
@@ -720,12 +735,12 @@ def ai_report_start():
     job_id = uuid.uuid4().hex
     with _ai_report_lock:
         _ai_report_jobs[job_id] = {
-            "status": "queued", "mode": mode, "progress": "Queued…",
+            "status": "queued", "mode": mode, "provider": provider, "progress": "Queued…",
             "pdf": None, "filename": None, "error": None, "note": None,
             "created": time.time(),
         }
 
-    def _run(parsed_snapshot, flt, m):
+    def _run(parsed_snapshot, flt, m, prov):
         with _ai_report_lock:
             if job_id in _ai_report_jobs:
                 _ai_report_jobs[job_id]["status"] = "running"
@@ -737,7 +752,7 @@ def ai_report_start():
 
         try:
             from ai_report import generate_ai_report
-            pdf_bytes, filename, note = generate_ai_report(parsed_snapshot, flt, m, progress)
+            pdf_bytes, filename, note = generate_ai_report(parsed_snapshot, flt, m, progress, prov)
             with _ai_report_lock:
                 if job_id in _ai_report_jobs:
                     _ai_report_jobs[job_id].update(status="done", pdf=pdf_bytes,
@@ -749,8 +764,8 @@ def ai_report_start():
                 if job_id in _ai_report_jobs:
                     _ai_report_jobs[job_id].update(status="failed", error=str(e), progress="Failed")
 
-    threading.Thread(target=_run, args=(first_parsed, filters, mode), daemon=True).start()
-    return jsonify({"job_id": job_id, "mode": mode})
+    threading.Thread(target=_run, args=(first_parsed, filters, mode, provider), daemon=True).start()
+    return jsonify({"job_id": job_id, "mode": mode, "provider": provider})
 
 
 @app.route("/api/ai-report/<job_id>", methods=["GET"])
@@ -762,7 +777,8 @@ def ai_report_status(job_id):
             return jsonify({"error": "Unknown job"}), 404
         return jsonify({"status": job["status"], "progress": job["progress"],
                         "error": job["error"], "note": job["note"],
-                        "filename": job["filename"], "mode": job["mode"]})
+                        "filename": job["filename"], "mode": job["mode"],
+                        "provider": job.get("provider", "nvidia")})
 
 
 @app.route("/api/ai-report/<job_id>/download", methods=["GET"])

@@ -7,7 +7,8 @@ import type { UploadedFile } from "@/lib/types"
 import { FILE_TYPE_LABELS } from "@/lib/file-type-meta"
 import {
   exportReport, ApiError,
-  startAiReport, getAiReportStatus, downloadAiReport, type AiReportMode,
+  startAiReport, getAiReportStatus, downloadAiReport,
+  type AiReportMode, type AiReportProvider,
 } from "@/lib/api"
 import {
   Dialog,
@@ -59,10 +60,16 @@ const AI_MODES: { id: AiReportMode; label: string; blurb: string }[] = [
   { id: "catalog", label: "Catalog", blurb: "AI picks from a curated RR chart set — the most reliable." },
 ]
 
+const AI_PROVIDERS: { id: AiReportProvider; label: string; sub: string }[] = [
+  { id: "nvidia", label: "Kimi K2.6", sub: "NVIDIA" },
+  { id: "aistudio", label: "Gemma 4 31B", sub: "AI Studio" },
+]
+
 export function ExportModal({ open, onOpenChange, activeFile, filters }: Props) {
   const [format, setFormat] = useState<ExportFormat>("pdf")
   const [busy, setBusy] = useState<null | "std" | "detailed">(null)
   const [aiMode, setAiMode] = useState<AiReportMode>("charts")
+  const [aiProvider, setAiProvider] = useState<AiReportProvider>("nvidia")
   const [aiBusy, setAiBusy] = useState(false)
   const [aiProgress, setAiProgress] = useState("")
 
@@ -113,6 +120,7 @@ export function ExportModal({ open, onOpenChange, activeFile, filters }: Props) 
         file_type: activeFile.file_type,
         filters: filters && Object.keys(filters).length > 0 ? filters : undefined,
         mode: aiMode,
+        provider: aiProvider,
       })
       let status = "queued"
       let note: string | null = null
@@ -286,9 +294,32 @@ export function ExportModal({ open, onOpenChange, activeFile, filters }: Props) 
               </Badge>
             </div>
             <p className="text-[11px] text-white/55 text-pretty">
-              Kimi K2.6 designs a bespoke executive report from your data (respecting the filters above) —
-              dynamic structure, written insight and custom visualizations, Rolls-Royce themed. Takes ~1–2 minutes.
+              The AI designs a bespoke executive report from your data (respecting the filters above) —
+              dynamic structure, written insight and custom visualizations, Rolls-Royce themed. Takes a few minutes.
             </p>
+            <div className="text-[10px] uppercase tracking-[0.12em] text-white/45">Model</div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {AI_PROVIDERS.map((pv) => {
+                const active = aiProvider === pv.id
+                return (
+                  <button
+                    key={pv.id}
+                    type="button"
+                    onClick={() => setAiProvider(pv.id)}
+                    disabled={aiBusy}
+                    className={`rounded-md border px-2.5 py-1.5 text-left transition-colors ${
+                      active
+                        ? "border-[var(--chart-2)] bg-[var(--chart-2)]/15"
+                        : "border-white/10 bg-white/[0.03] hover:border-white/25 hover:bg-white/[0.06]"
+                    }`}
+                  >
+                    <div className="text-xs font-medium text-white">{pv.label}</div>
+                    <div className="text-[9px] text-white/45">{pv.sub}</div>
+                  </button>
+                )
+              })}
+            </div>
+            <div className="text-[10px] uppercase tracking-[0.12em] text-white/45">Layout</div>
             <div className="grid grid-cols-3 gap-1.5">
               {AI_MODES.map((m) => {
                 const active = aiMode === m.id

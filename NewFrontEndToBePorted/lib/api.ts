@@ -395,6 +395,8 @@ export async function exportReport(payload: ExportPayload): Promise<Blob> {
 /* ---------- AI report (Kimi K2.6, background job) ---------- */
 
 export type AiReportMode = "catalog" | "charts" | "html"
+/** LLM provider: Kimi K2.6 via NVIDIA, or Gemma 4 31B via Google AI Studio. */
+export type AiReportProvider = "nvidia" | "aistudio"
 
 export interface AiReportStartPayload {
   filename: string
@@ -403,6 +405,8 @@ export interface AiReportStartPayload {
   filters?: Record<string, string>
   /** Render architecture: AI Vega-Lite charts | AI full HTML | curated catalog. */
   mode: AiReportMode
+  /** Which LLM designs the report. */
+  provider: AiReportProvider
 }
 
 export interface AiReportStatus {
@@ -413,6 +417,7 @@ export interface AiReportStatus {
   note: string | null
   filename: string | null
   mode: AiReportMode
+  provider?: AiReportProvider
 }
 
 /** POST /api/ai-report — start a background AI report job. */

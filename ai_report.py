@@ -60,7 +60,14 @@ NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY")
 NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 KIMI_MODEL = "moonshotai/kimi-k2.6"
 
+# Google AI Studio (Gemini API) — alternative provider.
+AISTUDIO_API_KEY = os.getenv("AISTUDIO_API_KEY")
+GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
+GEMMA_MODEL = "gemma-4-31b-it"
+
 MODES = ("catalog", "charts", "html")
+PROVIDERS = ("nvidia", "aistudio")
+PROVIDER_LABELS = {"nvidia": "Kimi K2.6 (NVIDIA)", "aistudio": "Gemma 4 31B (AI Studio)"}
 
 # kimi-k2.6 is a slow thinking model. We STREAM with thinking on (keeps NVIDIA's
 # gateway alive on long generations — avoids the 504 a long non-streaming request
@@ -481,6 +488,72 @@ def call_kimi_raw(system_prompt: str, user_prompt: str, *, max_tokens: int = 163
     # 2) fallback: non-streaming, thinking OFF, capped budget (fast, 504-safe)
     _report("Finalising report…")
     return _nonstream({**base, **THINKING_OFF, "max_tokens": min(max_tokens, 18000)})
+
+
+def call_gemma_raw(system_prompt: str, user_prompt: str, *, max_tokens: int = 16384,
+                   temperature: float = 0.45, response_json: bool = False,
+                   progress=None) -> str:
+    """Call ``gemma-4-31b-it`` via the Google AI Studio (Gemini) REST API and
+    return the raw text. Non-streaming generateContent. Gemma has no separate
+    system role and may not support every Gemini knob, so we fold the system
+    prompt into the user turn, request JSON via responseMimeType (not a rigid
+    responseSchema — the blueprint carries open-ended Vega specs), and avoid
+    tools/googleSearch so it can't pull external data. We deliberately do not
+    enable web search — the report must use only the supplied figures."""
+    if not AISTUDIO_API_KEY:
+        raise RuntimeError("AISTUDIO_API_KEY is not set — cannot reach Google AI Studio.")
+    prompt = (system_prompt + "\n\n" + user_prompt) if system_prompt else user_prompt
+    gen_cfg = {"temperature": temperature, "maxOutputTokens": min(max_tokens, 32768)}
+    if response_json:
+        gen_cfg["responseMimeType"] = "application/json"
+    body = {"contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "generationConfig": gen_cfg}
+    url = f"{GEMINI_BASE}/{GEMMA_MODEL}:generateContent?key={AISTUDIO_API_KEY}"
+    if progress:
+        try:
+            progress(f"Designing report ({GEMMA_MODEL})…")
+        except Exception:
+            pass
+
+    def _do(b):
+        r = requests.post(url, headers={"Content-Type": "application/json"}, json=b, timeout=600)
+        if r.status_code != 200:
+            raise RuntimeError(f"AI Studio error ({r.status_code}): {r.text[:300]}")
+        data = r.json()
+        pf = data.get("promptFeedback") or {}
+        if pf.get("blockReason"):
+            raise _EmptyCompletion(f"AI Studio blocked the prompt ({pf['blockReason']}).")
+        cands = data.get("candidates") or []
+        if not cands:
+            raise _EmptyCompletion("AI Studio returned no candidates.")
+        cand = cands[0]
+        parts = (cand.get("content") or {}).get("parts") or []
+        text = "".join(p.get("text", "") for p in parts if isinstance(p, dict)).strip()
+        if not text:
+            raise _EmptyCompletion(f"AI Studio returned empty content "
+                                   f"(finishReason={cand.get('finishReason')}).")
+        return text
+
+    try:
+        return _do(body)
+    except _EmptyCompletion:
+        raise
+    except RuntimeError:
+        # Retry once with a conservative config (some Gemma builds reject
+        # responseMimeType or a large maxOutputTokens).
+        gen_cfg.pop("responseMimeType", None)
+        gen_cfg["maxOutputTokens"] = min(gen_cfg.get("maxOutputTokens", 8192), 8192)
+        return _do(body)
+
+
+def _llm(provider: str, system_prompt: str, user_prompt: str, *, max_tokens: int,
+         temperature: float, response_json: bool = False, progress=None) -> str:
+    """Dispatch a raw text generation to the chosen provider."""
+    if provider == "aistudio":
+        return call_gemma_raw(system_prompt, user_prompt, max_tokens=max_tokens,
+                              temperature=temperature, response_json=response_json, progress=progress)
+    return call_kimi_raw(system_prompt, user_prompt, max_tokens=max_tokens,
+                         temperature=temperature, response_json=response_json, progress=progress)
 
 
 def _extract_json(text: str) -> dict:
@@ -913,7 +986,7 @@ def _table_columns(rows, requested):
     return cols[:8] or keys[:8]
 
 
-def _assemble_pdf(blueprint: dict, pack: dict, mode: str, progress=None) -> bytes:
+def _assemble_pdf(blueprint: dict, pack: dict, mode: str, progress=None, model_label="AI") -> bytes:
     pdf = AIReportPDF()
     avail_w = pdf.PAGE_W - pdf.MARGIN_L - pdf.MARGIN_R
     meta = pack["meta"]
@@ -924,7 +997,7 @@ def _assemble_pdf(blueprint: dict, pack: dict, mode: str, progress=None) -> byte
     cover_meta += [
         f"Generated: {meta['generated']}",
         f"Opportunities: {meta['filtered_opportunities']}   |   Currency: {meta['currency']}",
-        "AI-generated report (Kimi K2.6) - design dynamic, figures verified",
+        f"AI-generated report ({model_label}) - design dynamic, figures verified",
     ]
     _draw_cover(pdf, blueprint["title"], blueprint["subtitle"], "GLOBAL HOPPER - AI", cover_meta)
 
@@ -1085,14 +1158,17 @@ def _render_html_pdf(html: str) -> bytes:
 # =============================================================================
 
 def generate_ai_report(parsed_data: dict, filters: dict = None, mode: str = "catalog",
-                       progress=None):
+                       progress=None, provider: str = "nvidia"):
     """Generate an AI-designed PDF. Returns ``(pdf_bytes, filename, note)`` where
     ``note`` is None on success or a string when the deterministic fallback was used.
 
-    ``mode`` ∈ {"catalog", "charts", "html"}. On any hard failure we fall back to
-    the deterministic detailed report so the user always gets a PDF."""
+    ``mode`` ∈ {"catalog", "charts", "html"}; ``provider`` ∈ {"nvidia" (Kimi K2.6),
+    "aistudio" (Gemma 4 31B)}. On any hard failure we fall back to the
+    deterministic detailed report so the user always gets a PDF."""
     mode = mode if mode in MODES else "catalog"
+    provider = provider if provider in PROVIDERS else "nvidia"
     filters = filters or {}
+    model_label = PROVIDER_LABELS.get(provider, "AI")
 
     def _say(msg):
         if progress:
@@ -1111,8 +1187,8 @@ def generate_ai_report(parsed_data: dict, filters: dict = None, mode: str = "cat
                                    "this server. Use the Charts or Catalog mode.")
             _say("Designing report (HTML)…")
             system, user = _html_prompt(pack)
-            html = call_kimi_raw(system, user, max_tokens=HTML_MAX_TOKENS, temperature=0.5,
-                                 progress=progress)
+            html = _llm(provider, system, user, max_tokens=HTML_MAX_TOKENS, temperature=0.5,
+                        progress=progress)
             # strip an accidental code fence
             m = re.search(r"```(?:html)?\s*\n(.*?)\n```", html, re.DOTALL)
             if m:
@@ -1122,8 +1198,8 @@ def generate_ai_report(parsed_data: dict, filters: dict = None, mode: str = "cat
         else:
             _say("Designing report…")
             system, user = _blueprint_prompt(pack, mode)
-            raw = call_kimi_raw(system, user, max_tokens=BLUEPRINT_MAX_TOKENS, temperature=0.45,
-                                response_json=True, progress=progress)
+            raw = _llm(provider, system, user, max_tokens=BLUEPRINT_MAX_TOKENS, temperature=0.45,
+                       response_json=True, progress=progress)
             try:
                 bp = validate_blueprint(_extract_json(raw), pack, mode)
             except Exception as e1:
@@ -1131,15 +1207,15 @@ def generate_ai_report(parsed_data: dict, filters: dict = None, mode: str = "cat
                 repair = (f"Your previous output could not be used ({e1}). Return ONLY a valid "
                           f"JSON object matching the required schema. Use only datasets/fields "
                           f"from the pack.\n\n{user}")
-                raw2 = call_kimi_raw(system, repair, max_tokens=BLUEPRINT_MAX_TOKENS, temperature=0.3,
-                                     response_json=True, progress=progress)
+                raw2 = _llm(provider, system, repair, max_tokens=BLUEPRINT_MAX_TOKENS,
+                            temperature=0.3, response_json=True, progress=progress)
                 bp = validate_blueprint(_extract_json(raw2), pack, mode)
             _say("Rendering charts & building PDF…")
-            pdf_bytes = _assemble_pdf(bp, pack, mode, progress=progress)
+            pdf_bytes = _assemble_pdf(bp, pack, mode, progress=progress, model_label=model_label)
 
         if not pdf_bytes:
             raise RuntimeError("Empty PDF produced.")
-        fname = _filename(parsed_data, mode, fallback=False)
+        fname = _filename(parsed_data, mode, provider, fallback=False)
         return pdf_bytes, fname, None
 
     except Exception as e:
@@ -1147,15 +1223,16 @@ def generate_ai_report(parsed_data: dict, filters: dict = None, mode: str = "cat
         try:
             _say("AI unavailable — generating deterministic report…")
             pdf_bytes = generate_hopper_detailed_pdf_report(parsed_data, filters=filters)
-            return pdf_bytes, _filename(parsed_data, mode, fallback=True), \
+            return pdf_bytes, _filename(parsed_data, mode, provider, fallback=True), \
                 f"AI report unavailable ({e}); deterministic detailed report provided instead."
         except Exception as e2:
             raise RuntimeError(f"AI report failed ({e}) and fallback failed ({e2}).")
 
 
-def _filename(parsed_data, mode, fallback):
+def _filename(parsed_data, mode, provider, fallback):
     base = (parsed_data.get("metadata", {}) or {}).get("source_file", "") or "Global_Hopper"
     base = re.sub(r"\.[^.]+$", "", base).replace(" ", "_") or "Global_Hopper"
+    prov = {"nvidia": "kimi", "aistudio": "gemma"}.get(provider, provider)
     if fallback:
-        return f"{base}_AI_fallback.pdf"
-    return f"{base}_AI_{mode}.pdf"
+        return f"{base}_AI_{prov}_fallback.pdf"
+    return f"{base}_AI_{prov}_{mode}.pdf"
