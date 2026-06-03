@@ -364,6 +364,9 @@ export interface ExportPayload {
    * silently ignore it. The report is always the full executive briefing;
    * section selection was removed. */
   filters?: Record<string, string>
+  /** When true, generate the long-form Detailed report (every analysis as a
+   * chart + table). Applies to the Global Hopper report. */
+  detailed?: boolean
 }
 
 /**

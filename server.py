@@ -518,6 +518,8 @@ def export_pdf():
     currency_symbol = data.get("currency_symbol", "USD")
     file_type = data.get("file_type")
     filters = data.get("filters", {})
+    # "detailed" -> long-form report with every analysis (charts + tables).
+    detailed = bool(data.get("detailed"))
 
     # -- selected_files (list) OR filename (single) ---------------------------
     selected_files = data.get("selected_files")
@@ -550,13 +552,21 @@ def export_pdf():
 
     if file_type == 'GLOBAL_HOPPER' or first_parsed.get("file_type") == 'GLOBAL_HOPPER':
         try:
-            from pdf_export import generate_hopper_pdf_report
-            pdf_bytes = generate_hopper_pdf_report(
-                parsed_data=first_parsed,
-                sections_to_include=sections_to_include,
-                filters=filters
-            )
-            filename = f"Global_Hopper_Report.pdf"
+            if detailed:
+                from pdf_export import generate_hopper_detailed_pdf_report
+                pdf_bytes = generate_hopper_detailed_pdf_report(
+                    parsed_data=first_parsed,
+                    sections_to_include=sections_to_include,
+                    filters=filters
+                )
+            else:
+                from pdf_export import generate_hopper_pdf_report
+                pdf_bytes = generate_hopper_pdf_report(
+                    parsed_data=first_parsed,
+                    sections_to_include=sections_to_include,
+                    filters=filters
+                )
+            filename = "Global_Hopper_Detailed_Report.pdf" if detailed else "Global_Hopper_Report.pdf"
             return send_file(
                 io.BytesIO(pdf_bytes),
                 mimetype="application/pdf",

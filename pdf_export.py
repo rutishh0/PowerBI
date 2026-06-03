@@ -232,19 +232,15 @@ def generate_pdf_report(
     ])
     pdf.add_page()
 
-    # ========== TITLE BAR ==========
-    pdf.set_fill_color(*RRPDFReport.RR_DARK)
-    pdf.set_text_color(*RRPDFReport.RR_WHITE)
-    pdf.set_font('Helvetica', 'B', 16)
-    pdf.cell(0, 12, '', 0, 1, fill=True)  # Background bar
-    pdf.set_xy(10, 10)
-    pdf.cell(80, 12, 'ROLLS-ROYCE', 0, 0, 'L')
-    pdf.set_font('Helvetica', 'B', 14)
-    pdf.cell(0, 12, 'Statement of Account Report', 0, 0, 'C')
-    pdf.set_font('Helvetica', '', 10)
-    pdf.cell(-80, 12, datetime.now().strftime("%d/%m/%Y %H:%M"), 0, 1, 'R')
-
-    pdf.ln(5)
+    # ========== PAGE HEADING (the cover carries the full title) ==========
+    pdf.set_xy(10, 12)
+    pdf.set_font('Helvetica', 'B', 13)
+    pdf.set_text_color(*RRPDFReport.RR_DARK)
+    pdf.cell(0, 7, 'Statement of Account', 0, 1, 'L')
+    _hy = pdf.get_y() + 1
+    pdf.set_fill_color(*HOPPER_GOLD_RGB)
+    pdf.rect(10, _hy, 24, 1.0, 'F')
+    pdf.set_y(_hy + 4)
 
     # ========== CUSTOMER INFO SECTION ==========
     pdf.set_font('Helvetica', 'B', 12)
@@ -820,11 +816,15 @@ def generate_opp_pdf_report(
     # PAGE 1: Title + KPIs + Priority Breakdown
     # =========================================================================
 
-    date_str = datetime.now().strftime("%d %B %Y")
-    subtitle = f"Generated: {date_str}  |  {len(filtered)} Opportunities  |  {len(customers)} Customers"
-    if filters.get("customer"):
-        subtitle = f"Filtered: {filters['customer']}  |  " + subtitle
-    pdf._title_bar("COMMERCIAL OPTIMISATION OPPORTUNITY REPORT", subtitle)
+    # Slim heading — the cover carries the full report title.
+    pdf.set_xy(12, 12)
+    pdf.set_font("Helvetica", "B", 13)
+    pdf.set_text_color(*NAVY)
+    pdf.cell(0, 7, "Opportunity Overview", 0, 1, "L")
+    _hy = pdf.get_y() + 1
+    pdf.set_fill_color(*HOPPER_GOLD_RGB)
+    pdf.rect(12, _hy, 24, 1.0, "F")
+    pdf.set_y(_hy + 4)
 
     if len(filtered) == 0:
         pdf.set_font("Helvetica", "I", 12)
@@ -1236,35 +1236,89 @@ def _add_separators(fig, axes):
         pass
 
 
+# Reference gridline style — deliberately substantial so amounts read clearly.
+GRID_KW = dict(linewidth=1.1, alpha=0.55, color='#c2c9d4', zorder=0)
+
+
 def _style_value_axis(ax):
-    """Common styling for a value/count bar axis (no left spine, light grid)."""
+    """Common styling for a vertical value/count bar axis: thick horizontal
+    reference gridlines for the amounts, but no numeric y-axis clutter (the
+    bars carry value labels)."""
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['left'].set_visible(False)
     ax.spines['bottom'].set_color('#e5e7eb')
-    ax.tick_params(colors='#374151', labelsize=8)
-    ax.set_yticks([])
+    ax.grid(True, axis='y', **GRID_KW)
+    ax.set_axisbelow(True)
+    ax.tick_params(axis='y', left=False, labelleft=False)
+    ax.tick_params(axis='x', colors='#374151', labelsize=8, length=0)
     ax.title.set_color(HOPPER_NAVY)
     ax.title.set_fontsize(11)
     ax.title.set_weight('bold')
 
 
-def _generate_hopper_charts(filtered, summary):
-    """Hero chart strip for page 1: Pipeline-by-Status (value, gold) +
-    Annual-Profit (value, gold), with a CRP-by-Region donut in the middle
-    *only* when more than one region is present. Thin rules separate the
-    panels. Sized to sit below the executive summary on page 1."""
+PIPELINE_ORDER = [
+    "Initial idea", "ICT formed", "Strategy Approved",
+    "Financial Modelling Started", "Financial Modelling Complete",
+    "Financials Approved", "Negotiations Started",
+    "Negotiations Concluded", "Contracting Started",
+    "Contracting Concluded",
+]
+
+
+def _pipeline_stages(filtered):
+    """Stages actually present (canonical order first, then any spelling
+    variants by value) with their CRP totals. Zero-CRP stages are kept."""
+    status_crp = {}
+    for r in filtered:
+        st = str(r.get('status', '')).strip() or 'Unknown'
+        status_crp[st] = status_crp.get(st, 0) + _val(r.get('crp_term_benefit'))
+    stages = [s for s in PIPELINE_ORDER if s in status_crp] + \
+             sorted((s for s in status_crp if s not in PIPELINE_ORDER),
+                    key=lambda s: status_crp[s], reverse=True)
+    return stages, [status_crp[s] for s in stages]
+
+
+def _generate_pipeline_chart(filtered):
+    """Standalone large Pipeline-by-Status value chart (gold) for its own
+    page, with thick reference gridlines."""
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
+    stages, p_vals = _pipeline_stages(filtered)
+    if not stages:
+        return None
+    plt.style.use('default')
+    fig, ax = plt.subplots(figsize=(13, 5.2), dpi=160)
+    fig.patch.set_facecolor('white')
+    _style_value_axis(ax)
+    bars = ax.bar(range(len(stages)), p_vals, color=VALUE_HEX, width=0.6)
+    ax.set_xticks(range(len(stages)))
+    _fs = 9 if len(stages) <= 7 else (7.5 if len(stages) <= 9 else 6.5)
+    ax.set_xticklabels([s.replace(" ", "\n", 1) if " " in s else s for s in stages],
+                       fontsize=_fs, rotation=20, ha='right', color='#374151')
+    for bar, v in zip(bars, p_vals):
+        if v > 0:
+            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height(),
+                    f"£{v:,.0f}m", ha='center', va='bottom',
+                    fontsize=9, color=HOPPER_NAVY, weight='bold')
+    ax.margins(y=0.18)
+    ax.set_title("Pipeline by Status — CRP term benefit (£m)", loc='left', pad=8)
+    plt.tight_layout(pad=1.6)
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', bbox_inches='tight', dpi=160, facecolor='white')
+    plt.close(fig)
+    buf.seek(0)
+    return buf
 
-    PIPELINE_ORDER = [
-        "Initial idea", "ICT formed", "Strategy Approved",
-        "Financial Modelling Started", "Financial Modelling Complete",
-        "Financials Approved", "Negotiations Started",
-        "Negotiations Concluded", "Contracting Started",
-        "Contracting Concluded",
-    ]
+
+def _generate_hopper_charts(filtered, summary):
+    """Page-2 chart strip: Annual-Profit (value, gold) plus a CRP-by-Region
+    donut *only* when more than one region is present. (Pipeline by Status now
+    has its own page.) Thin rules separate the panels."""
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
 
     by_region = {}
     for r in filtered:
@@ -1274,46 +1328,17 @@ def _generate_hopper_charts(filtered, summary):
 
     plt.style.use('default')
     if show_region:
-        fig, axes = plt.subplots(1, 3, figsize=(13, 4.3), dpi=160,
-                                 gridspec_kw={'width_ratios': [1.5, 1, 1]})
-        ax1, ax2, ax3 = axes
-        sep_axes = [ax1, ax2, ax3]
-    else:
         fig, axes = plt.subplots(1, 2, figsize=(13, 4.3), dpi=160,
-                                 gridspec_kw={'width_ratios': [1.4, 1]})
-        ax1, ax3 = axes
+                                 gridspec_kw={'width_ratios': [1, 1.1]})
+        ax2, ax3 = axes
+        sep_axes = [ax2, ax3]
+    else:
+        fig, ax3 = plt.subplots(1, 1, figsize=(13, 4.0), dpi=160)
         ax2 = None
-        sep_axes = [ax1, ax3]
+        sep_axes = []
     fig.patch.set_facecolor('white')
 
-    # -- CHART 1: Pipeline by Status (VALUE -> gold). Include every status
-    # actually present so no value is silently dropped; zero-CRP stages kept.
-    status_crp = {}
-    for r in filtered:
-        st = str(r.get('status', '')).strip() or 'Unknown'
-        status_crp[st] = status_crp.get(st, 0) + _val(r.get('crp_term_benefit'))
-    stages = [s for s in PIPELINE_ORDER if s in status_crp] + \
-             sorted((s for s in status_crp if s not in PIPELINE_ORDER),
-                    key=lambda s: status_crp[s], reverse=True)
-    p_vals = [status_crp[s] for s in stages]
-
-    _style_value_axis(ax1)
-    if stages:
-        bars = ax1.bar(range(len(stages)), p_vals, color=VALUE_HEX, width=0.62)
-        ax1.set_xticks(range(len(stages)))
-        _fs = 7.5 if len(stages) <= 7 else (6.5 if len(stages) <= 9 else 5.6)
-        ax1.set_xticklabels([s.replace(" ", "\n", 1) if " " in s else s for s in stages],
-                             fontsize=_fs, rotation=30, ha='right', color='#374151')
-        ax1.tick_params(axis='x', pad=2)
-        for bar, v in zip(bars, p_vals):
-            if v > 0:
-                ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height(),
-                         f"£{v:,.0f}m", ha='center', va='bottom',
-                         fontsize=7.5, color=HOPPER_NAVY, weight='bold')
-        ax1.margins(y=0.18)
-    ax1.set_title("Pipeline by Status — CRP £m", loc='left', pad=8)
-
-    # -- CHART 2: CRP by Region donut (categorical; only when >1 region) --
+    # -- CRP by Region donut (categorical; only when >1 region) -----------
     if ax2 is not None:
         r_sorted = sorted(by_region.items(), key=lambda x: x[1], reverse=True)
         r_labels = [x[0] for x in r_sorted]
@@ -1332,18 +1357,18 @@ def _generate_hopper_charts(filtered, summary):
         ax2.set_title("CRP by Region", loc='left', pad=8)
         ax2.axis('equal')
 
-    # -- CHART 3: Annual Profit Forecast (VALUE -> single gold) -----------
+    # -- Annual Profit Forecast (VALUE -> single gold) --------------------
     years = ['2026', '2027', '2028', '2029', '2030']
     year_totals = [sum(_val(r.get(f'profit_{y}')) for r in filtered) for y in years]
     _style_value_axis(ax3)
     if any(abs(t) > 0 for t in year_totals):
-        bars = ax3.bar(years, year_totals, color=VALUE_HEX, width=0.64)
+        bars = ax3.bar(years, year_totals, color=VALUE_HEX, width=0.6)
         for bar, v in zip(bars, year_totals):
             if v != 0:
                 ax3.text(bar.get_x() + bar.get_width()/2, bar.get_height(),
                          f"£{v:,.0f}m", ha='center',
                          va='bottom' if v >= 0 else 'top',
-                         fontsize=8, color=HOPPER_NAVY, weight='bold')
+                         fontsize=9, color=HOPPER_NAVY, weight='bold')
         ax3.margins(y=0.18)
     ax3.set_title("Annual Profit Forecast — £m", loc='left', pad=8)
 
@@ -1376,9 +1401,9 @@ def _generate_customer_chart(filtered, top_n=20):
     names = [n[:26] for n, _ in items]
     vals = [v for _, v in items]
 
-    # Taller figure so the (now sole) chart fills the page after the table is
-    # removed; height scales with the number of customers.
-    h = max(4.5, min(8.0, 0.5 * len(items) + 1.6))
+    # Height scales with the number of customers but is capped so the
+    # supporting table still fits beneath on the page.
+    h = max(4.0, min(6.0, 0.42 * len(items) + 1.8))
     fig, ax = plt.subplots(figsize=(13, h), dpi=160)
     fig.patch.set_facecolor('white')
     ax.spines['top'].set_visible(False)
@@ -1386,8 +1411,8 @@ def _generate_customer_chart(filtered, top_n=20):
     ax.spines['left'].set_color('#e5e7eb')
     ax.spines['bottom'].set_color('#e5e7eb')
     ax.tick_params(colors='#374151', labelsize=10)
-    # Vertical reference gridlines (value axis) — make magnitudes readable.
-    ax.grid(True, axis='x', linestyle='--', alpha=0.30, color='#9aa3b2')
+    # Vertical reference gridlines (value axis) — thick so magnitudes read.
+    ax.grid(True, axis='x', **GRID_KW)
     ax.set_axisbelow(True)
     ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'£{int(x)}m'))
     bars = ax.barh(names, vals, color=VALUE_HEX, height=0.66)
@@ -1428,7 +1453,7 @@ def _generate_evs_charts(filtered, top_n=10):
     values = [by_value[e] for e in order]
 
     plt.style.use('default')
-    fig, (axc, axv) = plt.subplots(1, 2, figsize=(13, 3.8), dpi=160)
+    fig, (axc, axv) = plt.subplots(1, 2, figsize=(13, 4.4), dpi=160)
     fig.patch.set_facecolor('white')
 
     def _style(ax):
@@ -1436,10 +1461,12 @@ def _generate_evs_charts(filtered, top_n=10):
         ax.spines['right'].set_visible(False)
         ax.spines['left'].set_visible(False)
         ax.spines['bottom'].set_color('#e5e7eb')
-        ax.set_yticks([])
-        ax.tick_params(colors='#374151', labelsize=8)
+        ax.grid(True, axis='y', **GRID_KW)
+        ax.set_axisbelow(True)
+        ax.tick_params(axis='y', left=False, labelleft=False)
+        ax.tick_params(axis='x', colors='#374151', labelsize=9, length=0)
         ax.title.set_color(HOPPER_NAVY)
-        ax.title.set_fontsize(10.5)
+        ax.title.set_fontsize(11.5)
         ax.title.set_weight('bold')
 
     # COUNT panel (blue)
@@ -1487,50 +1514,44 @@ def _generate_structure_charts(filtered):
         k = str(r.get('restructure_type', '')).strip() or 'Unknown'
         rtype[k] = rtype.get(k, 0) + _val(r.get('crp_term_benefit'))
         rtype_n[k] = rtype_n.get(k, 0) + 1
-    # Order by value desc; reversed for horizontal bars (largest on top).
-    order = [k for k, _ in sorted(rtype.items(), key=lambda x: x[1])]
+    # Order by value desc (largest first, left to right).
+    order = [k for k, _ in sorted(rtype.items(), key=lambda x: x[1], reverse=True)]
     if not order:
         return None
-    names = [k[:30] for k in order]
+    names = [k for k in order]
     vals = [rtype[k] for k in order]
     counts = [rtype_n[k] for k in order]
 
+    def _wrap(s):  # wrap long restructure names onto 2 lines for x-axis
+        return s.replace(" ", "\n", 1) if " " in s else s
+    labels = [_wrap(n[:34]) for n in names]
+    _fs = 8.5 if len(names) <= 4 else 7
+
     plt.style.use('default')
-    fig, (axv, axc) = plt.subplots(1, 2, figsize=(13, 3.6), dpi=160)
+    fig, (axv, axc) = plt.subplots(1, 2, figsize=(13, 4.4), dpi=160)
     fig.patch.set_facecolor('white')
 
-    def _style(ax):
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_color('#e5e7eb')
-        ax.spines['bottom'].set_visible(False)
-        ax.set_xticks([])
-        ax.tick_params(colors='#374151', labelsize=8.5)
-        ax.title.set_color(HOPPER_NAVY)
-        ax.title.set_fontsize(10.5)
-        ax.title.set_weight('bold')
-
-    # VALUE panel (gold)
-    _style(axv)
-    bv = axv.barh(names, vals, color=VALUE_HEX, height=0.6)
-    span = max(vals) if vals else 0
+    # VALUE panel (gold) — vertical bars
+    _style_value_axis(axv)
+    bv = axv.bar(range(len(names)), vals, color=VALUE_HEX, width=0.6)
+    axv.set_xticks(range(len(names)))
+    axv.set_xticklabels(labels, fontsize=_fs, color='#374151')
     for b, v in zip(bv, vals):
-        axv.text(b.get_width() + span * 0.01, b.get_y() + b.get_height()/2,
-                 f"  £{v:,.0f}m", va='center', ha='left', fontsize=8.5,
-                 color=HOPPER_NAVY, weight='bold')
-    axv.margins(x=0.20)
+        if v > 0:
+            axv.text(b.get_x() + b.get_width()/2, b.get_height(), f"£{v:,.0f}m",
+                     ha='center', va='bottom', fontsize=8.5, color=HOPPER_NAVY, weight='bold')
+    axv.margins(y=0.18)
     axv.set_title("By CRP term benefit (£m)", loc='left', pad=8)
 
-    # COUNT panel (blue) — no y labels (shared with value panel via separator)
-    _style(axc)
-    bc = axc.barh(names, counts, color=COUNT_HEX, height=0.6)
-    axc.set_yticklabels([])
-    cspan = max(counts) if counts else 0
+    # COUNT panel (blue) — vertical bars
+    _style_value_axis(axc)
+    bc = axc.bar(range(len(names)), counts, color=COUNT_HEX, width=0.6)
+    axc.set_xticks(range(len(names)))
+    axc.set_xticklabels(labels, fontsize=_fs, color='#374151')
     for b, c in zip(bc, counts):
-        axc.text(b.get_width() + cspan * 0.01, b.get_y() + b.get_height()/2,
-                 f"  {c} opps", va='center', ha='left', fontsize=8.5,
-                 color=HOPPER_NAVY, weight='bold')
-    axc.margins(x=0.20)
+        axc.text(b.get_x() + b.get_width()/2, b.get_height(), f"{c}",
+                 ha='center', va='bottom', fontsize=8.5, color=HOPPER_NAVY, weight='bold')
+    axc.margins(y=0.18)
     axc.set_title("By opportunities (count)", loc='left', pad=8)
 
     plt.tight_layout(pad=2.0)
@@ -2133,124 +2154,121 @@ def generate_hopper_pdf_report(
             pdf.set_text_color(*HOPPER_TEXT_MUTE)
             pdf.cell(0, 5, _safe(f"(charts unavailable: {e})"), 0, 1, "L")
 
-    # ============================================================ PAGE 2
-    # Customer & Engine analysis — chart strip + tables
-    if "customer_analysis" in sections or "engine_analysis" in sections:
+    # ============================================================ PIPELINE (own page)
+    if "pipeline" in sections:
+        pdf.add_page()
+        pdf._page_header("Pipeline by Status")
+        avail_w = pdf.PAGE_W - pdf.MARGIN_L - pdf.MARGIN_R
+        try:
+            pbuf = _generate_pipeline_chart(filtered)
+            if pbuf is not None:
+                pdf.image(pbuf, x=pdf.MARGIN_L, w=avail_w)
+                pdf.ln(3)
+        except Exception:
+            pass
+        by_status_count = _aggregate(filtered, "status", count=True)
+        by_status_crp = _aggregate(filtered, "status")
+        ordered = [s for s in PIPELINE_ORDER if s in by_status_count] + \
+                  sorted((s for s in by_status_count if s not in PIPELINE_ORDER),
+                         key=lambda s: by_status_crp.get(s, 0), reverse=True)
+        if ordered:
+            rows = [[_trunc(s, 60), str(by_status_count.get(s, 0)),
+                     _fmtM_gbp(by_status_crp.get(s, 0)), _pct(by_status_crp.get(s, 0), total_crp)]
+                    for s in ordered]
+            pdf._section_header("Pipeline by stage")
+            pdf._table(["Stage", "Opportunities", "CRP Term (GBP m)", "% of CRP"], rows,
+                       [130, 40, 55, 30], right_align_idx={1, 2, 3},
+                       totals_row=["TOTAL", str(total_opps), _fmtM_gbp(total_crp), "100.0%"])
+
+    # ============================================================ CUSTOMER (chart + table)
+    if "customer_analysis" in sections:
         pdf.add_page()
         pdf._page_header("CRP term benefit by customer")
+        avail_w = pdf.PAGE_W - pdf.MARGIN_L - pdf.MARGIN_R
+        try:
+            cbuf = _generate_customer_chart(filtered, top_n=20)
+            if cbuf is not None:
+                pdf.image(cbuf, x=pdf.MARGIN_L, w=avail_w)
+                pdf.ln(3)
+        except Exception:
+            pass
+        by_cust = _aggregate(filtered, "customer")
+        cust_n = _aggregate(filtered, "customer", count=True)
+        cust_sorted = sorted(by_cust.items(), key=lambda x: x[1], reverse=True)
+        if cust_sorted:
+            rows = [[str(i), _trunc(c, 42), str(cust_n.get(c, 0)), _fmtM_gbp(v),
+                     _pct(v, total_crp)] for i, (c, v) in enumerate(cust_sorted, 1)]
+            pdf._section_header("Customer breakdown")
+            pdf._table(["#", "Customer", "Opportunities", "CRP Term (GBP m)", "% of Total"], rows,
+                       [10, 110, 40, 55, 35], right_align_idx={2, 3, 4},
+                       totals_row=["", "TOTAL", str(total_opps), _fmtM_gbp(total_crp), "100.0%"],
+                       max_rows=40)
 
-        # A single large chart — all customers, including those carrying zero
-        # CRP (still live opportunities).
-        if "customer_analysis" in sections:
-            try:
-                cbuf = _generate_customer_chart(filtered, top_n=20)
-                if cbuf is not None:
-                    pdf.image(cbuf, x=pdf.MARGIN_L,
-                              w=pdf.PAGE_W - pdf.MARGIN_L - pdf.MARGIN_R)
-                    pdf.ln(2)
-            except Exception:
-                pass
-
-        # -- EVS: two charts (count + value) replace the old data table; a
-        # short value-density note adds the analytical takeaway.
-        if "engine_analysis" in sections:
-            pdf.add_page()
-            pdf._page_header("Engine Value Stream Analysis")
-
-            try:
-                ebuf = _generate_evs_charts(filtered, top_n=10)
-                if ebuf is not None:
-                    pdf.image(ebuf, x=pdf.MARGIN_L,
-                              w=pdf.PAGE_W - pdf.MARGIN_L - pdf.MARGIN_R)
-                    pdf.ln(3)
-            except Exception:
-                pass
-
-            by_evs_count = _aggregate(filtered, "engine_value_stream", count=True)
-            by_evs_crp = _aggregate(filtered, "engine_value_stream")
-            dens = [(e, by_evs_crp.get(e, 0) / max(1, c))
-                    for e, c in by_evs_count.items() if by_evs_crp.get(e, 0) > 0]
-            if dens and by_evs_count:
-                dens.sort(key=lambda x: x[1], reverse=True)
-                lead = dens[0]
-                top_cnt = max(by_evs_count.items(), key=lambda x: x[1])
-                pdf._narrative(
-                    f"Insight - {lead[0]} carries the highest value density at {_fmtM_gbp(lead[1])} per "
-                    f"opportunity, while {top_cnt[0]} leads on volume with {top_cnt[1]} opportunities. "
-                    f"Streams with high count but low CRP are early-stage volume worth maturing.")
-
-    # ============================================================ PAGE 3
-    # Pipeline & Structure
-    if "pipeline" in sections or "restructure" in sections:
+    # ============================================================ ENGINE VALUE STREAM (charts + table)
+    if "engine_analysis" in sections:
         pdf.add_page()
-        pdf._page_header("Pipeline & Restructure Breakdown")
+        pdf._page_header("Engine Value Stream Analysis")
+        avail_w = pdf.PAGE_W - pdf.MARGIN_L - pdf.MARGIN_R
+        try:
+            ebuf = _generate_evs_charts(filtered, top_n=10)
+            if ebuf is not None:
+                pdf.image(ebuf, x=pdf.MARGIN_L, w=avail_w)
+                pdf.ln(3)
+        except Exception:
+            pass
 
-        if "pipeline" in sections:
-            PIPELINE_ORDER = [
-                "Initial idea", "ICT formed", "Strategy Approved",
-                "Financial Modelling Started", "Financial Modelling Complete",
-                "Financials Approved", "Negotiations Started",
-                "Negotiations Concluded", "Contracting Started",
-                "Contracting Concluded",
-            ]
-            by_status_count = _aggregate(filtered, "status", count=True)
-            by_status_crp = _aggregate(filtered, "status")
+        by_evs_count = _aggregate(filtered, "engine_value_stream", count=True)
+        by_evs_crp = _aggregate(filtered, "engine_value_stream")
+        evs_sorted = sorted(by_evs_count.items(), key=lambda x: x[1], reverse=True)
+        if evs_sorted:
+            rows = [[_trunc(e, 50), str(c), _fmtM_gbp(by_evs_crp.get(e, 0)),
+                     _pct(by_evs_crp.get(e, 0), total_crp)] for e, c in evs_sorted]
+            pdf._section_header("Engine value stream breakdown")
+            pdf._table(["Engine Value Stream", "Opportunities", "CRP Term (GBP m)", "% of Total"], rows,
+                       [120, 40, 55, 30], right_align_idx={1, 2, 3},
+                       totals_row=["TOTAL", str(total_opps), _fmtM_gbp(total_crp), "100.0%"])
+        dens = [(e, by_evs_crp.get(e, 0) / max(1, c))
+                for e, c in by_evs_count.items() if by_evs_crp.get(e, 0) > 0]
+        if dens:
+            dens.sort(key=lambda x: x[1], reverse=True)
+            lead = dens[0]
+            top_cnt = max(by_evs_count.items(), key=lambda x: x[1])
+            pdf._narrative(
+                f"Insight - {lead[0]} carries the highest value density at {_fmtM_gbp(lead[1])} per "
+                f"opportunity, while {top_cnt[0]} leads on volume with {top_cnt[1]} opportunities. "
+                f"Streams with high count but low CRP are early-stage volume worth maturing.")
 
-            # Order canonical first, then any unknown statuses by value.
-            ordered = []
-            for s in PIPELINE_ORDER:
-                if s in by_status_count:
-                    ordered.append(s)
-            extras = sorted(
-                (s for s in by_status_count if s not in PIPELINE_ORDER),
-                key=lambda s: by_status_crp.get(s, 0), reverse=True,
-            )
-            ordered.extend(extras)
+    # ============================================================ RESTRUCTURE (charts + table, own page)
+    if "restructure" in sections:
+        pdf.add_page()
+        pdf._page_header("Restructure Type")
+        avail_w = pdf.PAGE_W - pdf.MARGIN_L - pdf.MARGIN_R
+        try:
+            sbuf = _generate_structure_charts(filtered)
+            if sbuf is not None:
+                pdf.image(sbuf, x=pdf.MARGIN_L, w=avail_w)
+                pdf.ln(3)
+        except Exception:
+            pass
+        rt_crp = _aggregate(filtered, "restructure_type")
+        rt_n = _aggregate(filtered, "restructure_type", count=True)
+        rt_sorted = sorted(rt_crp.items(), key=lambda x: x[1], reverse=True)
+        if rt_sorted:
+            rows = [[_trunc(k, 60), str(rt_n.get(k, 0)), _fmtM_gbp(v), _pct(v, total_crp)]
+                    for k, v in rt_sorted]
+            pdf._section_header("Restructure type breakdown")
+            pdf._table(["Restructure Type", "Opportunities", "CRP Term (GBP m)", "% of CRP"], rows,
+                       [130, 40, 55, 30], right_align_idx={1, 2, 3},
+                       totals_row=["TOTAL", str(total_opps), _fmtM_gbp(total_crp), "100.0%"])
+            top_rt = rt_sorted[0]
+            pdf._narrative(
+                f"Insight - {top_rt[0]} accounts for {_pct(top_rt[1], total_crp)} of CRP term benefit. "
+                f"The value and volume views together show where restructuring effort and reward concentrate.")
 
-            if ordered:
-                pdf._section_header("Pipeline by Status")
-                headers = ["Stage", "Opportunities", "CRP Term (GBP m)", "% of CRP"]
-                widths = [130, 40, 55, 30]
-                rows = []
-                for s in ordered:
-                    rows.append([
-                        _trunc(s, 60),
-                        str(by_status_count.get(s, 0)),
-                        _fmtM_gbp(by_status_crp.get(s, 0)),
-                        _pct(by_status_crp.get(s, 0), total_crp),
-                    ])
-                pdf._table(headers, rows, widths,
-                           right_align_idx={1, 2, 3},
-                           totals_row=["TOTAL", str(total_opps),
-                                       _fmtM_gbp(total_crp), "100.0%"])
-
-        if "restructure" in sections:
-            # Restructure shown by VALUE and by COUNT (not value alone). Keep
-            # the header together with its charts (need ~80mm).
-            if pdf.get_y() + 80 > pdf.PAGE_H - 16:
-                pdf.add_page()
-                pdf._page_header("Restructure Type")
-            pdf._section_header("Restructure Type — value and volume")
-            try:
-                sbuf = _generate_structure_charts(filtered)
-                if sbuf is not None:
-                    pdf.image(sbuf, x=pdf.MARGIN_L,
-                              w=pdf.PAGE_W - pdf.MARGIN_L - pdf.MARGIN_R)
-                    pdf.ln(3)
-            except Exception:
-                pass
-            rt_crp = _aggregate(filtered, "restructure_type")
-            if rt_crp:
-                top_rt = max(rt_crp.items(), key=lambda x: x[1])
-                pdf._narrative(
-                    f"Insight - {top_rt[0]} accounts for {_pct(top_rt[1], total_crp)} of CRP term benefit. "
-                    f"The value and volume views together show where restructuring effort and reward concentrate.")
-
-    # ============================================================ PAGE 4
-    # Top Opportunities Register
+    # ============================================================ TOP 25 (own page)
     if "top_opportunities" in sections:
         pdf.add_page()
-        pdf._page_header("Top 25 Opportunities by CRP Term Benefit")
+        pdf._page_header("Global Top 25 Opportunities by CRP Term Benefit")
 
         top_sorted = sorted(filtered, key=lambda r: _val(r.get("crp_term_benefit")),
                             reverse=True)[:25]
@@ -2283,16 +2301,467 @@ def generate_hopper_pdf_report(
                  if str(r.get("initiative", "") or "").strip()]
     if init_opps:
         pdf.add_page()
-        pdf._page_header("Opportunity Initiatives")
+        pdf._page_header("Opportunities")
         body_w = pdf.PAGE_W - pdf.MARGIN_L - pdf.MARGIN_R
         for idx, r in enumerate(init_opps):
             init_text = str(r.get("initiative", "") or "").strip()
             # Keep the heading with at least the first lines of its initiative.
             if pdf.get_y() > pdf.PAGE_H - 36:
                 pdf.add_page()
-                pdf._page_header("Opportunity Initiatives (continued)")
+                pdf._page_header("Opportunities (continued)")
             elif idx > 0:
                 # Thin rule between entries for readability.
+                y = pdf.get_y()
+                pdf.set_draw_color(*HOPPER_BORDER)
+                pdf.set_line_width(0.2)
+                pdf.line(pdf.MARGIN_L, y, pdf.PAGE_W - pdf.MARGIN_R, y)
+                pdf.ln(3)
+            cust = _safe(r.get("customer", "") or "-")
+            evs = _safe(r.get("engine_value_stream", r.get("top_level_evs", "")) or "-")
+            status = _safe(r.get("status", "") or "-")
+            crp = _fmtM_gbp(_val(r.get("crp_term_benefit")))
+            pdf.set_x(pdf.MARGIN_L)
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.set_text_color(*HOPPER_PRIMARY_RGB)
+            pdf.cell(0, 6, _safe(f"{cust}   |   {evs}   |   {status}   |   CRP {crp}"), 0, 1, "L")
+            pdf.set_x(pdf.MARGIN_L)
+            pdf.set_font("Helvetica", "", 9.5)
+            pdf.set_text_color(*HOPPER_TEXT_DARK)
+            pdf.multi_cell(body_w, 5.2, _safe(init_text))
+            pdf.ln(3)
+
+    return bytes(pdf.output())
+
+
+# =============================================================================
+# Generic chart builders (used by the DETAILED report)
+# =============================================================================
+
+def _finish_fig(fig, pad=1.6, seps=None):
+    import matplotlib.pyplot as plt
+    fig.patch.set_facecolor('white')
+    try:
+        plt.tight_layout(pad=pad)
+    except Exception:
+        pass
+    if seps:
+        _add_separators(fig, seps)
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', bbox_inches='tight', dpi=160, facecolor='white')
+    plt.close(fig)
+    buf.seek(0)
+    return buf
+
+
+def _chart_vbars(panels, labels, rotate=20, label_fs=8, height=4.4):
+    """1- or 2-panel vertical bar chart. ``panels`` = list of
+    (values, title, color_hex, fmt_fn). Thick reference gridlines + separators."""
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    n = len(panels)
+    fig, axes = plt.subplots(1, n, figsize=(13, height), dpi=160)
+    if n == 1:
+        axes = [axes]
+
+    def wrap(s):
+        return s.replace(" ", "\n", 1) if (" " in s and len(s) > 12) else s
+
+    for ax, (vals, title, color, fmt) in zip(axes, panels):
+        _style_value_axis(ax)
+        bars = ax.bar(range(len(labels)), vals, color=color, width=0.62)
+        ax.set_xticks(range(len(labels)))
+        ax.set_xticklabels([wrap(str(l)) for l in labels], fontsize=label_fs,
+                           rotation=rotate, ha='right' if rotate else 'center', color='#374151')
+        for b, v in zip(bars, vals):
+            if v:
+                ax.text(b.get_x() + b.get_width()/2, b.get_height(), fmt(v),
+                        ha='center', va='bottom', fontsize=label_fs, color=HOPPER_NAVY, weight='bold')
+        ax.margins(y=0.18)
+        ax.set_title(title, loc='left', pad=8)
+    return _finish_fig(fig, pad=2.0, seps=list(axes) if n > 1 else None)
+
+
+def _chart_donut(pairs, title, palette=None):
+    pairs = [(l, v) for l, v in pairs if v and v > 0]
+    if not pairs:
+        return None
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    palette = palette or DONUT_PALETTE
+    labels = [p[0] for p in pairs]
+    vals = [p[1] for p in pairs]
+    total = sum(vals)
+    fig, ax = plt.subplots(figsize=(11, 4.6), dpi=160)
+    colors = [palette[i % len(palette)] for i in range(len(labels))]
+    wedges, _t, _a = ax.pie(
+        vals, labels=None, autopct=lambda p: f"{p:.0f}%" if p >= 4 else "",
+        colors=colors, startangle=90, pctdistance=0.78,
+        textprops={'color': 'white', 'fontsize': 9, 'weight': 'bold'},
+        wedgeprops={'width': 0.42, 'edgecolor': 'white', 'linewidth': 2})
+    ax.legend(wedges, [f"{str(l)[:24]} ({v / total * 100:.0f}%)" for l, v in zip(labels, vals)],
+              loc='center left', bbox_to_anchor=(0.98, 0.5), fontsize=9.5, frameon=False)
+    ax.set_title(title, loc='left', pad=12, color=HOPPER_NAVY, fontsize=12, fontweight='bold')
+    ax.axis('equal')
+    return _finish_fig(fig, pad=1.4)
+
+
+def _chart_hbar(pairs, title, value_fmt, color=VALUE_HEX, top_n=15):
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    pairs = sorted(pairs, key=lambda x: x[1], reverse=True)[:top_n]
+    pairs.reverse()
+    if not pairs:
+        return None
+    names = [str(l)[:26] for l, _ in pairs]
+    vals = [v for _, v in pairs]
+    h = max(3.6, min(7.0, 0.42 * len(pairs) + 1.6))
+    fig, ax = plt.subplots(figsize=(13, h), dpi=160)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_color('#e5e7eb')
+    ax.spines['bottom'].set_color('#e5e7eb')
+    ax.grid(True, axis='x', **GRID_KW)
+    ax.set_axisbelow(True)
+    ax.tick_params(colors='#374151', labelsize=9.5, length=0)
+    bars = ax.barh(names, vals, color=color, height=0.66)
+    span = max(vals) if vals else 0
+    for b, v in zip(bars, vals):
+        ax.text(b.get_width() + span * 0.005, b.get_y() + b.get_height()/2,
+                "  " + value_fmt(v), va='center', ha='left', fontsize=9,
+                color=HOPPER_NAVY, weight='bold')
+    ax.set_title(title, loc='left', pad=10, color=HOPPER_NAVY, fontsize=12, fontweight='bold')
+    ax.margins(x=0.14)
+    return _finish_fig(fig, pad=1.5)
+
+
+# =============================================================================
+# DETAILED Hopper report — long-form, every analysis, respects filters
+# =============================================================================
+
+def generate_hopper_detailed_pdf_report(parsed_data: dict, sections_to_include: list = None,
+                                        filters: dict = None) -> bytes:
+    """A comprehensive, long-form Hopper briefing (typically 15-20+ pages):
+    every analysis rendered as a chart AND a supporting table, with insight
+    notes throughout. Respects the same filters as the standard report."""
+    filters = filters or {}
+    meta = parsed_data.get("metadata", {})
+    filtered = _apply_hopper_filters(parsed_data.get("opportunities", []), filters)
+
+    total_crp = sum(_val(r.get("crp_term_benefit")) for r in filtered)
+    totals_year = {y: sum(_val(r.get(f"profit_{y}")) for r in filtered)
+                   for y in (2026, 2027, 2028, 2029, 2030)}
+    total_opps = len(filtered)
+    customers = {str(r.get("customer", "")).strip() for r in filtered if r.get("customer")}
+    regions = {str(r.get("region", "")).strip() for r in filtered if r.get("region")}
+    evss = {str(r.get("engine_value_stream", "")).strip() for r in filtered if r.get("engine_value_stream")}
+    mature = sum(1 for r in filtered if str(r.get("maturity", "")).strip().lower() == "mature")
+    immature = total_opps - mature
+    onerous = sum(1 for r in filtered if "onerous" in str(r.get("onerous_type", "")).lower()
+                  and "not" not in str(r.get("onerous_type", "")).lower())
+    not_onerous = total_opps - onerous
+    long_term = totals_year[2028] + totals_year[2029] + totals_year[2030]
+    near_term = totals_year[2026] + totals_year[2027]
+    date_str = datetime.now().strftime("%d %B %Y")
+    avail_w = HopperPDF.PAGE_W - HopperPDF.MARGIN_L - HopperPDF.MARGIN_R
+
+    pdf = HopperPDF()
+
+    cover_meta = []
+    if filters.get("region"):
+        cover_meta.append(f"Filtered region: {filters['region']}")
+    if filters.get("customer"):
+        cover_meta.append(f"Filtered customer: {filters['customer']}")
+    cover_meta += [
+        f"Generated: {date_str}",
+        f"Opportunities: {total_opps}   |   Customers: {len(customers)}   |   Regions: {len(regions)}",
+        "Currency: GBP (millions)   |   Detailed report",
+    ]
+    _draw_cover(pdf, "Global Commercial Optimisation Hopper",
+                "Detailed Report", "GLOBAL HOPPER - DETAILED", cover_meta)
+
+    if total_opps == 0:
+        pdf.add_page()
+        pdf._page_header("Executive Summary")
+        pdf.set_font("Helvetica", "I", 12)
+        pdf.set_text_color(*HOPPER_TEXT_MUTE)
+        pdf.cell(0, 10, "No data matches the selected filters.", 0, 1, "C")
+        return bytes(pdf.output())
+
+    by_cust = _aggregate(filtered, "customer")
+    cust_n = _aggregate(filtered, "customer", count=True)
+    cust_sorted = sorted(by_cust.items(), key=lambda x: x[1], reverse=True)
+
+    # ---- Executive Summary ----
+    pdf.add_page()
+    pdf._exec_header("Executive Summary", "Portfolio value and profile")
+    pdf._kpi_row_top([
+        ("CRP Term Benefit", _fmtM_gbp(total_crp),
+         f"{total_opps} opps - {len(customers)} customers", HOPPER_GOLD_RGB),
+        ("Profit 2026", _fmtM_gbp(totals_year[2026]), f"26-27: {_fmtM_gbp(near_term)}", HOPPER_GOLD_RGB),
+        ("Profit 2027", _fmtM_gbp(totals_year[2027]), None, HOPPER_PRIMARY_RGB),
+        ("Profit 2028-30", _fmtM_gbp(long_term), f"Avg/year: {_fmtM_gbp(long_term / 3)}", HOPPER_GREEN_RGB),
+    ])
+    region_phrase = (f"the {sorted(regions)[0]} region" if len(regions) <= 1
+                     else f"{len(regions)} regions")
+    pdf._narrative(
+        f"This detailed briefing covers {total_opps} commercial optimisation opportunities across "
+        f"{region_phrase} and {len(customers)} customers, carrying {_fmtM_gbp(total_crp)} of CRP term "
+        f"benefit. Near-term profit (2026-27) totals {_fmtM_gbp(near_term)}, with {_fmtM_gbp(long_term)} "
+        f"forecast across 2028-30. Every dimension below is shown as both a chart and a supporting table.")
+    pdf._kpi_row_top([
+        ("Mature", str(mature), f"{immature} immature", HOPPER_GREEN_RGB),
+        ("Onerous", str(onerous), f"{not_onerous} not onerous", HOPPER_RED_RGB),
+        ("Engine Value Streams", str(len(evss)), None, HOPPER_PRIMARY_RGB),
+        ("Regions", str(len(regions)),
+         ", ".join(sorted(regions)[:3]) + ("..." if len(regions) > 3 else ""), HOPPER_GOLD_RGB),
+    ], h=20)
+    if cust_sorted:
+        top_c, top_v = cust_sorted[0]
+        top3 = sum(v for _, v in cust_sorted[:3])
+        pdf._narrative(
+            f"Insight - value is concentrated: {top_c} alone holds {_pct(top_v, total_crp)} of CRP term benefit, "
+            f"and the top three customers account for {_pct(top3, total_crp)}. "
+            f"{mature} of {total_opps} opportunities are mature; {onerous} sit within onerous contracts.")
+
+    # ---- Pipeline by Status (value + count) ----
+    pdf.add_page()
+    pdf._page_header("Pipeline by Status")
+    stages, p_vals = _pipeline_stages(filtered)
+    st_count = _aggregate(filtered, "status", count=True)
+    p_counts = [st_count.get(s, 0) for s in stages]
+    try:
+        buf = _chart_vbars([(p_vals, "By CRP term benefit (£m)", VALUE_HEX, lambda v: f"£{v:,.0f}m"),
+                            (p_counts, "By opportunities (count)", COUNT_HEX, lambda v: f"{int(v)}")],
+                           [s[:14] for s in stages], rotate=25, label_fs=7, height=4.0)
+        _embed_fit(pdf, buf, pdf.MARGIN_L, avail_w, 92)
+        pdf.ln(2)
+    except Exception:
+        pass
+    by_status_crp = _aggregate(filtered, "status")
+    rows = [[_trunc(s, 60), str(st_count.get(s, 0)), _fmtM_gbp(by_status_crp.get(s, 0)),
+             _pct(by_status_crp.get(s, 0), total_crp)] for s in stages]
+    pdf._section_header("Pipeline by stage")
+    pdf._table(["Stage", "Opportunities", "CRP Term (GBP m)", "% of CRP"], rows, [130, 40, 55, 30],
+               right_align_idx={1, 2, 3},
+               totals_row=["TOTAL", str(total_opps), _fmtM_gbp(total_crp), "100.0%"])
+    LATE = {"Negotiations Started", "Negotations Started", "Negotiations Concluded",
+            "Contracting Started", "Contracting Concluded"}
+    late = sum(v for s, v in by_status_crp.items() if s in LATE)
+    pdf._narrative(f"Insight - {_pct(late, total_crp)} of CRP term benefit sits in late-stage "
+                   f"(negotiation / contracting) opportunities, indicating pipeline maturity.")
+
+    # ---- Annual Profit Forecast ----
+    pdf.add_page()
+    pdf._page_header("Annual Profit Forecast")
+    years = ["2026", "2027", "2028", "2029", "2030"]
+    try:
+        buf = _chart_vbars([([totals_year[int(y)] for y in years], "Forecast profit by year (£m)",
+                             VALUE_HEX, lambda v: f"£{v:,.0f}m")], years, rotate=0, label_fs=9, height=4.2)
+        _embed_fit(pdf, buf, pdf.MARGIN_L, avail_w, 95)
+        pdf.ln(2)
+    except Exception:
+        pass
+    allp = sum(totals_year.values()) or 1
+    rows = [[y, _fmtM_gbp(totals_year[int(y)]), _pct(totals_year[int(y)], allp)] for y in years]
+    pdf._section_header("Annual profit")
+    pdf._table(["Year", "Profit (GBP m)", "% of Forecast"], rows, [40, 60, 40], right_align_idx={1, 2},
+               totals_row=["TOTAL", _fmtM_gbp(allp), "100.0%"])
+    pdf._narrative(f"Insight - near-term profit (2026-27) of {_fmtM_gbp(near_term)} is "
+                   f"{_pct(near_term, allp)} of the five-year forecast — a front-loaded return profile.")
+
+    # ---- Regional Analysis ----
+    pdf.add_page()
+    pdf._page_header("Regional Analysis")
+    by_region = _aggregate(filtered, "region")
+    reg_n = _aggregate(filtered, "region", count=True)
+    reg_sorted = sorted(by_region.items(), key=lambda x: x[1], reverse=True)
+    if len(regions) > 1:
+        try:
+            buf = _chart_donut(reg_sorted, "CRP by region")
+            _embed_fit(pdf, buf, pdf.MARGIN_L, avail_w, 92)
+            pdf.ln(2)
+        except Exception:
+            pass
+    else:
+        pdf._narrative(f"This report is scoped to a single region ({sorted(regions)[0] if regions else '-'}); "
+                       f"the regional split below therefore shows one row.")
+    rows = [[_trunc(r, 40), str(reg_n.get(r, 0)), _fmtM_gbp(v), _pct(v, total_crp)] for r, v in reg_sorted]
+    pdf._section_header("Region breakdown")
+    pdf._table(["Region", "Opportunities", "CRP Term (GBP m)", "% of CRP"], rows, [120, 45, 55, 45],
+               right_align_idx={1, 2, 3},
+               totals_row=["TOTAL", str(total_opps), _fmtM_gbp(total_crp), "100.0%"])
+
+    # ---- Customer Analysis (chart + full breakdown w/ profit columns) ----
+    pdf.add_page()
+    pdf._page_header("Customer Analysis")
+    try:
+        cbuf = _generate_customer_chart(filtered, top_n=15)
+        if cbuf is not None:
+            _embed_fit(pdf, cbuf, pdf.MARGIN_L, avail_w, 96)
+            pdf.ln(2)
+    except Exception:
+        pass
+    # full customer breakdown with profit columns
+    full = {}
+    for r in filtered:
+        c = str(r.get("customer", "")).strip() or "Unknown"
+        slot = full.setdefault(c, {"n": 0, "crp": 0.0, "p26": 0.0, "p27": 0.0, "p2830": 0.0})
+        slot["n"] += 1
+        slot["crp"] += _val(r.get("crp_term_benefit"))
+        slot["p26"] += _val(r.get("profit_2026"))
+        slot["p27"] += _val(r.get("profit_2027"))
+        slot["p2830"] += (_val(r.get("profit_2028")) + _val(r.get("profit_2029")) + _val(r.get("profit_2030")))
+    rows = []
+    for i, (c, d) in enumerate(sorted(full.items(), key=lambda x: x[1]["crp"], reverse=True), 1):
+        rows.append([str(i), _trunc(c, 42), str(d["n"]), _fmtM_gbp(d["crp"]),
+                     _fmtM_short(d["p26"]), _fmtM_short(d["p27"]), _fmtM_short(d["p2830"]),
+                     _pct(d["crp"], total_crp)])
+    pdf._section_header("Customer breakdown")
+    pdf._table(["#", "Customer", "Opps", "CRP Term (GBP m)", "Profit 2026", "Profit 2027",
+                "Profit 2028-30", "% of CRP"], rows, [8, 71, 18, 40, 32, 32, 38, 26],
+               right_align_idx={2, 3, 4, 5, 6, 7},
+               totals_row=["", "TOTAL", str(total_opps), _fmtM_gbp(total_crp),
+                           _fmtM_short(totals_year[2026]), _fmtM_short(totals_year[2027]),
+                           _fmtM_short(long_term), "100.0%"], max_rows=80)
+
+    # ---- Engine Value Stream (charts + table) ----
+    pdf.add_page()
+    pdf._page_header("Engine Value Stream Analysis")
+    try:
+        ebuf = _generate_evs_charts(filtered, top_n=12)
+        if ebuf is not None:
+            _embed_fit(pdf, ebuf, pdf.MARGIN_L, avail_w, 90)
+            pdf.ln(2)
+    except Exception:
+        pass
+    by_evs_count = _aggregate(filtered, "engine_value_stream", count=True)
+    by_evs_crp = _aggregate(filtered, "engine_value_stream")
+    evs_sorted = sorted(by_evs_count.items(), key=lambda x: x[1], reverse=True)
+    rows = [[_trunc(e, 50), str(c), _fmtM_gbp(by_evs_crp.get(e, 0)), _pct(by_evs_crp.get(e, 0), total_crp)]
+            for e, c in evs_sorted]
+    pdf._section_header("Engine value stream breakdown")
+    pdf._table(["Engine Value Stream", "Opportunities", "CRP Term (GBP m)", "% of Total"], rows,
+               [120, 40, 55, 30], right_align_idx={1, 2, 3},
+               totals_row=["TOTAL", str(total_opps), _fmtM_gbp(total_crp), "100.0%"])
+
+    # ---- Restructure Type (charts + table) ----
+    pdf.add_page()
+    pdf._page_header("Restructure Type")
+    try:
+        sbuf = _generate_structure_charts(filtered)
+        if sbuf is not None:
+            _embed_fit(pdf, sbuf, pdf.MARGIN_L, avail_w, 90)
+            pdf.ln(2)
+    except Exception:
+        pass
+    rt_crp = _aggregate(filtered, "restructure_type")
+    rt_n = _aggregate(filtered, "restructure_type", count=True)
+    rows = [[_trunc(k, 60), str(rt_n.get(k, 0)), _fmtM_gbp(v), _pct(v, total_crp)]
+            for k, v in sorted(rt_crp.items(), key=lambda x: x[1], reverse=True)]
+    pdf._section_header("Restructure type breakdown")
+    pdf._table(["Restructure Type", "Opportunities", "CRP Term (GBP m)", "% of CRP"], rows,
+               [130, 40, 55, 30], right_align_idx={1, 2, 3},
+               totals_row=["TOTAL", str(total_opps), _fmtM_gbp(total_crp), "100.0%"])
+
+    # ---- Maturity & Risk (two donuts + tables) ----
+    pdf.add_page()
+    pdf._page_header("Maturity & Risk Profile")
+    mat_crp = _aggregate(filtered, "maturity")
+    mat_n = _aggregate(filtered, "maturity", count=True)
+    on_crp = _aggregate(filtered, "onerous_type")
+    on_n = _aggregate(filtered, "onerous_type", count=True)
+    try:
+        mbuf = _chart_donut(sorted(mat_n.items(), key=lambda x: x[1], reverse=True),
+                            "Maturity (by opportunities)",
+                            palette=[HOPPER_GREEN, '#c98a2e', HOPPER_SLATE])
+        _embed_fit(pdf, mbuf, pdf.MARGIN_L, avail_w, 78)
+        pdf.ln(2)
+    except Exception:
+        pass
+    pdf._section_header("Maturity breakdown")
+    rows = [[_trunc(k, 40), str(mat_n.get(k, 0)), _fmtM_gbp(v), _pct(v, total_crp)]
+            for k, v in sorted(mat_crp.items(), key=lambda x: x[1], reverse=True)]
+    pdf._table(["Maturity", "Opportunities", "CRP Term (GBP m)", "% of CRP"], rows, [120, 45, 55, 45],
+               right_align_idx={1, 2, 3})
+    pdf._section_header("Onerous contract status")
+    rows = [[_trunc(k, 40), str(on_n.get(k, 0)), _fmtM_gbp(v), _pct(v, total_crp)]
+            for k, v in sorted(on_crp.items(), key=lambda x: x[1], reverse=True)]
+    pdf._table(["Onerous Type", "Opportunities", "CRP Term (GBP m)", "% of CRP"], rows, [120, 45, 55, 45],
+               right_align_idx={1, 2, 3})
+    pdf._narrative(f"Insight - {_pct(onerous, total_opps)} of opportunities are onerous and "
+                   f"{_pct(immature, total_opps)} are immature — the principal execution risks to the forecast.")
+
+    # ---- Ownership (VP / Owner) ----
+    vp_crp = {}
+    vp_n = {}
+    for r in filtered:
+        v = str(r.get("vp_owner", "")).strip()
+        if not v:
+            continue
+        vp_crp[v] = vp_crp.get(v, 0) + _val(r.get("crp_term_benefit"))
+        vp_n[v] = vp_n.get(v, 0) + 1
+    if vp_crp:
+        pdf.add_page()
+        pdf._page_header("Ownership — VP / Owner")
+        try:
+            vbuf = _chart_hbar(list(vp_crp.items()), "Top owners by CRP term benefit (£m)",
+                               lambda v: f"£{v:,.1f}m", color=VALUE_HEX, top_n=12)
+            _embed_fit(pdf, vbuf, pdf.MARGIN_L, avail_w, 95)
+            pdf.ln(2)
+        except Exception:
+            pass
+        rows = [[_trunc(k, 50), str(vp_n.get(k, 0)), _fmtM_gbp(v), _pct(v, total_crp)]
+                for k, v in sorted(vp_crp.items(), key=lambda x: x[1], reverse=True)]
+        pdf._section_header("Owner breakdown")
+        pdf._table(["VP / Owner", "Opportunities", "CRP Term (GBP m)", "% of CRP"], rows,
+                   [120, 45, 55, 45], right_align_idx={1, 2, 3}, max_rows=40)
+
+    # ---- Top 25 register ----
+    pdf.add_page()
+    pdf._page_header("Global Top 25 Opportunities by CRP Term Benefit")
+    top_sorted = sorted(filtered, key=lambda r: _val(r.get("crp_term_benefit")), reverse=True)[:25]
+    rows = []
+    for i, r in enumerate(top_sorted, 1):
+        rows.append([str(i), _trunc(r.get("region", ""), 12), _trunc(r.get("customer", ""), 18),
+                     _trunc(r.get("engine_value_stream", r.get("top_level_evs", "")), 16),
+                     _trunc(r.get("restructure_type", ""), 16), _trunc(r.get("status", ""), 14),
+                     _trunc(r.get("maturity", ""), 9), _fmtM_short(_val(r.get("crp_term_benefit"))),
+                     _fmtM_short(_val(r.get("profit_2026"))), _fmtM_short(_val(r.get("profit_2027"))),
+                     _trunc(r.get("vp_owner", ""), 18)])
+    pdf._table(["#", "Region", "Customer", "Engine VS", "Restructure", "Status", "Maturity",
+                "CRP", "2026", "2027", "VP/Owner"], rows,
+               [8, 22, 35, 30, 30, 28, 18, 22, 18, 18, 35], right_align_idx={0, 7, 8, 9}, max_rows=25)
+
+    # ---- Full opportunities register (all rows) ----
+    pdf.add_page()
+    pdf._page_header("Full Opportunities Register")
+    rows = []
+    for i, r in enumerate(top_sorted_all := sorted(filtered, key=lambda r: _val(r.get("crp_term_benefit")),
+                                                   reverse=True), 1):
+        rows.append([str(i), _trunc(r.get("region", ""), 12), _trunc(r.get("customer", ""), 18),
+                     _trunc(r.get("engine_value_stream", r.get("top_level_evs", "")), 16),
+                     _trunc(r.get("restructure_type", ""), 16), _trunc(r.get("status", ""), 14),
+                     _trunc(r.get("maturity", ""), 9), _fmtM_short(_val(r.get("crp_term_benefit"))),
+                     _trunc(r.get("vp_owner", ""), 20)])
+    pdf._table(["#", "Region", "Customer", "Engine VS", "Restructure", "Status", "Maturity",
+                "CRP", "VP/Owner"], rows,
+               [8, 24, 38, 32, 32, 30, 20, 24, 40], right_align_idx={0, 7}, max_rows=400)
+
+    # ---- Opportunities (initiatives) ----
+    init_opps = [r for r in top_sorted_all if str(r.get("initiative", "") or "").strip()]
+    if init_opps:
+        pdf.add_page()
+        pdf._page_header("Opportunities")
+        body_w = pdf.PAGE_W - pdf.MARGIN_L - pdf.MARGIN_R
+        for idx, r in enumerate(init_opps):
+            init_text = str(r.get("initiative", "") or "").strip()
+            if pdf.get_y() > pdf.PAGE_H - 36:
+                pdf.add_page()
+                pdf._page_header("Opportunities (continued)")
+            elif idx > 0:
                 y = pdf.get_y()
                 pdf.set_draw_color(*HOPPER_BORDER)
                 pdf.set_line_width(0.2)

@@ -52,31 +52,34 @@ const FORMATS: { id: ExportFormat; label: string; description: string; icon: typ
 
 export function ExportModal({ open, onOpenChange, activeFile, filters }: Props) {
   const [format, setFormat] = useState<ExportFormat>("pdf")
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState<null | "std" | "detailed">(null)
 
-  async function handleExport() {
+  const isHopper = activeFile?.file_type === "GLOBAL_HOPPER"
+
+  async function handleExport(detailed: boolean) {
     if (!activeFile) return
-    setBusy(true)
+    setBusy(detailed ? "detailed" : "std")
     try {
       const blob = await exportReport({
         filename: activeFile.name,
         file_type: activeFile.file_type,
         format,
         filters: filters && Object.keys(filters).length > 0 ? filters : undefined,
+        detailed: detailed || undefined,
       })
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
       const ext = format === "pptx" ? "pptx" : format === "png" ? "png" : "pdf"
       const baseName = activeFile.name.replace(/\.[^.]+$/, "")
-      a.download = `${baseName}.${ext}`
+      a.download = `${baseName}${detailed ? "-detailed" : ""}.${ext}`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
 
       toast.success("Export ready", {
-        description: `${activeFile.name} · ${format.toUpperCase()} downloaded.`,
+        description: `${activeFile.name} · ${detailed ? "Detailed PDF" : format.toUpperCase()} downloaded.`,
         icon: <CheckCircle2 className="h-4 w-4 text-success" />,
       })
       onOpenChange(false)
@@ -84,7 +87,7 @@ export function ExportModal({ open, onOpenChange, activeFile, filters }: Props) 
       const msg = err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Export failed"
       toast.error("Export failed", { description: msg })
     } finally {
-      setBusy(false)
+      setBusy(null)
     }
   }
 
@@ -193,22 +196,40 @@ export function ExportModal({ open, onOpenChange, activeFile, filters }: Props) 
           </div>
         </div>
 
+        {isHopper ? (
+          <p className="text-[11px] text-white/45 -mt-1">
+            <span className="text-white/70 font-medium">Detailed PDF</span> produces a long-form report
+            (15-20+ pages) — every dimension as a chart and a supporting table.
+          </p>
+        ) : null}
+
         <DialogFooter className="gap-2 sm:gap-2 pt-1">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
-            disabled={busy}
+            disabled={!!busy}
             className="border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white"
           >
             Cancel
           </Button>
+          {isHopper ? (
+            <Button
+              variant="outline"
+              onClick={() => handleExport(true)}
+              disabled={!!busy || !activeFile}
+              className="gap-2 border-[var(--chart-2)]/60 bg-transparent text-[var(--chart-2)] hover:bg-[var(--chart-2)]/10 hover:text-[var(--chart-2)]"
+            >
+              {busy === "detailed" ? <Spinner className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
+              {busy === "detailed" ? "Generating…" : "Generate Detailed PDF"}
+            </Button>
+          ) : null}
           <Button
-            onClick={handleExport}
-            disabled={busy || !activeFile}
+            onClick={() => handleExport(false)}
+            disabled={!!busy || !activeFile}
             className="gap-2 bg-[var(--chart-2)] text-[oklch(0.17_0.03_165)] hover:bg-[var(--chart-2)]/90"
           >
-            {busy ? <Spinner className="h-4 w-4" /> : <Download className="h-4 w-4" />}
-            {busy ? "Generating…" : "Generate export"}
+            {busy === "std" ? <Spinner className="h-4 w-4" /> : <Download className="h-4 w-4" />}
+            {busy === "std" ? "Generating…" : "Generate export"}
           </Button>
         </DialogFooter>
       </DialogContent>
