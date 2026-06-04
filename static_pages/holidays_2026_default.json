@@ -1,5 +1,6 @@
 {
  "UAE": {
+  "weekend": "sat-sun",
   "holidays": [
    {
     "date": "2026-01-01",
@@ -73,6 +74,7 @@
   ]
  },
  "Oman": {
+  "weekend": "fri-sat",
   "holidays": [
    {
     "date": "2026-01-11",
@@ -161,6 +163,7 @@
   ]
  },
  "Qatar": {
+  "weekend": "fri-sat",
   "holidays": [
    {
     "date": "2026-02-10",
@@ -219,6 +222,7 @@
   ]
  },
  "Bahrain": {
+  "weekend": "fri-sat",
   "holidays": [
    {
     "date": "2026-01-01",
@@ -302,6 +306,7 @@
   ]
  },
  "KSA": {
+  "weekend": "fri-sat",
   "holidays": [
    {
     "date": "2026-02-22",
@@ -420,6 +425,7 @@
   ]
  },
  "Egypt": {
+  "weekend": "fri-sat",
   "holidays": [
    {
     "date": "2026-01-07",
@@ -518,6 +524,7 @@
   ]
  },
  "South Africa": {
+  "weekend": "sat-sun",
   "holidays": [
    {
     "date": "2026-01-01",
@@ -585,6 +592,7 @@
   ]
  },
  "Ethiopia": {
+  "weekend": "sat-sun",
   "holidays": [
    {
     "date": "2026-01-07",
@@ -657,6 +665,7 @@
   ]
  },
  "Lebanon": {
+  "weekend": "sat-sun",
   "holidays": [
    {
     "date": "2026-01-01",

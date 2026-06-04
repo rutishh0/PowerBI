@@ -116,6 +116,9 @@
     border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:#faf7f0}
   .editbar .spacer{flex:1}
   .editbar .mk{font-size:.74rem;color:var(--ink-soft);font-weight:600}
+  .mksel{font-family:'DM Sans';font-weight:600;font-size:.76rem;color:var(--ink);background:var(--card);
+    border:1.5px solid var(--line);border-radius:9px;padding:7px 10px;cursor:pointer}
+  .mksel:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
   .edittable input{font-family:'DM Sans';font-size:.88rem;border:1.5px solid var(--line);
     border-radius:8px;padding:8px 10px;width:100%;background:var(--card);color:var(--ink)}
   .edittable input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
@@ -170,7 +173,7 @@
     <div class="titleblock">
       <div class="eyebrow">Middle East &amp; Africa &middot; Rolls-Royce</div>
       <h1>Public Holidays <em>2026</em></h1>
-      <p class="sub">Select a market to view its statutory holidays across the year. Weekend days follow Fri&ndash;Sat in the Gulf markets.</p>
+      <p class="sub">Select a market to view its statutory holidays across the year. Weekend shading reflects each market&rsquo;s working week (Fri&ndash;Sat or Sat&ndash;Sun).</p>
     </div>
     <div class="controls">
       <label for="country">Market</label>
@@ -204,6 +207,11 @@
     <div id="editor" style="display:none">
       <div class="editbar">
         <button id="addHol" class="btn primary small">+ Add holiday</button>
+        <span class="mk">Weekend:</span>
+        <select id="weekendSel" class="mksel">
+          <option value="fri-sat">Fri&ndash;Sat</option>
+          <option value="sat-sun">Sat&ndash;Sun</option>
+        </select>
         <span class="spacer"></span>
         <span class="mk">Market:</span>
         <button id="addMarket" class="btn ghost small">+ Market</button>
@@ -251,7 +259,10 @@
 const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DOW=["Su","Mo","Tu","We","Th","Fr","Sa"];
 const DOWFULL=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-const GULF=new Set(["UAE","Oman","Qatar","Bahrain","KSA"]);
+// Markets with a Friday–Saturday weekend (used only as a fallback when a
+// market record has no explicit "weekend" field). NOTE: UAE is Sat–Sun
+// (changed Jan 2022) so it is deliberately NOT here.
+const FRI_SAT_FALLBACK=new Set(["KSA","Qatar","Bahrain","Oman","Egypt","Kuwait","Jordan","Iraq"]);
 const YEAR=2026;
 
 let DATA={};            // server truth
@@ -288,7 +299,14 @@ async function loadData(){
 }
 
 function fmt(iso){return new Date(iso+'T00:00:00');}
-function isWeekend(d,country){const wd=d.getDay();return GULF.has(country)?(wd===5||wd===6):(wd===6||wd===0);}
+// Resolve a market's weekend: explicit data field wins; else fall back to the
+// known Fri–Sat market names; else default Sat–Sun.
+function weekendKind(country){
+  const rec=src()[country]||{};
+  if(rec.weekend==='fri-sat'||rec.weekend==='sat-sun') return rec.weekend;
+  return FRI_SAT_FALLBACK.has(country)?'fri-sat':'sat-sun';
+}
+function isWeekend(d,country){const wd=d.getDay();return weekendKind(country)==='fri-sat'?(wd===5||wd===6):(wd===6||wd===0);}
 
 /* ---------- read-only previews (strip + calendar + notes) ---------- */
 function renderPreview(){
@@ -380,6 +398,8 @@ function renderEditor(){
     draft[current].holidays.splice(+e.currentTarget.dataset.del,1); renderEditor(); renderPreview();
   }));
   $('notesEdit').value=(rec.notes||[]).join('\n');
+  $('weekendSel').value=(rec.weekend==='fri-sat'||rec.weekend==='sat-sun')
+    ? rec.weekend : (FRI_SAT_FALLBACK.has(current)?'fri-sat':'sat-sun');
 }
 
 /* ---------- main render ---------- */
@@ -416,6 +436,12 @@ $('notesEdit').addEventListener('input',e=>{
 });
 $('notesEdit').addEventListener('change',renderPreview);
 
+$('weekendSel').addEventListener('change',e=>{
+  if(!editing||!draft[current])return;
+  draft[current].weekend=e.target.value;
+  renderPreview(); // re-shade weekends on the calendar/list
+});
+
 $('addHol').addEventListener('click',()=>{
   draft[current].holidays.push({date:YEAR+'-01-01',name:'',note:null});
   renderEditor(); renderPreview();
@@ -426,7 +452,7 @@ $('addMarket').addEventListener('click',()=>{
   const name=(prompt('New market name:')||'').trim();
   if(!name) return;
   if(draft[name]){ toast('That market already exists',true); return; }
-  draft[name]={holidays:[],notes:[]}; current=name; populateSelector(); render();
+  draft[name]={weekend:'sat-sun',holidays:[],notes:[]}; current=name; populateSelector(); render();
 });
 $('renMarket').addEventListener('click',()=>{
   const name=(prompt('Rename market "'+current+'" to:',current)||'').trim();

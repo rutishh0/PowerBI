@@ -384,7 +384,8 @@ def _sanitize_holidays(data):
                 hols.append({"date": date, "name": name, "note": note})
         hols.sort(key=lambda x: x["date"])
         notes = [str(n).strip()[:300] for n in (rec.get("notes") or [])[:20] if str(n).strip()]
-        out[market] = {"holidays": hols, "notes": notes}
+        weekend = rec.get("weekend") if rec.get("weekend") in ("fri-sat", "sat-sun") else "sat-sun"
+        out[market] = {"weekend": weekend, "holidays": hols, "notes": notes}
     if not out:
         raise ValueError("no valid markets in data")
     return out

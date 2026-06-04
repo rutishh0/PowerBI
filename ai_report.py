@@ -63,7 +63,11 @@ KIMI_MODEL = "moonshotai/kimi-k2.6"
 # Google AI Studio (Gemini API) — alternative provider.
 AISTUDIO_API_KEY = os.getenv("AISTUDIO_API_KEY")
 GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
-GEMMA_MODEL = "gemma-4-31b-it"
+# Model id is env-configurable so a wrong/renamed id can be fixed without a code
+# change. If the configured id 404s, we fall back to known-good Gemma ids.
+GEMMA_MODEL = os.getenv("GEMMA_MODEL", "gemma-4-31b-it")
+GEMMA_FALLBACK_MODELS = ["gemma-3-27b-it", "gemma-3-12b-it"]
+GEMMA_MAX_OUTPUT = 8192   # Gemma's output cap on the Gemini API
 
 MODES = ("catalog", "charts", "html")
 PROVIDERS = ("nvidia", "aistudio")
@@ -493,57 +497,70 @@ def call_kimi_raw(system_prompt: str, user_prompt: str, *, max_tokens: int = 163
 def call_gemma_raw(system_prompt: str, user_prompt: str, *, max_tokens: int = 16384,
                    temperature: float = 0.45, response_json: bool = False,
                    progress=None) -> str:
-    """Call ``gemma-4-31b-it`` via the Google AI Studio (Gemini) REST API and
-    return the raw text. Non-streaming generateContent. Gemma has no separate
-    system role and may not support every Gemini knob, so we fold the system
-    prompt into the user turn, request JSON via responseMimeType (not a rigid
-    responseSchema — the blueprint carries open-ended Vega specs), and avoid
-    tools/googleSearch so it can't pull external data. We deliberately do not
-    enable web search — the report must use only the supplied figures."""
+    """Call a Gemma model via Google AI Studio using the google-genai SDK
+    (matches the official sample). Returns the raw text.
+
+    Gemma specifics handled here: no separate system role (we fold the system
+    prompt into the user turn); no JSON mode / responseSchema (we instruct
+    "return ONLY JSON" and parse it ourselves with _extract_json); output capped
+    ~8192 tokens; NO tools/googleSearch (the report must use only the supplied
+    figures). If the configured model id isn't found, we try known-good ids."""
     if not AISTUDIO_API_KEY:
         raise RuntimeError("AISTUDIO_API_KEY is not set — cannot reach Google AI Studio.")
+    from google import genai
+    from google.genai import types
+    from google.genai import errors as genai_errors
+
     prompt = (system_prompt + "\n\n" + user_prompt) if system_prompt else user_prompt
-    gen_cfg = {"temperature": temperature, "maxOutputTokens": min(max_tokens, 32768)}
-    if response_json:
-        gen_cfg["responseMimeType"] = "application/json"
-    body = {"contents": [{"role": "user", "parts": [{"text": prompt}]}],
-            "generationConfig": gen_cfg}
-    url = f"{GEMINI_BASE}/{GEMMA_MODEL}:generateContent?key={AISTUDIO_API_KEY}"
     if progress:
         try:
             progress(f"Designing report ({GEMMA_MODEL})…")
         except Exception:
             pass
 
-    def _do(b):
-        r = requests.post(url, headers={"Content-Type": "application/json"}, json=b, timeout=600)
-        if r.status_code != 200:
-            raise RuntimeError(f"AI Studio error ({r.status_code}): {r.text[:300]}")
-        data = r.json()
-        pf = data.get("promptFeedback") or {}
-        if pf.get("blockReason"):
-            raise _EmptyCompletion(f"AI Studio blocked the prompt ({pf['blockReason']}).")
-        cands = data.get("candidates") or []
-        if not cands:
-            raise _EmptyCompletion("AI Studio returned no candidates.")
-        cand = cands[0]
-        parts = (cand.get("content") or {}).get("parts") or []
-        text = "".join(p.get("text", "") for p in parts if isinstance(p, dict)).strip()
+    client = genai.Client(api_key=AISTUDIO_API_KEY)
+    # Match the official sample: set temperature only and let the model use its
+    # default output budget. (A hard low cap risks a thinking model exhausting it
+    # on reasoning and returning no answer.) No tools/googleSearch — the report
+    # must use only the supplied figures.
+    cfg = types.GenerateContentConfig(temperature=temperature)
+
+    def _do(model):
+        resp = client.models.generate_content(model=model, contents=prompt, config=cfg)
+        try:
+            text = (resp.text or "").strip()
+        except Exception:
+            text = ""
         if not text:
-            raise _EmptyCompletion(f"AI Studio returned empty content "
-                                   f"(finishReason={cand.get('finishReason')}).")
+            fr = block = None
+            try:
+                fr = resp.candidates[0].finish_reason
+            except Exception:
+                pass
+            try:
+                block = resp.prompt_feedback.block_reason
+            except Exception:
+                pass
+            raise _EmptyCompletion(f"AI Studio (Gemma) returned no text "
+                                   f"(finish_reason={fr}, block={block}).")
         return text
 
-    try:
-        return _do(body)
-    except _EmptyCompletion:
-        raise
-    except RuntimeError:
-        # Retry once with a conservative config (some Gemma builds reject
-        # responseMimeType or a large maxOutputTokens).
-        gen_cfg.pop("responseMimeType", None)
-        gen_cfg["maxOutputTokens"] = min(gen_cfg.get("maxOutputTokens", 8192), 8192)
-        return _do(body)
+    models = [GEMMA_MODEL] + [m for m in GEMMA_FALLBACK_MODELS if m != GEMMA_MODEL]
+    last_err = None
+    for model in models:
+        try:
+            return _do(model)
+        except _EmptyCompletion:
+            raise  # a block/empty isn't fixed by switching model
+        except genai_errors.ClientError as e:
+            last_err = e
+            msg = str(e).lower()
+            if "not_found" in msg or "not found" in msg or "404" in msg or "not supported" in msg:
+                continue  # bad/renamed model id -> try the next one
+            raise RuntimeError(f"AI Studio (Gemma) error: {e}")
+        except Exception as e:
+            raise RuntimeError(f"AI Studio (Gemma) error: {e}")
+    raise RuntimeError(f"AI Studio (Gemma) model not found; tried {models}. Last error: {last_err}")
 
 
 def _llm(provider: str, system_prompt: str, user_prompt: str, *, max_tokens: int,
