@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Download, FileText, Image as ImageIcon, Presentation, CheckCircle2, Sparkles } from "lucide-react"
+import { Download, FileText, Image as ImageIcon, Presentation, CheckCircle2, Sparkles, ChevronDown } from "lucide-react"
 import { toast } from "sonner"
 import type { UploadedFile } from "@/lib/types"
 import { FILE_TYPE_LABELS } from "@/lib/file-type-meta"
@@ -72,6 +72,9 @@ export function ExportModal({ open, onOpenChange, activeFile, filters }: Props) 
   const [aiProvider, setAiProvider] = useState<AiReportProvider>("nvidia")
   const [aiBusy, setAiBusy] = useState(false)
   const [aiProgress, setAiProgress] = useState("")
+  // The AI Report block is collapsed by default — it's a heavier, slower path,
+  // so it stays out of the way until the user expands it.
+  const [aiOpen, setAiOpen] = useState(false)
 
   const isHopper = activeFile?.file_type === "GLOBAL_HOPPER"
 
@@ -280,11 +283,17 @@ export function ExportModal({ open, onOpenChange, activeFile, filters }: Props) 
           </p>
         ) : null}
 
-        {/* AI Report (Beta) — Kimi K2.6 designs a bespoke report dynamically. */}
+        {/* AI Report (Beta) — Kimi K2.6 designs a bespoke report dynamically.
+            Collapsed by default; the header toggles the options open. */}
         {isHopper ? (
-          <div className="rounded-md border border-[var(--chart-2)]/30 bg-[var(--chart-2)]/[0.06] p-3 space-y-2.5">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-[var(--chart-2)]" />
+          <div className="rounded-md border border-[var(--chart-2)]/30 bg-[var(--chart-2)]/[0.06]">
+            <button
+              type="button"
+              onClick={() => setAiOpen((v) => !v)}
+              aria-expanded={aiOpen}
+              className="w-full flex items-center gap-2 p-3 text-left rounded-md hover:bg-[var(--chart-2)]/[0.06] transition-colors"
+            >
+              <Sparkles className="h-4 w-4 text-[var(--chart-2)] shrink-0" />
               <span className="text-sm font-medium text-white">AI Report</span>
               <Badge
                 variant="outline"
@@ -292,63 +301,70 @@ export function ExportModal({ open, onOpenChange, activeFile, filters }: Props) 
               >
                 Beta · Kimi K2.6
               </Badge>
-            </div>
-            <p className="text-[11px] text-white/55 text-pretty">
-              The AI designs a bespoke executive report from your data (respecting the filters above) —
-              dynamic structure, written insight and custom visualizations, Rolls-Royce themed. Takes a few minutes.
-            </p>
-            <div className="text-[10px] uppercase tracking-[0.12em] text-white/45">Model</div>
-            <div className="grid grid-cols-2 gap-1.5">
-              {AI_PROVIDERS.map((pv) => {
-                const active = aiProvider === pv.id
-                return (
-                  <button
-                    key={pv.id}
-                    type="button"
-                    onClick={() => setAiProvider(pv.id)}
-                    disabled={aiBusy}
-                    className={`rounded-md border px-2.5 py-1.5 text-left transition-colors ${
-                      active
-                        ? "border-[var(--chart-2)] bg-[var(--chart-2)]/15"
-                        : "border-white/10 bg-white/[0.03] hover:border-white/25 hover:bg-white/[0.06]"
-                    }`}
-                  >
-                    <div className="text-xs font-medium text-white">{pv.label}</div>
-                    <div className="text-[9px] text-white/45">{pv.sub}</div>
-                  </button>
-                )
-              })}
-            </div>
-            <div className="text-[10px] uppercase tracking-[0.12em] text-white/45">Layout</div>
-            <div className="grid grid-cols-3 gap-1.5">
-              {AI_MODES.map((m) => {
-                const active = aiMode === m.id
-                return (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => setAiMode(m.id)}
-                    disabled={aiBusy}
-                    className={`rounded-md border px-2 py-1.5 text-xs font-medium transition-colors ${
-                      active
-                        ? "border-[var(--chart-2)] bg-[var(--chart-2)]/15 text-white"
-                        : "border-white/10 bg-white/[0.03] text-white/70 hover:border-white/25 hover:bg-white/[0.06]"
-                    }`}
-                  >
-                    {m.label}
-                  </button>
-                )
-              })}
-            </div>
-            <p className="text-[10px] text-white/45">{AI_MODES.find((m) => m.id === aiMode)?.blurb}</p>
-            <Button
-              onClick={handleAiExport}
-              disabled={aiBusy || !!busy || !activeFile}
-              className="w-full gap-2 bg-[var(--chart-2)] text-[oklch(0.17_0.03_165)] hover:bg-[var(--chart-2)]/90"
-            >
-              {aiBusy ? <Spinner className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
-              {aiBusy ? aiProgress || "Generating…" : "Generate AI Report"}
-            </Button>
+              <ChevronDown
+                className={`ml-auto h-4 w-4 text-white/50 transition-transform shrink-0 ${aiOpen ? "rotate-180" : ""}`}
+              />
+            </button>
+            {aiOpen ? (
+              <div className="px-3 pb-3 space-y-2.5">
+                <p className="text-[11px] text-white/55 text-pretty">
+                  The AI designs a bespoke executive report from your data (respecting the filters above) —
+                  dynamic structure, written insight and custom visualizations, Rolls-Royce themed. Takes a few minutes.
+                </p>
+                <div className="text-[10px] uppercase tracking-[0.12em] text-white/45">Model</div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {AI_PROVIDERS.map((pv) => {
+                    const active = aiProvider === pv.id
+                    return (
+                      <button
+                        key={pv.id}
+                        type="button"
+                        onClick={() => setAiProvider(pv.id)}
+                        disabled={aiBusy}
+                        className={`rounded-md border px-2.5 py-1.5 text-left transition-colors ${
+                          active
+                            ? "border-[var(--chart-2)] bg-[var(--chart-2)]/15"
+                            : "border-white/10 bg-white/[0.03] hover:border-white/25 hover:bg-white/[0.06]"
+                        }`}
+                      >
+                        <div className="text-xs font-medium text-white">{pv.label}</div>
+                        <div className="text-[9px] text-white/45">{pv.sub}</div>
+                      </button>
+                    )
+                  })}
+                </div>
+                <div className="text-[10px] uppercase tracking-[0.12em] text-white/45">Layout</div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {AI_MODES.map((m) => {
+                    const active = aiMode === m.id
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setAiMode(m.id)}
+                        disabled={aiBusy}
+                        className={`rounded-md border px-2 py-1.5 text-xs font-medium transition-colors ${
+                          active
+                            ? "border-[var(--chart-2)] bg-[var(--chart-2)]/15 text-white"
+                            : "border-white/10 bg-white/[0.03] text-white/70 hover:border-white/25 hover:bg-white/[0.06]"
+                        }`}
+                      >
+                        {m.label}
+                      </button>
+                    )
+                  })}
+                </div>
+                <p className="text-[10px] text-white/45">{AI_MODES.find((m) => m.id === aiMode)?.blurb}</p>
+                <Button
+                  onClick={handleAiExport}
+                  disabled={aiBusy || !!busy || !activeFile}
+                  className="w-full gap-2 bg-[var(--chart-2)] text-[oklch(0.17_0.03_165)] hover:bg-[var(--chart-2)]/90"
+                >
+                  {aiBusy ? <Spinner className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
+                  {aiBusy ? aiProgress || "Generating…" : "Generate AI Report"}
+                </Button>
+              </div>
+            ) : null}
           </div>
         ) : null}
 

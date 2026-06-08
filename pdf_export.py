@@ -1400,7 +1400,7 @@ def _generate_annual_profit_chart(year_totals):
         run += v
         cum.append(run / total * 100.0)
 
-    fig, ax = plt.subplots(figsize=(13, 3.8), dpi=160)
+    fig, ax = plt.subplots(figsize=(13, 3.5), dpi=160)
     fig.patch.set_facecolor('white')
     _style_value_axis(ax)
     xs = list(range(len(years)))
@@ -1767,7 +1767,9 @@ class HopperPDF(FPDF):
         self.set_text_color(*HOPPER_NAVY_RGB)
         self.cell(w - 8, 8, _safe(value), 0, 2, "L")
         if sub:
-            self.set_xy(x + 4, y + h - 5.5)
+            # Anchor the sub-line to the bottom of the card, but never let it
+            # ride up into the value text on a short card (h < ~21).
+            self.set_xy(x + 4, max(y + 15.5, y + h - 5.5))
             self.set_font("Helvetica", "", 6.8)
             self.set_text_color(*HOPPER_TEXT_MUTE)
             self.cell(w - 8, 3.5, _safe(sub), 0, 0, "L")
@@ -2435,10 +2437,6 @@ def generate_hopper_pdf_report(
             pdf._table(["Restructure Type", "Opportunities", "CRP Term (GBP m)", "% of CRP"], rows,
                        [130, 40, 55, 30], right_align_idx={1, 2, 3},
                        totals_row=["TOTAL", str(total_opps), _fmtM_gbp(total_crp), "100.0%"])
-            top_rt = rt_sorted[0]
-            pdf._narrative(
-                f"Insight - {top_rt[0]} accounts for {_pct(top_rt[1], total_crp)} of CRP term benefit. "
-                f"The value and volume views together show where restructuring effort and reward concentrate.")
 
     # ============================================================ TOP 25 (own pages)
     if "top_opportunities" in sections:
@@ -3034,11 +3032,11 @@ def generate_hopper_detailed_pdf_report(parsed_data: dict, sections_to_include: 
         ("Long-term 2028-30", _fmtM_gbp(long_term),
          f"Avg {_fmtM_gbp(long_term / 3)}/yr", HOPPER_GREEN_RGB),
         ("Peak Year", peak_year, f"{_fmtM_gbp(totals_year[int(peak_year)])}", HOPPER_GOLD_RGB),
-    ], h=18)
+    ], h=22)
     try:
         buf = _generate_annual_profit_chart(totals_year)
         if buf is not None:
-            _embed_fit(pdf, buf, pdf.MARGIN_L, avail_w, 80)
+            _embed_fit(pdf, buf, pdf.MARGIN_L, avail_w, 76)
             pdf.ln(2)
     except Exception:
         pass
@@ -3177,13 +3175,6 @@ def generate_hopper_detailed_pdf_report(parsed_data: dict, sections_to_include: 
                totals_row=["", "TOTAL", str(total_opps), "100.0%", _fmtM_gbp(total_crp), "100.0%",
                            _fmtM_short(avg_all), f"{tot_mature}/{total_opps}",
                            f"{tot_onerous}/{total_opps}", _fmtM_short(tot_profit)])
-    if rt_sorted:
-        lead_k, lead_d = rt_sorted[0]
-        lead_avg = lead_d["crp"] / lead_d["n"] if lead_d["n"] else 0.0
-        pdf._narrative(
-            f"Insight - {lead_k} leads with {_pct(lead_d['crp'], total_crp)} of CRP term benefit across "
-            f"{lead_d['n']} opportunities ({_fmtM_gbp(lead_avg)} average ticket). The Mature and Onerous "
-            f"columns show where each restructure type sits on the readiness/risk spectrum.")
 
     # ---- Maturity & Risk (twin interactive donuts + tables) ----
     donut_page_no = None     # page on which the donuts sit (for post-processing)
