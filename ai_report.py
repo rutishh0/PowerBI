@@ -1137,18 +1137,24 @@ def _catalog_fallback(rows, title):
 # 8. MODE B — AI HTML -> WeasyPrint
 # =============================================================================
 
+_FONT_ALLOW = ("https://fonts.googleapis.com", "https://fonts.gstatic.com")
+
+
 def _sanitize_html(html: str) -> str:
-    """Strip scripts and external resource references; keep inline styles + data URIs."""
+    """Strip scripts and external resource references; keep inline styles, data:
+    URIs, #anchors, and Google Fonts links (so WeasyPrint can load the brand
+    fonts Fraunces / DM Sans — falls back to installed system fonts otherwise)."""
     html = re.sub(r"<script\b[^>]*>.*?</script>", "", html, flags=re.DOTALL | re.IGNORECASE)
     html = re.sub(r"\son\w+\s*=\s*(\"[^\"]*\"|'[^']*')", "", html, flags=re.IGNORECASE)
-    # neutralise external src/href (allow data: and #anchors)
+
     def _strip_ext(m):
         attr, q, url = m.group(1), m.group(2), m.group(3)
-        if url.startswith("data:") or url.startswith("#"):
+        if url.startswith("data:") or url.startswith("#") or url.startswith(_FONT_ALLOW):
             return m.group(0)
         return f'{attr}={q}#{q}'
     html = re.sub(r'(src|href)\s*=\s*(["\'])(.*?)\2', _strip_ext, html, flags=re.IGNORECASE)
-    html = re.sub(r"@import[^;]+;", "", html, flags=re.IGNORECASE)
+    # Drop @import except Google Fonts (which use <link>, so this is just a guard).
+    html = re.sub(r"@import\s+(?:url\()?['\"]?(?!https://fonts\.)[^;]+;", "", html, flags=re.IGNORECASE)
     return html
 
 
