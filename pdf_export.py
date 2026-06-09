@@ -1457,6 +1457,7 @@ def _generate_customer_chart(filtered, top_n=20):
         if c and c.lower() not in ('nan', 'none'):
             by_cust[c] = by_cust.get(c, 0) + _val(r.get('crp_term_benefit'))
 
+    grand = sum(by_cust.values()) or 1
     items = sorted(by_cust.items(), key=lambda x: x[1], reverse=True)[:top_n]
     items.reverse()
     if not items:
@@ -1482,9 +1483,9 @@ def _generate_customer_chart(filtered, top_n=20):
     span = max(vals) if vals else 0
     for bar, v in zip(bars, vals):
         ax.text(bar.get_width() + span * 0.005, bar.get_y() + bar.get_height()/2,
-                f"  £{v:,.1f}m", va='center', ha='left',
+                f"  £{v:,.1f}m  ({v / grand * 100:.0f}%)", va='center', ha='left',
                 fontsize=9, color=HOPPER_NAVY, weight='bold')
-    ax.margins(x=0.12)
+    ax.margins(x=0.18)
     plt.tight_layout(pad=1.5)
     buf = io.BytesIO()
     plt.savefig(buf, format='png', bbox_inches='tight', dpi=160, facecolor='white')
@@ -1553,6 +1554,10 @@ def _generate_evs_charts(filtered, top_n=10):
     axv.set_title("By CRP term benefit (£m)", loc='left', pad=8)
     axv.margins(y=0.18)
 
+    # Cumulative-share lines (Annual-Profit benchmark detail level).
+    _cumulative_overlay(axc, counts)
+    _cumulative_overlay(axv, values)
+
     plt.tight_layout(pad=2.0)
     _add_separators(fig, [axc, axv])
     buf = io.BytesIO()
@@ -1616,6 +1621,10 @@ def _generate_structure_charts(filtered):
                  ha='center', va='bottom', fontsize=8.5, color=HOPPER_NAVY, weight='bold')
     axc.margins(y=0.18)
     axc.set_title("By Number of Opportunities", loc='left', pad=8)
+
+    # Cumulative-share lines (Annual-Profit benchmark detail level).
+    _cumulative_overlay(axv, vals)
+    _cumulative_overlay(axc, counts)
 
     plt.tight_layout(pad=2.0)
     _add_separators(fig, [axv, axc])
@@ -2559,8 +2568,8 @@ def _chart_donut(pairs, title, palette=None):
         colors=colors, startangle=90, pctdistance=0.78,
         textprops={'color': 'white', 'fontsize': 9, 'weight': 'bold'},
         wedgeprops={'width': 0.42, 'edgecolor': 'white', 'linewidth': 2})
-    ax.legend(wedges, [f"{str(l)[:24]} ({v / total * 100:.0f}%)" for l, v in zip(labels, vals)],
-              loc='center left', bbox_to_anchor=(0.98, 0.5), fontsize=9.5, frameon=False)
+    ax.legend(wedges, [f"{str(l)[:20]}  £{v:,.0f}m ({v / total * 100:.0f}%)" for l, v in zip(labels, vals)],
+              loc='center left', bbox_to_anchor=(0.98, 0.5), fontsize=9, frameon=False)
     ax.set_title(title, loc='left', pad=12, color=HOPPER_NAVY, fontsize=12, fontweight='bold')
     ax.axis('equal')
     return _finish_fig(fig, pad=1.4)
@@ -2594,6 +2603,172 @@ def _chart_hbar(pairs, title, value_fmt, color=VALUE_HEX, top_n=15):
     ax.set_title(title, loc='left', pad=10, color=HOPPER_NAVY, fontsize=12, fontweight='bold')
     ax.margins(x=0.14)
     return _finish_fig(fig, pad=1.5)
+
+
+def _cumulative_overlay(ax, values, line_color=HOPPER_NAVY):
+    """Overlay a cumulative-share line on a secondary % axis of a vertical-bar
+    plot — the 'cumulative blue line' device from the Annual-Profit benchmark.
+    No-op (returns None) when the values sum to zero."""
+    tot = sum(values)
+    if tot <= 0:
+        return None
+    cum, run = [], 0.0
+    for v in values:
+        run += v
+        cum.append(run / tot * 100.0)
+    ax2 = ax.twinx()
+    ax2.plot(range(len(values)), cum, color=line_color, linewidth=1.8,
+             marker='o', markersize=3, zorder=5)
+    ax2.set_ylim(0, 118)
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['left'].set_visible(False)
+    ax2.spines['right'].set_color('#e5e7eb')
+    ax2.tick_params(axis='y', colors=HOPPER_SLATE, labelsize=7, length=0)
+    ax2.set_yticks([0, 50, 100])
+    ax2.set_yticklabels(["0%", "50%", "100%"])
+    return ax2
+
+
+def _generate_status_chart(stages, p_vals, p_counts):
+    """Status overview chart at the Annual-Profit detail level: two panels (CRP
+    value, opportunity count), a value label on every bar and a navy
+    cumulative-share line per panel. Stage names are wrapped (never truncated)
+    with generous bottom spacing so no x-axis label is clipped."""
+    import matplotlib
+    import textwrap
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    if not stages:
+        return None
+    labels = ["\n".join(textwrap.wrap(str(s), width=12)) or str(s) for s in stages]
+    fig, (axv, axc) = plt.subplots(1, 2, figsize=(13, 5.3), dpi=160)
+    fig.patch.set_facecolor('white')
+
+    def _panel(ax, vals, color, fmt, title):
+        _style_value_axis(ax)
+        xs = list(range(len(stages)))
+        bars = ax.bar(xs, vals, color=color, width=0.6, zorder=3)
+        ax.set_xticks(xs)
+        ax.set_xticklabels(labels, fontsize=6.6, color='#374151')
+        top = max(vals) if (vals and max(vals) > 0) else 1
+        ax.set_ylim(0, top * 1.24)
+        for b, v in zip(bars, vals):
+            if v:
+                ax.text(b.get_x() + b.get_width() / 2, v + top * 0.02, fmt(v),
+                        ha='center', va='bottom', fontsize=7.3, color=HOPPER_NAVY, weight='bold')
+        _cumulative_overlay(ax, vals)
+        ax.set_title(title, loc='left', pad=8, color=HOPPER_NAVY, fontsize=11, fontweight='bold')
+
+    _panel(axv, p_vals, VALUE_HEX, lambda v: f"£{v:,.0f}m", "By CRP term benefit (£m)")
+    _panel(axc, p_counts, COUNT_HEX, lambda v: f"{int(v)}", "By Number of Opportunities")
+    # Reserve bottom room for the wrapped multi-line stage labels and keep the
+    # two panels apart; bbox_inches='tight' then captures everything cleanly.
+    fig.subplots_adjust(left=0.03, right=0.97, top=0.9, bottom=0.28, wspace=0.30)
+    _add_separators(fig, [axv, axc])
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', bbox_inches='tight', dpi=160, facecolor='white')
+    plt.close(fig)
+    buf.seek(0)
+    return buf
+
+
+def _segment_charts(seg_rows):
+    """Two-panel chart for a per-segment (status / restructure-type) detail page
+    at the Annual-Profit detail level: (left) the segment's profit by year with
+    a cumulative-share line; (right) its top customers by CRP term benefit."""
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    years = ['2026', '2027', '2028', '2029', '2030']
+    yvals = [sum(_val(r.get(f'profit_{y}')) for r in seg_rows) for y in years]
+    bycust = {}
+    for r in seg_rows:
+        c = str(r.get('customer', '')).strip() or 'Unknown'
+        bycust[c] = bycust.get(c, 0) + _val(r.get('crp_term_benefit'))
+    citems = sorted(bycust.items(), key=lambda x: x[1], reverse=True)[:8]
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 4.2), dpi=160)
+    fig.patch.set_facecolor('white')
+
+    # Left: profit by year + cumulative share.
+    _style_value_axis(ax1)
+    xs = list(range(len(years)))
+    b1 = ax1.bar(xs, yvals, color=VALUE_HEX, width=0.6, zorder=3)
+    ax1.set_xticks(xs)
+    ax1.set_xticklabels(years, fontsize=9, color='#374151')
+    top1 = max(yvals) if any(v > 0 for v in yvals) else 1
+    ax1.set_ylim(0, top1 * 1.26)
+    for b, v in zip(b1, yvals):
+        if v:
+            ax1.text(b.get_x() + b.get_width() / 2, v + top1 * 0.02, f"£{v:,.0f}m",
+                     ha='center', va='bottom', fontsize=8, color=HOPPER_NAVY, weight='bold')
+    _cumulative_overlay(ax1, yvals)
+    ax1.set_title("Profit by year (£m) + cumulative share", loc='left', pad=8,
+                  color=HOPPER_NAVY, fontsize=11, fontweight='bold')
+
+    # Right: top customers by CRP term benefit (horizontal).
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
+    ax2.spines['left'].set_color('#e5e7eb')
+    ax2.spines['bottom'].set_color('#e5e7eb')
+    ax2.grid(True, axis='x', **GRID_KW)
+    ax2.set_axisbelow(True)
+    ax2.tick_params(colors='#374151', labelsize=8.5, length=0)
+    if citems:
+        cnames = [str(c)[:20] for c, _ in citems][::-1]
+        cvals = [v for _, v in citems][::-1]
+        bb = ax2.barh(cnames, cvals, color=VALUE_HEX, height=0.62)
+        span = max(cvals) if cvals else 0
+        for b, v in zip(bb, cvals):
+            ax2.text(b.get_width() + span * 0.01, b.get_y() + b.get_height() / 2,
+                     f" £{v:,.1f}m", va='center', ha='left', fontsize=8,
+                     color=HOPPER_NAVY, weight='bold')
+        ax2.margins(x=0.18)
+    else:
+        ax2.axis('off')
+    ax2.set_title("Top customers by CRP term benefit (£m)", loc='left', pad=8,
+                  color=HOPPER_NAVY, fontsize=11, fontweight='bold')
+    return _finish_fig(fig, pad=1.8, seps=[ax1, ax2])
+
+
+def _segment_detail_page(pdf, kind, seg_label, seg_rows, total_crp, total_opps,
+                         avail_w, other_dim, other_hdr):
+    """One dedicated page for a single status / restructure-type segment: a KPI
+    row, a two-panel chart (profit timeline + top customers) and a table of the
+    segment's opportunities."""
+    pdf.add_page()
+    pdf._page_header(f"{kind}: {seg_label}")
+    n = len(seg_rows)
+    crp = sum(_val(r.get("crp_term_benefit")) for r in seg_rows)
+    p2630 = sum(_val(r.get(f"profit_{y}")) for r in seg_rows for y in (2026, 2027, 2028, 2029, 2030))
+    avg = crp / n if n else 0.0
+    n_cust = len({str(r.get("customer", "")).strip() for r in seg_rows if r.get("customer")})
+    pdf._kpi_row_top([
+        ("Opportunities", str(n), f"{_pct(n, total_opps)} of portfolio", HOPPER_PRIMARY_RGB),
+        ("CRP Term Benefit", _fmtM_gbp(crp), f"{_pct(crp, total_crp)} of portfolio", HOPPER_GOLD_RGB),
+        ("Avg / Opp", _fmtM_gbp(avg), f"{n_cust} customers", HOPPER_GREEN_RGB),
+        ("Profit 2026-30", _fmtM_gbp(p2630), "Forecast in window", HOPPER_PRIMARY_RGB),
+    ], h=22)
+    try:
+        cbuf = _segment_charts(seg_rows)
+        if cbuf is not None:
+            _embed_fit(pdf, cbuf, pdf.MARGIN_L, avail_w, 70)
+            pdf.ln(2)
+    except Exception:
+        pass
+    seg_sorted = sorted(seg_rows, key=lambda r: _val(r.get("crp_term_benefit")), reverse=True)
+    rows = [[str(i), _trunc(r.get("customer", ""), 24), _trunc(r.get("region", ""), 12),
+             _trunc(r.get("engine_value_stream", r.get("top_level_evs", "")), 18),
+             _trunc(r.get(other_dim, ""), 20), _trunc(r.get("maturity", ""), 9),
+             _fmtM_short(_val(r.get("crp_term_benefit"))),
+             _fmtM_short(_val(r.get("profit_2026"))), _fmtM_short(_val(r.get("profit_2027")))]
+            for i, r in enumerate(seg_sorted, 1)]
+    pdf._section_header("Opportunities in this " + kind.lower())
+    pdf._table(["#", "Customer", "Region", "Engine VS", other_hdr, "Maturity", "CRP", "2026", "2027"],
+               rows, [8, 48, 24, 36, 40, 20, 24, 20, 20], right_align_idx={0, 6, 7, 8},
+               totals_row=["", "TOTAL", "", "", "", "", _fmtM_short(crp),
+                           _fmtM_short(sum(_val(r.get('profit_2026')) for r in seg_rows)),
+                           _fmtM_short(sum(_val(r.get('profit_2027')) for r in seg_rows))])
 
 
 def _chart_concentration(values, title):
@@ -3003,11 +3178,10 @@ def generate_hopper_detailed_pdf_report(parsed_data: dict, sections_to_include: 
     st_count = _aggregate(filtered, "status", count=True)
     p_counts = [st_count.get(s, 0) for s in stages]
     try:
-        buf = _chart_vbars([(p_vals, "By CRP term benefit (£m)", VALUE_HEX, lambda v: f"£{v:,.0f}m"),
-                            (p_counts, "By Number of Opportunities", COUNT_HEX, lambda v: f"{int(v)}")],
-                           [s[:14] for s in stages], rotate=25, label_fs=7, height=4.0)
-        _embed_fit(pdf, buf, pdf.MARGIN_L, avail_w, 92)
-        pdf.ln(2)
+        buf = _generate_status_chart(stages, p_vals, p_counts)
+        if buf is not None:
+            _embed_fit(pdf, buf, pdf.MARGIN_L, avail_w, 96)
+            pdf.ln(2)
     except Exception:
         pass
     by_status_crp = _aggregate(filtered, "status")
@@ -3018,12 +3192,18 @@ def generate_hopper_detailed_pdf_report(parsed_data: dict, sections_to_include: 
                right_align_idx={1, 2, 3},
                totals_row=["TOTAL", str(total_opps), _fmtM_gbp(total_crp), "100.0%"])
 
+    # ---- One detail page per status (right after the overview) ----
+    for stage in stages:
+        seg = [r for r in filtered if (str(r.get("status", "")).strip() or "Unknown") == stage]
+        if seg:
+            _segment_detail_page(pdf, "Status", stage, seg, total_crp, total_opps,
+                                 avail_w, "restructure_type", "Restructure")
+
     # ---- Annual Profit Forecast ----
     pdf.add_page()
     pdf._page_header("Annual Profit Forecast")
     years = ["2026", "2027", "2028", "2029", "2030"]
     allp = sum(totals_year.values()) or 1
-    peak_year = max(years, key=lambda y: totals_year[int(y)])
     # Headline KPIs frame the five-year shape of the forecast.
     pdf._kpi_row_top([
         ("Total Forecast 2026-30", _fmtM_gbp(allp), "Sum of annual profit", HOPPER_GOLD_RGB),
@@ -3031,7 +3211,7 @@ def generate_hopper_detailed_pdf_report(parsed_data: dict, sections_to_include: 
          f"{_pct(near_term, allp)} of forecast", HOPPER_PRIMARY_RGB),
         ("Long-term 2028-30", _fmtM_gbp(long_term),
          f"Avg {_fmtM_gbp(long_term / 3)}/yr", HOPPER_GREEN_RGB),
-        ("Peak Year", peak_year, f"{_fmtM_gbp(totals_year[int(peak_year)])}", HOPPER_GOLD_RGB),
+        ("Avg / Year", _fmtM_gbp(allp / 5), "Across 2026-30", HOPPER_GOLD_RGB),
     ], h=22)
     try:
         buf = _generate_annual_profit_chart(totals_year)
@@ -3053,11 +3233,6 @@ def generate_hopper_detailed_pdf_report(parsed_data: dict, sections_to_include: 
     pdf._table(["Year", "Profit (GBP m)", "% of Forecast", "Cumulative %", "YoY"], rows,
                [34, 56, 40, 40, 30], right_align_idx={1, 2, 3, 4},
                totals_row=["TOTAL", _fmtM_gbp(allp), "100.0%", "", ""])
-    front = _pct(near_term, allp)
-    pdf._narrative(
-        f"Insight - {front} of forecast profit lands in 2026-27, with {peak_year} the peak year at "
-        f"{_fmtM_gbp(totals_year[int(peak_year)])}. The cumulative curve shows how front-loaded the "
-        f"book is; later years average {_fmtM_gbp(long_term / 3)} per year.")
 
     # ---- Regional Analysis (only when the data spans more than one region) ----
     if len(regions) > 1:
@@ -3176,6 +3351,13 @@ def generate_hopper_detailed_pdf_report(parsed_data: dict, sections_to_include: 
                            _fmtM_short(avg_all), f"{tot_mature}/{total_opps}",
                            f"{tot_onerous}/{total_opps}", _fmtM_short(tot_profit)])
 
+    # ---- One detail page per restructure type (right after the overview) ----
+    for rtype, _d in rt_sorted:
+        seg = [r for r in filtered if (str(r.get("restructure_type", "")).strip() or "Unknown") == rtype]
+        if seg:
+            _segment_detail_page(pdf, "Restructure Type", rtype, seg, total_crp, total_opps,
+                                 avail_w, "status", "Status")
+
     # ---- Maturity & Risk (twin interactive donuts + tables) ----
     donut_page_no = None     # page on which the donuts sit (for post-processing)
     donut_injects = []       # list of donut specs for _inject_donut_rollovers
@@ -3260,66 +3442,82 @@ def generate_hopper_detailed_pdf_report(parsed_data: dict, sections_to_include: 
         pdf.add_page()
         pdf._page_header("Opportunities")  # detailed-report initiatives
         body_w = pdf.PAGE_W - pdf.MARGIN_L - pdf.MARGIN_R
-        # Lead-in: how much of the book the documented initiatives represent.
-        init_crp = sum(_val(r.get("crp_term_benefit")) for r in init_opps)
-        pdf._narrative(
-            f"{len(init_opps)} opportunities carry a documented initiative, representing "
-            f"{_fmtM_gbp(init_crp)} of CRP term benefit ({_pct(init_crp, total_crp)} of the selection). "
-            f"Each is shown below with its commercial profile and the initiative narrative, ranked by "
-            f"CRP term benefit.")
-        for idx, r in enumerate(init_opps):
-            init_text = str(r.get("initiative", "") or "").strip()
-            # Keep the heading row + profile chips + first lines of the
-            # initiative together; a richer card needs more headroom than the
-            # old plain list did.
-            if pdf.get_y() > pdf.PAGE_H - 46:
-                pdf.add_page()
-                pdf._page_header("Opportunities (continued)")
-            elif idx > 0:
-                y = pdf.get_y()
-                pdf.set_draw_color(*HOPPER_BORDER)
-                pdf.set_line_width(0.2)
-                pdf.line(pdf.MARGIN_L, y, pdf.PAGE_W - pdf.MARGIN_R, y)
-                pdf.ln(2.5)
+        inner_w = body_w - 10
+        usable_h = pdf.PAGE_H - 16 - 18
+
+        def _opp_content(r, idx, cy0):
+            """Render one opportunity's header / profile / profit / narrative
+            starting at y=cy0+2.6 inside the card padding. Returns the y after."""
             cust = _safe(r.get("customer", "") or "-")
             crp_v = _val(r.get("crp_term_benefit"))
-            # Header: rank + customer (left), CRP value (gold, right).
-            hy = pdf.get_y()
-            pdf.set_xy(pdf.MARGIN_L, hy)
+            evs = r.get("engine_value_stream", r.get("top_level_evs", "")) or "-"
+            ix = pdf.MARGIN_L + 5
+            pdf.set_xy(ix, cy0 + 2.6)
             pdf.set_font("Helvetica", "B", 10.5)
             pdf.set_text_color(*HOPPER_PRIMARY_RGB)
-            pdf.cell(body_w - 40, 6, _safe(f"{idx + 1}.  {cust}"), 0, 0, "L")
-            pdf.set_font("Helvetica", "B", 10.5)
+            pdf.cell(inner_w - 42, 6, _safe(f"{idx + 1}.  {cust}"), 0, 0, "L")
             pdf.set_text_color(*HOPPER_GOLD_RGB)
-            pdf.cell(40, 6, _safe(f"CRP {_fmtM_gbp(crp_v)}"), 0, 1, "R")
-            # Profile chips + maturity / onerous badges on one row.
-            cy = pdf.get_y() + 0.5
-            cx = pdf.MARGIN_L
-            evs = r.get("engine_value_stream", r.get("top_level_evs", "")) or "-"
+            pdf.cell(42, 6, _safe(f"CRP {_fmtM_gbp(crp_v)}"), 0, 0, "R")
+            cyc = cy0 + 10
+            cx = ix
             for lab, val in [("Region", _trunc(r.get("region", "") or "-", 16)),
                              ("EVS", _trunc(evs, 18)),
                              ("Status", _trunc(r.get("status", "") or "-", 22)),
                              ("VP", _trunc(r.get("vp_owner", "") or "-", 18))]:
-                cx += pdf._chip(lab, val, cx, cy) + 5
+                cx += pdf._chip(lab, val, cx, cyc) + 5
             mat = str(r.get("maturity", "") or "").strip()
             if mat:
-                cx += _hopper_badge(pdf, mat.upper(), _maturity_color(mat), cx, cy - 0.4) + 2
+                cx += _hopper_badge(pdf, mat.upper(), _maturity_color(mat), cx, cyc - 0.4) + 2
             ot = str(r.get("onerous_type", "") or "").strip()
             if ot:
-                cx += _hopper_badge(pdf, ot.upper(), _onerous_color(ot), cx, cy - 0.4) + 2
-            pdf.set_xy(pdf.MARGIN_L, cy + 6)
-            # 26-30 profit micro-strip.
-            p_bits = "   ".join(f"{y}: {_fmtM_short(_val(r.get(f'profit_{y}')))}"
-                                for y in (2026, 2027, 2028, 2029, 2030))
+                cx += _hopper_badge(pdf, ot.upper(), _onerous_color(ot), cx, cyc - 0.4) + 2
+            pdf.set_xy(ix, cyc + 5.5)
+            p_bits = "    ".join(f"{y}: {_fmtM_short(_val(r.get(f'profit_{y}')))}"
+                                 for y in (2026, 2027, 2028, 2029, 2030))
             pdf.set_font("Helvetica", "", 7.5)
             pdf.set_text_color(*HOPPER_TEXT_MUTE)
-            pdf.cell(0, 4, _safe("Profit  " + p_bits), 0, 1, "L")
-            # Initiative narrative.
-            pdf.set_x(pdf.MARGIN_L)
-            pdf.set_font("Helvetica", "", 9.5)
+            pdf.cell(0, 4, _safe("Profit    " + p_bits), 0, 0, "L")
+            pdf.set_xy(ix, cyc + 10)
+            pdf.set_font("Helvetica", "", 9.3)
             pdf.set_text_color(*HOPPER_TEXT_DARK)
-            pdf.multi_cell(body_w, 5.0, _safe(init_text))
-            pdf.ln(2.5)
+            pdf.multi_cell(inner_w, 4.7, _safe(str(r.get("initiative", "") or "").strip()) or "-")
+
+        for idx, r in enumerate(init_opps):
+            init_text = _safe(str(r.get("initiative", "") or "").strip()) or "-"
+            pdf.set_font("Helvetica", "", 9.3)
+            n_lines = len(pdf.multi_cell(inner_w, 4.7, init_text, dry_run=True, output="LINES"))
+            text_h = max(4.7, n_lines * 4.7)
+            card_h = 22.5 + text_h   # header + chips + profit + narrative + pads
+
+            if card_h <= usable_h:
+                # Normal case: the whole entry fits in one bordered card. Lock
+                # auto page-break so the narrative can't split the card.
+                if pdf.get_y() + card_h > pdf.PAGE_H - 18:
+                    pdf.add_page()
+                    pdf._page_header("Opportunities (continued)")
+                cy0 = pdf.get_y()
+                pdf.set_fill_color(*HOPPER_BG_LIGHT)
+                pdf.set_draw_color(*HOPPER_BORDER)
+                pdf.set_line_width(0.2)
+                pdf.rect(pdf.MARGIN_L, cy0, body_w, card_h, "DF")
+                pdf.set_fill_color(*HOPPER_GOLD_RGB)
+                pdf.rect(pdf.MARGIN_L, cy0, 1.6, card_h, "F")
+                prev_auto = pdf.auto_page_break
+                pdf.set_auto_page_break(False)
+                _opp_content(r, idx, cy0)
+                pdf.set_auto_page_break(prev_auto, margin=20)
+                pdf.set_y(cy0 + card_h + 3)
+            else:
+                # Rare oversized initiative: render unboxed so the full text can
+                # flow across pages rather than overflow a fixed card.
+                if pdf.get_y() > pdf.PAGE_H - 46:
+                    pdf.add_page()
+                    pdf._page_header("Opportunities (continued)")
+                _opp_content(r, idx, pdf.get_y())
+                pdf.set_draw_color(*HOPPER_BORDER)
+                pdf.set_line_width(0.2)
+                pdf.line(pdf.MARGIN_L, pdf.get_y() + 2, pdf.PAGE_W - pdf.MARGIN_R, pdf.get_y() + 2)
+                pdf.ln(4)
 
     out = bytes(pdf.output())
     # Make the maturity + onerous donuts interactive: hover a wedge to reveal

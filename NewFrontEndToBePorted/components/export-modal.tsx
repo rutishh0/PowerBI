@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Download, FileText, Image as ImageIcon, Presentation, CheckCircle2, Sparkles, ChevronDown } from "lucide-react"
+import { Download, FileText, CheckCircle2, Sparkles, ChevronDown } from "lucide-react"
 import { toast } from "sonner"
 import type { UploadedFile } from "@/lib/types"
 import { FILE_TYPE_LABELS } from "@/lib/file-type-meta"
@@ -33,27 +33,6 @@ type Props = {
   filters?: Record<string, string>
 }
 
-const FORMATS: { id: ExportFormat; label: string; description: string; icon: typeof FileText }[] = [
-  {
-    id: "pdf",
-    label: "PDF report",
-    description: "Multi-page, print-ready executive report with RR header & footer.",
-    icon: FileText,
-  },
-  {
-    id: "pptx",
-    label: "PowerPoint deck",
-    description: "16:9 slideshow matching the Slides view for use in reviews. (Coming soon — falls back to PDF.)",
-    icon: Presentation,
-  },
-  {
-    id: "png",
-    label: "Current view (PNG)",
-    description: "Screenshot of the current visualizer for quick sharing. (Coming soon — falls back to PDF.)",
-    icon: ImageIcon,
-  },
-]
-
 const AI_MODES: { id: AiReportMode; label: string; blurb: string }[] = [
   { id: "charts", label: "Charts", blurb: "AI invents the visualizations (Vega-Lite), Rolls-Royce themed." },
   { id: "html", label: "HTML", blurb: "AI writes the entire HTML/CSS layout — the most bespoke look." },
@@ -66,7 +45,8 @@ const AI_PROVIDERS: { id: AiReportProvider; label: string; sub: string }[] = [
 ]
 
 export function ExportModal({ open, onOpenChange, activeFile, filters }: Props) {
-  const [format, setFormat] = useState<ExportFormat>("pdf")
+  // PDF is now the only output format (PPTX/PNG were removed).
+  const format: ExportFormat = "pdf"
   const [busy, setBusy] = useState<null | "std" | "detailed">(null)
   const [aiMode, setAiMode] = useState<AiReportMode>("charts")
   const [aiProvider, setAiProvider] = useState<AiReportProvider>("nvidia")
@@ -225,63 +205,20 @@ export function ExportModal({ open, onOpenChange, activeFile, filters }: Props) 
           </div>
         ) : null}
 
-        {/* Format */}
-        <div className="space-y-2">
-          <div className="text-[11px] uppercase tracking-[0.14em] text-white/55 font-semibold">
-            Format
+        {/* Output — a single branded PDF report (PPTX/PNG were removed). */}
+        <div className="flex items-start gap-3 rounded-md border border-[var(--chart-2)] bg-[var(--chart-2)]/10 p-3">
+          <div className="h-8 w-8 rounded-md flex items-center justify-center shrink-0 bg-[var(--chart-2)]/20 text-[var(--chart-2)]">
+            <FileText className="h-4 w-4" />
           </div>
-          <div className="grid gap-2">
-            {FORMATS.map((f) => {
-              const Icon = f.icon
-              const active = format === f.id
-              return (
-                <button
-                  key={f.id}
-                  type="button"
-                  onClick={() => setFormat(f.id)}
-                  className={`flex items-start gap-3 rounded-md border p-3 text-left transition-colors ${
-                    active
-                      ? "border-[var(--chart-2)] bg-[var(--chart-2)]/10"
-                      : "border-white/10 bg-white/[0.03] hover:border-white/25 hover:bg-white/[0.06]"
-                  }`}
-                >
-                  <span
-                    className={`mt-1 h-3.5 w-3.5 rounded-full border flex-shrink-0 ${
-                      active
-                        ? "border-[var(--chart-2)] bg-[var(--chart-2)]"
-                        : "border-white/40"
-                    }`}
-                    aria-hidden
-                  >
-                    {active ? (
-                      <span className="block h-1.5 w-1.5 rounded-full bg-[oklch(0.17_0.03_165)] m-auto translate-y-0.5" />
-                    ) : null}
-                  </span>
-                  <div
-                    className={`h-8 w-8 rounded-md flex items-center justify-center shrink-0 ${
-                      active
-                        ? "bg-[var(--chart-2)]/20 text-[var(--chart-2)]"
-                        : "bg-white/5 text-white/55"
-                    }`}
-                  >
-                    <Icon className="h-4 w-4" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-white">{f.label}</div>
-                    <div className="text-xs text-white/55 mt-0.5 text-pretty">{f.description}</div>
-                  </div>
-                </button>
-              )
-            })}
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-medium text-white">PDF report</div>
+            <div className="text-xs text-white/55 mt-0.5 text-pretty">
+              {isHopper
+                ? "Long-form, print-ready report (15-20+ pages) — every dimension as a chart and a supporting table, with RR header & footer."
+                : "Multi-page, print-ready report with the Rolls-Royce Civil Aerospace header & footer."}
+            </div>
           </div>
         </div>
-
-        {isHopper ? (
-          <p className="text-[11px] text-white/45 -mt-1">
-            <span className="text-white/70 font-medium">Detailed PDF</span> produces a long-form report
-            (15-20+ pages) — every dimension as a chart and a supporting table.
-          </p>
-        ) : null}
 
         {/* AI Report (Beta) — Kimi K2.6 designs a bespoke report dynamically.
             Collapsed by default; the header toggles the options open. */}
@@ -377,24 +314,15 @@ export function ExportModal({ open, onOpenChange, activeFile, filters }: Props) 
           >
             Cancel
           </Button>
-          {isHopper ? (
-            <Button
-              variant="outline"
-              onClick={() => handleExport(true)}
-              disabled={!!busy || aiBusy || !activeFile}
-              className="gap-2 border-[var(--chart-2)]/60 bg-transparent text-[var(--chart-2)] hover:bg-[var(--chart-2)]/10 hover:text-[var(--chart-2)]"
-            >
-              {busy === "detailed" ? <Spinner className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
-              {busy === "detailed" ? "Generating…" : "Generate Detailed PDF"}
-            </Button>
-          ) : null}
+          {/* Single primary action: the Detailed PDF for Hopper files, the
+              standard branded PDF otherwise. */}
           <Button
-            onClick={() => handleExport(false)}
+            onClick={() => handleExport(isHopper)}
             disabled={!!busy || aiBusy || !activeFile}
             className="gap-2 bg-[var(--chart-2)] text-[oklch(0.17_0.03_165)] hover:bg-[var(--chart-2)]/90"
           >
-            {busy === "std" ? <Spinner className="h-4 w-4" /> : <Download className="h-4 w-4" />}
-            {busy === "std" ? "Generating…" : "Generate export"}
+            {busy ? <Spinner className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
+            {busy ? "Generating…" : isHopper ? "Generate Detailed PDF" : "Generate PDF"}
           </Button>
         </DialogFooter>
       </DialogContent>
