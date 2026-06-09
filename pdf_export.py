@@ -2608,9 +2608,10 @@ def _chart_hbar(pairs, title, value_fmt, color=VALUE_HEX, top_n=15):
 def _cumulative_overlay(ax, values, line_color=HOPPER_NAVY):
     """Overlay a cumulative-share line on a secondary % axis of a vertical-bar
     plot — the 'cumulative blue line' device from the Annual-Profit benchmark.
-    No-op (returns None) when the values sum to zero."""
+    No-op when the values sum to zero or only a single bar carries any value
+    (a lone bar would put the line flat at 100%, which conveys nothing)."""
     tot = sum(values)
-    if tot <= 0:
+    if tot <= 0 or sum(1 for v in values if v) < 2:
         return None
     cum, run = [], 0.0
     for v in values:
@@ -2673,62 +2674,145 @@ def _generate_status_chart(stages, p_vals, p_counts):
 
 
 def _segment_charts(seg_rows):
-    """Two-panel chart for a per-segment (status / restructure-type) detail page
-    at the Annual-Profit detail level: (left) the segment's profit by year with
-    a cumulative-share line; (right) its top customers by CRP term benefit."""
+    """Two robust, always-meaningful panels for a per-segment (status /
+    restructure-type) detail page:
+
+      (left)  the segment's opportunities ranked by value — CRP term benefit if
+              any is present, else forecast profit 2026-30, else opportunity
+              count by engine value stream — with each value bar coloured by
+              maturity (green = mature, amber = immature).
+      (right) the segment's maturity and onerous-contract risk profile as
+              stacked count bars.
+
+    Unlike a fixed profit-by-year chart, this never renders empty: a segment
+    with zero profit still shows its CRP, a zero-CRP segment shows its profit,
+    and a value-less segment falls back to an engine-value-stream count. Zero
+    bars are dropped (unless every bar is zero), single-opportunity segments get
+    sensible headroom, and negative profit is handled with a zero reference."""
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
-    years = ['2026', '2027', '2028', '2029', '2030']
-    yvals = [sum(_val(r.get(f'profit_{y}')) for r in seg_rows) for y in years]
-    bycust = {}
-    for r in seg_rows:
-        c = str(r.get('customer', '')).strip() or 'Unknown'
-        bycust[c] = bycust.get(c, 0) + _val(r.get('crp_term_benefit'))
-    citems = sorted(bycust.items(), key=lambda x: x[1], reverse=True)[:8]
+    from matplotlib.patches import Patch
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 4.2), dpi=160)
+    def _profit(r):
+        return sum(_val(r.get(f'profit_{y}')) for y in (2026, 2027, 2028, 2029, 2030))
+
+    crp_total = sum(_val(r.get('crp_term_benefit')) for r in seg_rows)
+    prof_total = sum(_profit(r) for r in seg_rows)
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 4.3), dpi=160,
+                                   gridspec_kw={'width_ratios': [1.45, 1]})
     fig.patch.set_facecolor('white')
 
-    # Left: profit by year + cumulative share.
-    _style_value_axis(ax1)
-    xs = list(range(len(years)))
-    b1 = ax1.bar(xs, yvals, color=VALUE_HEX, width=0.6, zorder=3)
-    ax1.set_xticks(xs)
-    ax1.set_xticklabels(years, fontsize=9, color='#374151')
-    top1 = max(yvals) if any(v > 0 for v in yvals) else 1
-    ax1.set_ylim(0, top1 * 1.26)
-    for b, v in zip(b1, yvals):
-        if v:
-            ax1.text(b.get_x() + b.get_width() / 2, v + top1 * 0.02, f"£{v:,.0f}m",
-                     ha='center', va='bottom', fontsize=8, color=HOPPER_NAVY, weight='bold')
-    _cumulative_overlay(ax1, yvals)
-    ax1.set_title("Profit by year (£m) + cumulative share", loc='left', pad=8,
-                  color=HOPPER_NAVY, fontsize=11, fontweight='bold')
+    # ---------- Panel 1: value (or count) ranking, coloured by maturity ----------
+    for sp in ('top', 'right', 'left'):
+        ax1.spines[sp].set_visible(False)
+    ax1.spines['bottom'].set_color('#e5e7eb')
+    ax1.grid(True, axis='x', **GRID_KW)
+    ax1.set_axisbelow(True)
+    ax1.tick_params(colors='#374151', labelsize=7.8, length=0)
 
-    # Right: top customers by CRP term benefit (horizontal).
-    ax2.spines['top'].set_visible(False)
-    ax2.spines['right'].set_visible(False)
-    ax2.spines['left'].set_color('#e5e7eb')
-    ax2.spines['bottom'].set_color('#e5e7eb')
-    ax2.grid(True, axis='x', **GRID_KW)
-    ax2.set_axisbelow(True)
-    ax2.tick_params(colors='#374151', labelsize=8.5, length=0)
-    if citems:
-        cnames = [str(c)[:20] for c, _ in citems][::-1]
-        cvals = [v for _, v in citems][::-1]
-        bb = ax2.barh(cnames, cvals, color=VALUE_HEX, height=0.62)
-        span = max(cvals) if cvals else 0
-        for b, v in zip(bb, cvals):
-            ax2.text(b.get_width() + span * 0.01, b.get_y() + b.get_height() / 2,
-                     f" £{v:,.1f}m", va='center', ha='left', fontsize=8,
-                     color=HOPPER_NAVY, weight='bold')
-        ax2.margins(x=0.18)
+    def _lbl(r):
+        cust = (str(r.get('customer', '') or '-').strip() or '-')
+        evs = str(r.get('engine_value_stream', r.get('top_level_evs', '')) or '').strip()
+        return f"{cust[:16]} - {evs[:12]}" if evs else cust[:24]
+
+    show_mat_key = False
+    if crp_total > 0 or abs(prof_total) > 0:
+        mfn = (lambda r: _val(r.get('crp_term_benefit'))) if crp_total > 0 else _profit
+        mlabel = "CRP term benefit (GBP m)" if crp_total > 0 else "forecast profit 2026-30 (GBP m)"
+        items = [(_lbl(r), mfn(r), str(r.get('maturity', '') or '')) for r in seg_rows]
+        nz = [it for it in items if it[1]]
+        items = (nz if nz else items)
+        items.sort(key=lambda x: abs(x[1]), reverse=True)
+        items = items[:9][::-1]
+        labels = [it[0] for it in items]
+        vals = [it[1] for it in items]
+        cols = [_maturity_color(it[2]) for it in items]
+        is_val = True
+        show_mat_key = True
+        title = f"Opportunities by {mlabel}"
     else:
-        ax2.axis('off')
-    ax2.set_title("Top customers by CRP term benefit (£m)", loc='left', pad=8,
+        by = {}
+        for r in seg_rows:
+            e = str(r.get('engine_value_stream', r.get('top_level_evs', '')) or 'Unknown').strip() or 'Unknown'
+            by[e] = by.get(e, 0) + 1
+        order = sorted(by.items(), key=lambda x: x[1], reverse=True)[:9][::-1]
+        labels = [e[:24] for e, _ in order]
+        vals = [c for _, c in order]
+        cols = [COUNT_HEX] * len(order)
+        is_val = False
+        title = "Opportunities by engine value stream (count)"
+
+    yp = list(range(len(labels)))
+    bars = ax1.barh(yp, vals, color=cols, height=0.62, zorder=3)
+    ax1.set_yticks(yp)
+    ax1.set_yticklabels(labels, fontsize=7.8)
+    vmax = max(vals) if vals else 1
+    vmin = min(vals) if vals else 0
+    hi = vmax * 1.32 if vmax > 0 else 1
+    lo = vmin * 1.18 if vmin < 0 else 0
+    ax1.set_xlim(lo, hi)
+    ax1.set_ylim(-0.8, max(0.8, len(labels) - 0.2))
+    if vmin < 0:
+        ax1.axvline(0, color='#9aa3af', lw=0.8, zorder=2)
+    rng = (hi - lo) or 1
+    for b, v in zip(bars, vals):
+        txt = (f" GBP {v:,.1f}m" if is_val else f" {int(v)}")
+        if v >= 0:
+            ax1.text(b.get_width() + rng * 0.012, b.get_y() + b.get_height() / 2, txt,
+                     va='center', ha='left', fontsize=7.6, color=HOPPER_NAVY, weight='bold')
+        else:
+            ax1.text(b.get_width() - rng * 0.012, b.get_y() + b.get_height() / 2, txt,
+                     va='center', ha='right', fontsize=7.6, color=HOPPER_NAVY, weight='bold')
+    ax1.set_title(title, loc='left', pad=8, color=HOPPER_NAVY, fontsize=11, fontweight='bold')
+    if show_mat_key:
+        ax1.legend(handles=[Patch(facecolor=HOPPER_GREEN, label='Mature'),
+                            Patch(facecolor='#c98a2e', label='Immature')],
+                   loc='lower right', fontsize=6.8, frameon=False)
+
+    # ---------- Panel 2: maturity & onerous risk profile (stacked counts) ----------
+    n = len(seg_rows)
+
+    def _mat(r):
+        s = str(r.get('maturity', '')).strip().lower()
+        return 'imm' if 'immature' in s else ('mat' if 'mature' in s else 'oth')
+
+    def _on(r):
+        s = str(r.get('onerous_type', '')).strip().lower()
+        return 'on' if ('onerous' in s and 'not' not in s) else ('not' if 'not' in s else 'oth')
+
+    mc = {'mat': 0, 'imm': 0, 'oth': 0}
+    oc = {'not': 0, 'on': 0, 'oth': 0}
+    for r in seg_rows:
+        mc[_mat(r)] += 1
+        oc[_on(r)] += 1
+    for sp in ('top', 'right', 'left', 'bottom'):
+        ax2.spines[sp].set_visible(False)
+    ax2.tick_params(left=False, bottom=False, labelbottom=False)
+    onerous_segs = [(oc['not'], HOPPER_GREEN), (oc['on'], HOPPER_RED), (oc['oth'], HOPPER_SLATE)]
+    maturity_segs = [(mc['mat'], HOPPER_GREEN), (mc['imm'], '#c98a2e'), (mc['oth'], HOPPER_SLATE)]
+    for yi, segs in [(0, onerous_segs), (1, maturity_segs)]:
+        left = 0
+        for cnt, col in segs:
+            if cnt <= 0:
+                continue
+            ax2.barh(yi, cnt, left=left, color=col, height=0.5, edgecolor='white', linewidth=1.4, zorder=3)
+            ax2.text(left + cnt / 2.0, yi, str(cnt), va='center', ha='center',
+                     color='white', fontsize=8.5, weight='bold')
+            left += cnt
+    ax2.set_yticks([0, 1])
+    ax2.set_yticklabels(["Onerous", "Maturity"], fontsize=9, color=HOPPER_NAVY)
+    ax2.set_xlim(0, max(1, n) * 1.02)
+    ax2.set_ylim(-0.7, 1.7)
+    ax2.set_title("Maturity & onerous profile", loc='left', pad=8,
                   color=HOPPER_NAVY, fontsize=11, fontweight='bold')
-    return _finish_fig(fig, pad=1.8, seps=[ax1, ax2])
+    ax2.legend(handles=[Patch(facecolor=HOPPER_GREEN, label='Mature / Not onerous'),
+                        Patch(facecolor='#c98a2e', label='Immature'),
+                        Patch(facecolor=HOPPER_RED, label='Onerous')],
+               loc='lower right', fontsize=6.6, frameon=False)
+
+    return _finish_fig(fig, pad=1.6, seps=[ax1, ax2])
 
 
 def _segment_detail_page(pdf, kind, seg_label, seg_rows, total_crp, total_opps,
