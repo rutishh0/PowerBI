@@ -2677,18 +2677,18 @@ def _segment_charts(seg_rows):
     """Two robust, always-meaningful panels for a per-segment (status /
     restructure-type) detail page:
 
-      (left)  the segment's opportunities ranked by value — CRP term benefit if
-              any is present, else forecast profit 2026-30, else opportunity
-              count by engine value stream — with each value bar coloured by
-              maturity (green = mature, amber = immature).
+      (left)  the rich profit-by-year chart (with cumulative-share line) when
+              the segment's profit is spread across >=2 years; otherwise the
+              opportunities ranked by value (CRP, else forecast profit) coloured
+              by maturity; otherwise an engine-value-stream count. This keeps the
+              detailed benchmark chart where it is informative yet never renders
+              empty or as a lone bar where a richer view exists.
       (right) the segment's maturity and onerous-contract risk profile as
               stacked count bars.
 
-    Unlike a fixed profit-by-year chart, this never renders empty: a segment
-    with zero profit still shows its CRP, a zero-CRP segment shows its profit,
-    and a value-less segment falls back to an engine-value-stream count. Zero
-    bars are dropped (unless every bar is zero), single-opportunity segments get
-    sensible headroom, and negative profit is handled with a zero reference."""
+    Zero bars are dropped (unless every bar is zero), single-opportunity
+    segments get sensible headroom, and negative profit is handled with a zero
+    reference line (the cumulative line is suppressed in that case)."""
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
@@ -2699,77 +2699,103 @@ def _segment_charts(seg_rows):
 
     crp_total = sum(_val(r.get('crp_term_benefit')) for r in seg_rows)
     prof_total = sum(_profit(r) for r in seg_rows)
+    years = ['2026', '2027', '2028', '2029', '2030']
+    yvals = [sum(_val(r.get(f'profit_{y}')) for r in seg_rows) for y in years]
+    prof_years_nonzero = sum(1 for v in yvals if v)
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 4.3), dpi=160,
                                    gridspec_kw={'width_ratios': [1.45, 1]})
     fig.patch.set_facecolor('white')
 
-    # ---------- Panel 1: value (or count) ranking, coloured by maturity ----------
-    for sp in ('top', 'right', 'left'):
-        ax1.spines[sp].set_visible(False)
-    ax1.spines['bottom'].set_color('#e5e7eb')
-    ax1.grid(True, axis='x', **GRID_KW)
-    ax1.set_axisbelow(True)
-    ax1.tick_params(colors='#374151', labelsize=7.8, length=0)
-
-    def _lbl(r):
-        cust = (str(r.get('customer', '') or '-').strip() or '-')
-        evs = str(r.get('engine_value_stream', r.get('top_level_evs', '')) or '').strip()
-        return f"{cust[:16]} - {evs[:12]}" if evs else cust[:24]
-
-    show_mat_key = False
-    if crp_total > 0 or abs(prof_total) > 0:
-        mfn = (lambda r: _val(r.get('crp_term_benefit'))) if crp_total > 0 else _profit
-        mlabel = "CRP term benefit (GBP m)" if crp_total > 0 else "forecast profit 2026-30 (GBP m)"
-        items = [(_lbl(r), mfn(r), str(r.get('maturity', '') or '')) for r in seg_rows]
-        nz = [it for it in items if it[1]]
-        items = (nz if nz else items)
-        items.sort(key=lambda x: abs(x[1]), reverse=True)
-        items = items[:9][::-1]
-        labels = [it[0] for it in items]
-        vals = [it[1] for it in items]
-        cols = [_maturity_color(it[2]) for it in items]
-        is_val = True
-        show_mat_key = True
-        title = f"Opportunities by {mlabel}"
+    # ---------- Panel 1: adaptive value / time view ----------
+    # Prefer the rich profit-by-year shape (the Annual-Profit benchmark) when
+    # profit is spread across the window; otherwise rank opportunities by
+    # whichever metric carries value (CRP, else profit) coloured by maturity;
+    # else fall back to an engine-value-stream count. This keeps the detailed
+    # year chart where it's informative and never renders empty.
+    if prof_years_nonzero >= 2:
+        _style_value_axis(ax1)
+        xs = list(range(len(years)))
+        bars = ax1.bar(xs, yvals, color=VALUE_HEX, width=0.6, zorder=3)
+        ax1.set_xticks(xs)
+        ax1.set_xticklabels(years, fontsize=9.5, color='#374151')
+        vmax, vmin = max(yvals), min(yvals)
+        top = vmax if vmax > 0 else 1
+        ax1.set_ylim((vmin * 1.18 if vmin < 0 else 0), top * 1.28)
+        if vmin < 0:
+            ax1.axhline(0, color='#9aa3af', lw=0.8, zorder=2)
+        for b, v in zip(bars, yvals):
+            if v:
+                ax1.text(b.get_x() + b.get_width() / 2,
+                         v + (top * 0.02 if v >= 0 else -top * 0.02),
+                         f"GBP {v:,.0f}m", ha='center',
+                         va='bottom' if v >= 0 else 'top',
+                         fontsize=8, color=HOPPER_NAVY, weight='bold')
+        cum_ok = vmin >= 0 and _cumulative_overlay(ax1, yvals) is not None
+        ax1.set_title("Profit by year (GBP m)" + (" + cumulative share" if cum_ok else ""),
+                      loc='left', pad=8, color=HOPPER_NAVY, fontsize=11, fontweight='bold')
     else:
-        by = {}
-        for r in seg_rows:
-            e = str(r.get('engine_value_stream', r.get('top_level_evs', '')) or 'Unknown').strip() or 'Unknown'
-            by[e] = by.get(e, 0) + 1
-        order = sorted(by.items(), key=lambda x: x[1], reverse=True)[:9][::-1]
-        labels = [e[:24] for e, _ in order]
-        vals = [c for _, c in order]
-        cols = [COUNT_HEX] * len(order)
-        is_val = False
-        title = "Opportunities by engine value stream (count)"
+        for sp in ('top', 'right', 'left'):
+            ax1.spines[sp].set_visible(False)
+        ax1.spines['bottom'].set_color('#e5e7eb')
+        ax1.grid(True, axis='x', **GRID_KW)
+        ax1.set_axisbelow(True)
+        ax1.tick_params(colors='#374151', labelsize=7.8, length=0)
 
-    yp = list(range(len(labels)))
-    bars = ax1.barh(yp, vals, color=cols, height=0.62, zorder=3)
-    ax1.set_yticks(yp)
-    ax1.set_yticklabels(labels, fontsize=7.8)
-    vmax = max(vals) if vals else 1
-    vmin = min(vals) if vals else 0
-    hi = vmax * 1.32 if vmax > 0 else 1
-    lo = vmin * 1.18 if vmin < 0 else 0
-    ax1.set_xlim(lo, hi)
-    ax1.set_ylim(-0.8, max(0.8, len(labels) - 0.2))
-    if vmin < 0:
-        ax1.axvline(0, color='#9aa3af', lw=0.8, zorder=2)
-    rng = (hi - lo) or 1
-    for b, v in zip(bars, vals):
-        txt = (f" GBP {v:,.1f}m" if is_val else f" {int(v)}")
-        if v >= 0:
-            ax1.text(b.get_width() + rng * 0.012, b.get_y() + b.get_height() / 2, txt,
-                     va='center', ha='left', fontsize=7.6, color=HOPPER_NAVY, weight='bold')
+        def _lbl(r):
+            cust = (str(r.get('customer', '') or '-').strip() or '-')
+            evs = str(r.get('engine_value_stream', r.get('top_level_evs', '')) or '').strip()
+            return f"{cust[:16]} - {evs[:12]}" if evs else cust[:24]
+
+        if crp_total > 0 or abs(prof_total) > 0:
+            use_crp = crp_total > 0
+            mfn = (lambda r: _val(r.get('crp_term_benefit'))) if use_crp else _profit
+            mlabel = "CRP term benefit (GBP m)" if use_crp else "forecast profit 2026-30 (GBP m)"
+            items = [(_lbl(r), mfn(r), str(r.get('maturity', '') or '')) for r in seg_rows]
+            nz = [it for it in items if it[1]]
+            items = (nz if nz else items)
+            items.sort(key=lambda x: abs(x[1]), reverse=True)
+            items = items[:9][::-1]
+            labels = [it[0] for it in items]
+            vals = [it[1] for it in items]
+            cols = [_maturity_color(it[2]) for it in items]
+            is_val = True
+            ax1.legend(handles=[Patch(facecolor=HOPPER_GREEN, label='Mature'),
+                                Patch(facecolor='#c98a2e', label='Immature')],
+                       loc='lower right', fontsize=6.8, frameon=False)
+            title = f"Opportunities by {mlabel}"
         else:
-            ax1.text(b.get_width() - rng * 0.012, b.get_y() + b.get_height() / 2, txt,
-                     va='center', ha='right', fontsize=7.6, color=HOPPER_NAVY, weight='bold')
-    ax1.set_title(title, loc='left', pad=8, color=HOPPER_NAVY, fontsize=11, fontweight='bold')
-    if show_mat_key:
-        ax1.legend(handles=[Patch(facecolor=HOPPER_GREEN, label='Mature'),
-                            Patch(facecolor='#c98a2e', label='Immature')],
-                   loc='lower right', fontsize=6.8, frameon=False)
+            by = {}
+            for r in seg_rows:
+                e = str(r.get('engine_value_stream', r.get('top_level_evs', '')) or 'Unknown').strip() or 'Unknown'
+                by[e] = by.get(e, 0) + 1
+            order = sorted(by.items(), key=lambda x: x[1], reverse=True)[:9][::-1]
+            labels = [e[:24] for e, _ in order]
+            vals = [c for _, c in order]
+            cols = [COUNT_HEX] * len(order)
+            is_val = False
+            title = "Opportunities by engine value stream (count)"
+
+        yp = list(range(len(labels)))
+        bars = ax1.barh(yp, vals, color=cols, height=0.62, zorder=3)
+        ax1.set_yticks(yp)
+        ax1.set_yticklabels(labels, fontsize=7.8)
+        vmax = max(vals) if vals else 1
+        vmin = min(vals) if vals else 0
+        hi = vmax * 1.32 if vmax > 0 else 1
+        lo = vmin * 1.18 if vmin < 0 else 0
+        ax1.set_xlim(lo, hi)
+        ax1.set_ylim(-0.8, max(0.8, len(labels) - 0.2))
+        if vmin < 0:
+            ax1.axvline(0, color='#9aa3af', lw=0.8, zorder=2)
+        rng = (hi - lo) or 1
+        for b, v in zip(bars, vals):
+            txt = (f" GBP {v:,.1f}m" if is_val else f" {int(v)}")
+            ax1.text(b.get_width() + (rng * 0.012 if v >= 0 else -rng * 0.012),
+                     b.get_y() + b.get_height() / 2, txt,
+                     va='center', ha='left' if v >= 0 else 'right',
+                     fontsize=7.6, color=HOPPER_NAVY, weight='bold')
+        ax1.set_title(title, loc='left', pad=8, color=HOPPER_NAVY, fontsize=11, fontweight='bold')
 
     # ---------- Panel 2: maturity & onerous risk profile (stacked counts) ----------
     n = len(seg_rows)
