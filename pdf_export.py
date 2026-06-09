@@ -2674,17 +2674,19 @@ def _generate_status_chart(stages, p_vals, p_counts):
 
 
 def _segment_charts(seg_rows):
-    """Two robust, always-meaningful panels for a per-segment (status /
-    restructure-type) detail page:
+    """Adaptive chart(s) for a per-segment (status / restructure-type) page.
 
-      (left)  the rich profit-by-year chart (with cumulative-share line) when
-              the segment's profit is spread across >=2 years; otherwise the
-              opportunities ranked by value (CRP, else forecast profit) coloured
-              by maturity; otherwise an engine-value-stream count. This keeps the
-              detailed benchmark chart where it is informative yet never renders
-              empty or as a lone bar where a richer view exists.
-      (right) the segment's maturity and onerous-contract risk profile as
-              stacked count bars.
+    Left panel (always): the rich profit-by-year chart (with cumulative-share
+    line) when the segment's profit is spread across >=2 years; otherwise the
+    opportunities ranked by value (CRP, else forecast profit) coloured by
+    maturity; otherwise an engine-value-stream count.
+
+    Right panel (only when it adds value): the maturity & onerous risk profile,
+    shown *only* when the segment actually splits across maturity or onerous
+    status. When every opportunity shares the same maturity and onerous status
+    that chart is just two solid bars conveying nothing, so the value chart
+    takes the full width instead. There is no inter-panel separator line (it
+    used to cut straight through the risk panel's row labels).
 
     Zero bars are dropped (unless every bar is zero), single-opportunity
     segments get sensible headroom, and negative profit is handled with a zero
@@ -2703,8 +2705,31 @@ def _segment_charts(seg_rows):
     yvals = [sum(_val(r.get(f'profit_{y}')) for r in seg_rows) for y in years]
     prof_years_nonzero = sum(1 for v in yvals if v)
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 4.3), dpi=160,
-                                   gridspec_kw={'width_ratios': [1.45, 1]})
+    # Maturity / onerous composition — drives whether a risk chart adds value.
+    def _mat(r):
+        s = str(r.get('maturity', '')).strip().lower()
+        return 'imm' if 'immature' in s else ('mat' if 'mature' in s else 'oth')
+
+    def _on(r):
+        s = str(r.get('onerous_type', '')).strip().lower()
+        return 'on' if ('onerous' in s and 'not' not in s) else ('not' if 'not' in s else 'oth')
+
+    mc = {'mat': 0, 'imm': 0, 'oth': 0}
+    oc = {'not': 0, 'on': 0, 'oth': 0}
+    for r in seg_rows:
+        mc[_mat(r)] += 1
+        oc[_on(r)] += 1
+    # A risk chart only helps when the segment actually splits across maturity or
+    # onerous status; a single solid bar ("all mature", "all not onerous") is noise.
+    mat_varies = sum(1 for v in mc.values() if v) >= 2
+    risk_split = mat_varies or (sum(1 for v in oc.values() if v) >= 2)
+
+    if risk_split:
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 4.3), dpi=160,
+                                       gridspec_kw={'width_ratios': [1.45, 1]})
+    else:
+        fig, ax1 = plt.subplots(1, 1, figsize=(13, 4.3), dpi=160)
+        ax2 = None
     fig.patch.set_facecolor('white')
 
     # ---------- Panel 1: adaptive value / time view ----------
@@ -2760,9 +2785,10 @@ def _segment_charts(seg_rows):
             vals = [it[1] for it in items]
             cols = [_maturity_color(it[2]) for it in items]
             is_val = True
-            ax1.legend(handles=[Patch(facecolor=HOPPER_GREEN, label='Mature'),
-                                Patch(facecolor='#c98a2e', label='Immature')],
-                       loc='lower right', fontsize=6.8, frameon=False)
+            if mat_varies:
+                ax1.legend(handles=[Patch(facecolor=HOPPER_GREEN, label='Mature'),
+                                    Patch(facecolor='#c98a2e', label='Immature')],
+                           loc='lower right', fontsize=6.8, frameon=False)
             title = f"Opportunities by {mlabel}"
         else:
             by = {}
@@ -2797,48 +2823,36 @@ def _segment_charts(seg_rows):
                      fontsize=7.6, color=HOPPER_NAVY, weight='bold')
         ax1.set_title(title, loc='left', pad=8, color=HOPPER_NAVY, fontsize=11, fontweight='bold')
 
-    # ---------- Panel 2: maturity & onerous risk profile (stacked counts) ----------
-    n = len(seg_rows)
+    # ---------- Panel 2: maturity & onerous risk profile (only when it splits) ----------
+    if ax2 is not None:
+        for sp in ('top', 'right', 'left', 'bottom'):
+            ax2.spines[sp].set_visible(False)
+        ax2.tick_params(left=False, bottom=False, labelbottom=False)
+        onerous_segs = [(oc['not'], HOPPER_GREEN), (oc['on'], HOPPER_RED), (oc['oth'], HOPPER_SLATE)]
+        maturity_segs = [(mc['mat'], HOPPER_GREEN), (mc['imm'], '#c98a2e'), (mc['oth'], HOPPER_SLATE)]
+        n = len(seg_rows)
+        for yi, segs in [(0, onerous_segs), (1, maturity_segs)]:
+            left = 0
+            for cnt, col in segs:
+                if cnt <= 0:
+                    continue
+                ax2.barh(yi, cnt, left=left, color=col, height=0.5, edgecolor='white', linewidth=1.4, zorder=3)
+                ax2.text(left + cnt / 2.0, yi, str(cnt), va='center', ha='center',
+                         color='white', fontsize=8.5, weight='bold')
+                left += cnt
+        ax2.set_yticks([0, 1])
+        ax2.set_yticklabels(["Onerous", "Maturity"], fontsize=9, color=HOPPER_NAVY)
+        ax2.set_xlim(0, max(1, n) * 1.04)
+        ax2.set_ylim(-0.7, 1.7)
+        ax2.set_title("Maturity & onerous profile", loc='left', pad=8,
+                      color=HOPPER_NAVY, fontsize=11, fontweight='bold')
+        ax2.legend(handles=[Patch(facecolor=HOPPER_GREEN, label='Mature / Not onerous'),
+                            Patch(facecolor='#c98a2e', label='Immature'),
+                            Patch(facecolor=HOPPER_RED, label='Onerous')],
+                   loc='lower right', fontsize=6.6, frameon=False)
 
-    def _mat(r):
-        s = str(r.get('maturity', '')).strip().lower()
-        return 'imm' if 'immature' in s else ('mat' if 'mature' in s else 'oth')
-
-    def _on(r):
-        s = str(r.get('onerous_type', '')).strip().lower()
-        return 'on' if ('onerous' in s and 'not' not in s) else ('not' if 'not' in s else 'oth')
-
-    mc = {'mat': 0, 'imm': 0, 'oth': 0}
-    oc = {'not': 0, 'on': 0, 'oth': 0}
-    for r in seg_rows:
-        mc[_mat(r)] += 1
-        oc[_on(r)] += 1
-    for sp in ('top', 'right', 'left', 'bottom'):
-        ax2.spines[sp].set_visible(False)
-    ax2.tick_params(left=False, bottom=False, labelbottom=False)
-    onerous_segs = [(oc['not'], HOPPER_GREEN), (oc['on'], HOPPER_RED), (oc['oth'], HOPPER_SLATE)]
-    maturity_segs = [(mc['mat'], HOPPER_GREEN), (mc['imm'], '#c98a2e'), (mc['oth'], HOPPER_SLATE)]
-    for yi, segs in [(0, onerous_segs), (1, maturity_segs)]:
-        left = 0
-        for cnt, col in segs:
-            if cnt <= 0:
-                continue
-            ax2.barh(yi, cnt, left=left, color=col, height=0.5, edgecolor='white', linewidth=1.4, zorder=3)
-            ax2.text(left + cnt / 2.0, yi, str(cnt), va='center', ha='center',
-                     color='white', fontsize=8.5, weight='bold')
-            left += cnt
-    ax2.set_yticks([0, 1])
-    ax2.set_yticklabels(["Onerous", "Maturity"], fontsize=9, color=HOPPER_NAVY)
-    ax2.set_xlim(0, max(1, n) * 1.02)
-    ax2.set_ylim(-0.7, 1.7)
-    ax2.set_title("Maturity & onerous profile", loc='left', pad=8,
-                  color=HOPPER_NAVY, fontsize=11, fontweight='bold')
-    ax2.legend(handles=[Patch(facecolor=HOPPER_GREEN, label='Mature / Not onerous'),
-                        Patch(facecolor='#c98a2e', label='Immature'),
-                        Patch(facecolor=HOPPER_RED, label='Onerous')],
-               loc='lower right', fontsize=6.6, frameon=False)
-
-    return _finish_fig(fig, pad=1.6, seps=[ax1, ax2])
+    # No inter-panel separator — it used to cut through the risk panel's row labels.
+    return _finish_fig(fig, pad=1.8, seps=None)
 
 
 def _segment_detail_page(pdf, kind, seg_label, seg_rows, total_crp, total_opps,
