@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef } from "react"
-import { Plane, Zap, BarChart3, Link2, ArrowRight } from "lucide-react"
+import { Plane, ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 interface WelcomeStateProps {
@@ -62,36 +62,6 @@ export function WelcomeState({ onUpload }: WelcomeStateProps) {
           }}
         />
       </div>
-
-      <div className="grid gap-4 md:grid-cols-3 w-full mt-4">
-        <FeatureCard
-          icon={Zap}
-          title="Smart Detection"
-          description="Automatically identifies SOA, Invoice Lists, Opportunity Trackers, Shop Visits, SVRG and Global Hopper files."
-        />
-        <FeatureCard
-          icon={BarChart3}
-          title="Rich Analytics"
-          description="Interactive charts, KPI cards, aging analysis, pipeline views and engine timelines at a glance."
-        />
-        <FeatureCard
-          icon={Link2}
-          title="Cross-File Linking"
-          description="Upload multiple files to discover shared references, customers and invoice links across datasets."
-        />
-      </div>
-    </div>
-  )
-}
-
-function FeatureCard({ icon: Icon, title, description }: { icon: React.ElementType; title: string; description: string }) {
-  return (
-    <div className="group flex flex-col gap-2 rounded-lg border border-border bg-card p-5 text-left hover:border-accent/40 transition-colors">
-      <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/8 text-primary">
-        <Icon className="h-4 w-4" />
-      </span>
-      <h3 className="font-display text-sm font-semibold tracking-tight mt-1">{title}</h3>
-      <p className="text-xs text-muted-foreground leading-relaxed text-pretty">{description}</p>
     </div>
   )
 }

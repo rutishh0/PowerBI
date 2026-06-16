@@ -877,15 +877,6 @@ export const CHART_DEFS: HopperChartDef[] = [
     Component: RegionEvsHeatmapChart,
   },
   {
-    id: "top-vp-owners",
-    title: "Top VP / Owners",
-    subtitle: "By CRP term benefit (£m)",
-    category: "ownership",
-    description: "Top 10 VPs and owners ranked by total CRP they own.",
-    defaultPinned: false,
-    Component: TopVpOwnersChart,
-  },
-  {
     id: "top-single-opportunities",
     title: "Top Single Opportunities",
     subtitle: "Largest individual opportunity rows",

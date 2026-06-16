@@ -1554,10 +1554,6 @@ def _generate_evs_charts(filtered, top_n=10):
     axv.set_title("By CRP term benefit (£m)", loc='left', pad=8)
     axv.margins(y=0.18)
 
-    # Cumulative-share lines (Annual-Profit benchmark detail level).
-    _cumulative_overlay(axc, counts)
-    _cumulative_overlay(axv, values)
-
     plt.tight_layout(pad=2.0)
     _add_separators(fig, [axc, axv])
     buf = io.BytesIO()
@@ -1621,10 +1617,6 @@ def _generate_structure_charts(filtered):
                  ha='center', va='bottom', fontsize=8.5, color=HOPPER_NAVY, weight='bold')
     axc.margins(y=0.18)
     axc.set_title("By Number of Opportunities", loc='left', pad=8)
-
-    # Cumulative-share lines (Annual-Profit benchmark detail level).
-    _cumulative_overlay(axv, vals)
-    _cumulative_overlay(axc, counts)
 
     plt.tight_layout(pad=2.0)
     _add_separators(fig, [axv, axc])
@@ -2673,7 +2665,7 @@ def _generate_status_chart(stages, p_vals, p_counts):
     return buf
 
 
-def _segment_charts(seg_rows):
+def _segment_charts(seg_rows, cumulative=True):
     """Adaptive chart(s) for a per-segment (status / restructure-type) page.
 
     Left panel (always): the rich profit-by-year chart (with cumulative-share
@@ -2756,7 +2748,7 @@ def _segment_charts(seg_rows):
                          f"GBP {v:,.0f}m", ha='center',
                          va='bottom' if v >= 0 else 'top',
                          fontsize=8, color=HOPPER_NAVY, weight='bold')
-        cum_ok = vmin >= 0 and _cumulative_overlay(ax1, yvals) is not None
+        cum_ok = cumulative and vmin >= 0 and _cumulative_overlay(ax1, yvals) is not None
         ax1.set_title("Profit by year (GBP m)" + (" + cumulative share" if cum_ok else ""),
                       loc='left', pad=8, color=HOPPER_NAVY, fontsize=11, fontweight='bold')
     else:
@@ -2856,10 +2848,12 @@ def _segment_charts(seg_rows):
 
 
 def _segment_detail_page(pdf, kind, seg_label, seg_rows, total_crp, total_opps,
-                         avail_w, other_dim, other_hdr):
+                         avail_w, other_dim, other_hdr, cumulative=True):
     """One dedicated page for a single status / restructure-type segment: a KPI
     row, a two-panel chart (profit timeline + top customers) and a table of the
-    segment's opportunities."""
+    segment's opportunities. ``cumulative`` controls whether the profit-by-year
+    panel carries a cumulative-share line (suppressed on pages from the Engine
+    Value Stream Analysis page onward)."""
     pdf.add_page()
     pdf._page_header(f"{kind}: {seg_label}")
     n = len(seg_rows)
@@ -2874,7 +2868,7 @@ def _segment_detail_page(pdf, kind, seg_label, seg_rows, total_crp, total_opps,
         ("Profit 2026-30", _fmtM_gbp(p2630), "Forecast in window", HOPPER_PRIMARY_RGB),
     ], h=22)
     try:
-        cbuf = _segment_charts(seg_rows)
+        cbuf = _segment_charts(seg_rows, cumulative=cumulative)
         if cbuf is not None:
             _embed_fit(pdf, cbuf, pdf.MARGIN_L, avail_w, 70)
             pdf.ln(2)
@@ -3476,11 +3470,13 @@ def generate_hopper_detailed_pdf_report(parsed_data: dict, sections_to_include: 
                            f"{tot_onerous}/{total_opps}", _fmtM_short(tot_profit)])
 
     # ---- One detail page per restructure type (right after the overview) ----
+    # These pages sit after the Engine Value Stream Analysis page, so their
+    # profit-by-year panel drops the cumulative-share line.
     for rtype, _d in rt_sorted:
         seg = [r for r in filtered if (str(r.get("restructure_type", "")).strip() or "Unknown") == rtype]
         if seg:
             _segment_detail_page(pdf, "Restructure Type", rtype, seg, total_crp, total_opps,
-                                 avail_w, "status", "Status")
+                                 avail_w, "status", "Status", cumulative=False)
 
     # ---- Maturity & Risk (twin interactive donuts + tables) ----
     donut_page_no = None     # page on which the donuts sit (for post-processing)
@@ -3570,20 +3566,28 @@ def generate_hopper_detailed_pdf_report(parsed_data: dict, sections_to_include: 
         usable_h = pdf.PAGE_H - 16 - 18
 
         def _opp_content(r, idx, cy0):
-            """Render one opportunity's header / profile / profit / narrative
-            starting at y=cy0+2.6 inside the card padding. Returns the y after."""
+            """Render one opportunity as nested boxes: a title row, a shaded
+            profile box (metadata chips + a profit-by-year strip) and a labelled
+            initiative-narrative block, all starting at card top ``cy0``."""
             cust = _safe(r.get("customer", "") or "-")
             crp_v = _val(r.get("crp_term_benefit"))
             evs = r.get("engine_value_stream", r.get("top_level_evs", "")) or "-"
             ix = pdf.MARGIN_L + 5
+            # Title row: rank + customer (navy) | CRP (gold).
             pdf.set_xy(ix, cy0 + 2.6)
             pdf.set_font("Helvetica", "B", 10.5)
             pdf.set_text_color(*HOPPER_PRIMARY_RGB)
             pdf.cell(inner_w - 42, 6, _safe(f"{idx + 1}.  {cust}"), 0, 0, "L")
             pdf.set_text_color(*HOPPER_GOLD_RGB)
             pdf.cell(42, 6, _safe(f"CRP {_fmtM_gbp(crp_v)}"), 0, 0, "R")
-            cyc = cy0 + 10
-            cx = ix
+            # Shaded profile box: metadata chips (row 1) + profit strip (row 2).
+            box_x, box_w, box_y, box_h = pdf.MARGIN_L + 4, body_w - 8, cy0 + 9.5, 13.0
+            pdf.set_fill_color(*HOPPER_BG_ALT)
+            pdf.set_draw_color(*HOPPER_BORDER)
+            pdf.set_line_width(0.2)
+            pdf.rect(box_x, box_y, box_w, box_h, "DF")
+            cyc = box_y + 2.0
+            cx = box_x + 3
             for lab, val in [("Region", _trunc(r.get("region", "") or "-", 16)),
                              ("EVS", _trunc(evs, 18)),
                              ("Status", _trunc(r.get("status", "") or "-", 22)),
@@ -3595,13 +3599,18 @@ def generate_hopper_detailed_pdf_report(parsed_data: dict, sections_to_include: 
             ot = str(r.get("onerous_type", "") or "").strip()
             if ot:
                 cx += _hopper_badge(pdf, ot.upper(), _onerous_color(ot), cx, cyc - 0.4) + 2
-            pdf.set_xy(ix, cyc + 5.5)
-            p_bits = "    ".join(f"{y}: {_fmtM_short(_val(r.get(f'profit_{y}')))}"
-                                 for y in (2026, 2027, 2028, 2029, 2030))
+            p_bits = "     ".join(f"{y}: {_fmtM_short(_val(r.get(f'profit_{y}')))}"
+                                  for y in (2026, 2027, 2028, 2029, 2030))
+            pdf.set_xy(box_x + 3, cyc + 6.0)
             pdf.set_font("Helvetica", "", 7.5)
             pdf.set_text_color(*HOPPER_TEXT_MUTE)
             pdf.cell(0, 4, _safe("Profit    " + p_bits), 0, 0, "L")
-            pdf.set_xy(ix, cyc + 10)
+            # Initiative label + narrative block.
+            pdf.set_xy(ix, box_y + box_h + 2.0)
+            pdf.set_font("Helvetica", "B", 6.5)
+            pdf.set_text_color(*HOPPER_TEXT_MUTE)
+            pdf.cell(0, 3.4, "INITIATIVE", 0, 1, "L")
+            pdf.set_x(ix)
             pdf.set_font("Helvetica", "", 9.3)
             pdf.set_text_color(*HOPPER_TEXT_DARK)
             pdf.multi_cell(inner_w, 4.7, _safe(str(r.get("initiative", "") or "").strip()) or "-")
@@ -3611,7 +3620,7 @@ def generate_hopper_detailed_pdf_report(parsed_data: dict, sections_to_include: 
             pdf.set_font("Helvetica", "", 9.3)
             n_lines = len(pdf.multi_cell(inner_w, 4.7, init_text, dry_run=True, output="LINES"))
             text_h = max(4.7, n_lines * 4.7)
-            card_h = 22.5 + text_h   # header + chips + profit + narrative + pads
+            card_h = 31.0 + text_h   # title + profile box + initiative label/narrative + pads
 
             if card_h <= usable_h:
                 # Normal case: the whole entry fits in one bordered card. Lock

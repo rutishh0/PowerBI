@@ -43,6 +43,8 @@ export function GlobalHopperVisualizer({ data, filename, onFiltersChange }: Glob
   const [status, setStatus] = useState<string[]>([])
   const [maturity, setMaturity] = useState<string[]>([])
   const [rtype, setRtype] = useState<string[]>([])
+  // Onerous-status filter (driven by the clickable Onerous / Not Onerous KPI cards).
+  const [onerousFilter, setOnerousFilter] = useState<string[]>([])
 
   // Publish current filters whenever they change. Empty arrays are omitted;
   // multi-selections are joined so the wire shape stays Record<string,string>.
@@ -55,8 +57,9 @@ export function GlobalHopperVisualizer({ data, filename, onFiltersChange }: Glob
     if (status.length) f.status = status.join(", ")
     if (maturity.length) f.maturity = maturity.join(", ")
     if (rtype.length) f.restructure_type = rtype.join(", ")
+    if (onerousFilter.length) f.onerous_type = onerousFilter.join(", ")
     onFiltersChange(f)
-  }, [region, customer, evs, status, maturity, rtype, onFiltersChange])
+  }, [region, customer, evs, status, maturity, rtype, onerousFilter, onFiltersChange])
 
   const filtered = useMemo(() => {
     return data.opportunities.filter((o) => {
@@ -66,9 +69,16 @@ export function GlobalHopperVisualizer({ data, filename, onFiltersChange }: Glob
       if (!inSel(status, o.status)) return false
       if (!inSel(maturity, o.maturity)) return false
       if (!inSel(rtype, o.restructure_type)) return false
+      if (!inSel(onerousFilter, o.onerous_type)) return false
       return true
     })
-  }, [data.opportunities, region, customer, evs, status, maturity, rtype])
+  }, [data.opportunities, region, customer, evs, status, maturity, rtype, onerousFilter])
+
+  // Toggle helper for the clickable KPI cards: set the single-value filter,
+  // or clear it when it's already the only active value.
+  function toggleFilter(cur: string[], set: (v: string[]) => void, val: string) {
+    set(cur.length === 1 && cur[0] === val ? [] : [val])
+  }
 
   // Hero KPIs
   const totalCRP = filtered.reduce((a, b) => a + b.crp_term_benefit, 0)
@@ -212,7 +222,7 @@ export function GlobalHopperVisualizer({ data, filename, onFiltersChange }: Glob
           <MultiSelect label="Maturity" value={maturity} onChange={setMaturity} options={data.summary.unique_maturities} />
           <MultiSelect label="Restructure" value={rtype} onChange={setRtype} options={data.summary.unique_restructure_types} width="9rem" />
           <HopperCustomizeSheet pinned={pinned} onChange={updatePinned} onReset={resetPinned} />
-          {[region, customer, evs, status, maturity, rtype].some((v) => v.length > 0) ? (
+          {[region, customer, evs, status, maturity, rtype, onerousFilter].some((v) => v.length > 0) ? (
             <button
               onClick={() => {
                 setRegion([])
@@ -221,6 +231,7 @@ export function GlobalHopperVisualizer({ data, filename, onFiltersChange }: Glob
                 setStatus([])
                 setMaturity([])
                 setRtype([])
+                setOnerousFilter([])
               }}
               className="h-8 self-end rounded border border-white/20 bg-white/5 px-3 text-xs font-medium hover:bg-white/10 transition-colors"
             >
@@ -246,12 +257,29 @@ export function GlobalHopperVisualizer({ data, filename, onFiltersChange }: Glob
           <HopperChip label="Engine Value Streams" value={fmtCount(new Set(filtered.map((o) => o.engine_value_stream)).size)} />
         </div>
 
-        {/* Secondary KPIs */}
+        {/* Secondary KPIs — the maturity / onerous cards are clickable filters:
+            tap to drill the whole dashboard (and register) to those opportunities. */}
         <div className="grid gap-3 grid-cols-2 lg:grid-cols-5">
-          <HopperKpi label="Mature" value={fmtCount(mature)} icon={<ShieldCheck className="h-4 w-4" />} accent="success" />
-          <HopperKpi label="Immature" value={fmtCount(immature)} icon={<ShieldAlert className="h-4 w-4" />} />
-          <HopperKpi label="Onerous" value={fmtCount(onerous)} icon={<AlertCircle className="h-4 w-4" />} accent="danger" />
-          <HopperKpi label="Not Onerous" value={fmtCount(notOnerous)} icon={<ShieldCheck className="h-4 w-4" />} />
+          <HopperKpi
+            label="Mature" value={fmtCount(mature)} icon={<ShieldCheck className="h-4 w-4" />} accent="success"
+            active={maturity.length === 1 && maturity[0] === "Mature"}
+            onClick={() => toggleFilter(maturity, setMaturity, "Mature")}
+          />
+          <HopperKpi
+            label="Immature" value={fmtCount(immature)} icon={<ShieldAlert className="h-4 w-4" />}
+            active={maturity.length === 1 && maturity[0] === "Immature"}
+            onClick={() => toggleFilter(maturity, setMaturity, "Immature")}
+          />
+          <HopperKpi
+            label="Onerous" value={fmtCount(onerous)} icon={<AlertCircle className="h-4 w-4" />} accent="danger"
+            active={onerousFilter.length === 1 && onerousFilter[0] === "Onerous Contract"}
+            onClick={() => toggleFilter(onerousFilter, setOnerousFilter, "Onerous Contract")}
+          />
+          <HopperKpi
+            label="Not Onerous" value={fmtCount(notOnerous)} icon={<ShieldCheck className="h-4 w-4" />}
+            active={onerousFilter.length === 1 && onerousFilter[0] === "Not Onerous"}
+            onClick={() => toggleFilter(onerousFilter, setOnerousFilter, "Not Onerous")}
+          />
           <HopperKpi
             label="Regions"
             value={fmtCount(regionsInView.length)}
@@ -329,6 +357,10 @@ function HopperKpi({
   sub?: string
   icon?: React.ReactNode
   accent?: "gold" | "primary" | "success" | "danger"
+  /** When provided, the card becomes a clickable filter toggle. */
+  onClick?: () => void
+  /** Highlights the card when its filter is currently active. */
+  active?: boolean
 }) {
   const valueTone =
     accent === "gold"
@@ -350,8 +382,15 @@ function HopperKpi({
           : accent === "danger"
             ? "bg-destructive/20 text-destructive"
             : "bg-white/10 text-white/70"
-  return (
-    <div className="flex flex-col gap-3 rounded-lg border border-white/10 bg-white/[0.03] p-4">
+  const wrapCls = onClick
+    ? `flex flex-col gap-3 rounded-lg border p-4 text-left transition-colors cursor-pointer ${
+        active
+          ? "border-[var(--chart-2)] bg-[var(--chart-2)]/10"
+          : "border-white/10 bg-white/[0.03] hover:border-white/30 hover:bg-white/[0.06]"
+      }`
+    : "flex flex-col gap-3 rounded-lg border border-white/10 bg-white/[0.03] p-4"
+  const inner = (
+    <>
       <div className="flex items-start justify-between gap-3">
         <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-white/55">{label}</span>
         {icon ? <span className={`flex h-8 w-8 items-center justify-center rounded-md ${iconBg}`}>{icon}</span> : null}
@@ -359,9 +398,20 @@ function HopperKpi({
       <div className="flex flex-col gap-0.5">
         <span className={`font-display text-2xl font-semibold tracking-tight tnum ${valueTone}`}>{value}</span>
         {sub ? <span className="text-xs text-white/55 text-pretty truncate">{sub}</span> : null}
+        {onClick ? (
+          <span className="text-[10px] text-white/40 mt-0.5">{active ? "Filtering — tap to clear" : "Tap to filter"}</span>
+        ) : null}
       </div>
-    </div>
+    </>
   )
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} aria-pressed={active} className={wrapCls}>
+        {inner}
+      </button>
+    )
+  }
+  return <div className={wrapCls}>{inner}</div>
 }
 
 function HopperChartCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
