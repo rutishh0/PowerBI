@@ -351,6 +351,8 @@ function HopperKpi({
   sub,
   icon,
   accent,
+  onClick,
+  active,
 }: {
   label: string
   value: string
