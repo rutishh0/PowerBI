@@ -2586,7 +2586,13 @@ def _chart_hbar(pairs, title, value_fmt, color=VALUE_HEX, top_n=15):
     ax.grid(True, axis='x', **GRID_KW)
     ax.set_axisbelow(True)
     ax.tick_params(colors='#374151', labelsize=9.5, length=0)
-    bars = ax.barh(names, vals, color=color, height=0.66)
+    # Plot against integer positions (not the label strings) so duplicate
+    # labels — e.g. two opportunities with the same customer + engine — don't
+    # collapse onto a single row.
+    ypos = list(range(len(names)))
+    bars = ax.barh(ypos, vals, color=color, height=0.66)
+    ax.set_yticks(ypos)
+    ax.set_yticklabels(names)
     span = max(vals) if vals else 0
     for b, v in zip(bars, vals):
         ax.text(b.get_width() + span * 0.005, b.get_y() + b.get_height()/2,
@@ -3277,13 +3283,19 @@ def generate_hopper_detailed_pdf_report(parsed_data: dict, sections_to_include: 
         ("Regions", str(len(regions)),
          ", ".join(sorted(regions)[:3]) + ("..." if len(regions) > 3 else ""), HOPPER_GOLD_RGB),
     ], h=20)
-    # Fill the lower half with a portfolio concentration (Pareto) view — a
-    # cumulative-share curve that appears on no other page.
-    conc_vals = [_val(r.get("crp_term_benefit")) for r in filtered]
+    # Fill the lower half with the largest individual opportunities by CRP — a
+    # headline "where the value sits" view (plain bars, no cumulative line).
+    top_pairs = [
+        (f"{str(r.get('customer', '') or '-')[:16]} - "
+         f"{str(r.get('engine_value_stream', r.get('top_level_evs', '')) or '')[:12]}",
+         _val(r.get("crp_term_benefit")))
+        for r in filtered
+    ]
     try:
-        kbuf = _chart_concentration(conc_vals, "Value concentration - cumulative share of CRP term benefit")
+        kbuf = _chart_hbar(top_pairs, "Largest opportunities by CRP term benefit (GBP m)",
+                           lambda v: f"GBP {v:,.1f}m", top_n=10)
         if kbuf is not None:
-            pdf._section_header("Portfolio value concentration")
+            pdf._section_header("Largest opportunities")
             max_h = (pdf.PAGE_H - 20) - pdf.get_y() - 2
             _embed_fit(pdf, kbuf, pdf.MARGIN_L, avail_w, max(70, max_h))
     except Exception:
@@ -3311,11 +3323,15 @@ def generate_hopper_detailed_pdf_report(parsed_data: dict, sections_to_include: 
                totals_row=["TOTAL", str(total_opps), _fmtM_gbp(total_crp), "100.0%"])
 
     # ---- One detail page per status (right after the overview) ----
+    # These stages' profit is bunched into a year or two, so the cumulative
+    # line just sits flat at 100% — drop it for them.
+    _no_cum_status = {"Contracting Concluded", "Contracting Started"}
     for stage in stages:
         seg = [r for r in filtered if (str(r.get("status", "")).strip() or "Unknown") == stage]
         if seg:
             _segment_detail_page(pdf, "Status", stage, seg, total_crp, total_opps,
-                                 avail_w, "restructure_type", "Restructure")
+                                 avail_w, "restructure_type", "Restructure",
+                                 cumulative=stage not in _no_cum_status)
 
     # ---- Annual Profit Forecast ----
     pdf.add_page()
