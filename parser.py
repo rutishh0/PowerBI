@@ -3332,6 +3332,11 @@ def _parse_global_hopper(all_sheets: Dict[str, pd.DataFrame], filename: str) -> 
             p30, p30_note = _num_and_note("profit_2030")
 
             raw_vp = _clean(_g("vp_owner")) or None
+            # Correct a recurring source-data typo so it reads correctly
+            # everywhere downstream (PDF report + dashboard filters).
+            raw_status = _clean(_g("status")) or None
+            if raw_status:
+                raw_status = raw_status.replace("Negotations", "Negotiations")
 
             rec = {
                 "region": region or None,
@@ -3346,7 +3351,7 @@ def _parse_global_hopper(all_sheets: Dict[str, pd.DataFrame], filename: str) -> 
                 "onerous_type": _clean(_g("onerous_type")) or None,
                 "initiative": _clean(_g("initiative")) or None,
                 "project_plan_req": _clean(_g("project_plan_req")) or None,
-                "status": _clean(_g("status")) or None,
+                "status": raw_status,
                 "expected_year": _to_float(_g("expected_year")),
                 "signature_ap": _clean(_g("signature_ap")) or None,
                 "crp_term_benefit": crp_num,

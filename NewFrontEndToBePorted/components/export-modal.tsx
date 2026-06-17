@@ -24,6 +24,10 @@ import { Badge } from "@/components/ui/badge"
 
 type ExportFormat = "pdf" | "pptx" | "png"
 
+// Feature flag — the AI-generated report path is hidden from the UI for now.
+// Flip to `true` to re-enable the "AI Report" section and its button.
+const SHOW_AI_REPORT = false
+
 type Props = {
   open: boolean
   onOpenChange: (v: boolean) => void
@@ -47,7 +51,7 @@ const AI_PROVIDERS: { id: AiReportProvider; label: string; sub: string }[] = [
 export function ExportModal({ open, onOpenChange, activeFile, filters }: Props) {
   // PDF is now the only output format (PPTX/PNG were removed).
   const format: ExportFormat = "pdf"
-  const [busy, setBusy] = useState<null | "std" | "detailed">(null)
+  const [busy, setBusy] = useState<null | "std" | "detailed" | "ultra">(null)
   const [aiMode, setAiMode] = useState<AiReportMode>("charts")
   const [aiProvider, setAiProvider] = useState<AiReportProvider>("nvidia")
   const [aiBusy, setAiBusy] = useState(false)
@@ -58,9 +62,9 @@ export function ExportModal({ open, onOpenChange, activeFile, filters }: Props) 
 
   const isHopper = activeFile?.file_type === "GLOBAL_HOPPER"
 
-  async function handleExport(detailed: boolean) {
+  async function handleExport(detailed: boolean, ultra = false) {
     if (!activeFile) return
-    setBusy(detailed ? "detailed" : "std")
+    setBusy(ultra ? "ultra" : detailed ? "detailed" : "std")
     try {
       const blob = await exportReport({
         filename: activeFile.name,
@@ -68,20 +72,22 @@ export function ExportModal({ open, onOpenChange, activeFile, filters }: Props) 
         format,
         filters: filters && Object.keys(filters).length > 0 ? filters : undefined,
         detailed: detailed || undefined,
+        ultra: ultra || undefined,
       })
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
       const ext = format === "pptx" ? "pptx" : format === "png" ? "png" : "pdf"
       const baseName = activeFile.name.replace(/\.[^.]+$/, "")
-      a.download = `${baseName}${detailed ? "-detailed" : ""}.${ext}`
+      const suffix = ultra ? "-ultra-detailed" : detailed ? "-detailed" : ""
+      a.download = `${baseName}${suffix}.${ext}`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
 
       toast.success("Export ready", {
-        description: `${activeFile.name} · ${detailed ? "Detailed PDF" : format.toUpperCase()} downloaded.`,
+        description: `${activeFile.name} · ${ultra ? "Ultra-detailed PDF" : detailed ? "Detailed PDF" : format.toUpperCase()} downloaded.`,
         icon: <CheckCircle2 className="h-4 w-4 text-success" />,
       })
       onOpenChange(false)
@@ -221,8 +227,8 @@ export function ExportModal({ open, onOpenChange, activeFile, filters }: Props) 
         </div>
 
         {/* AI Report (Beta) — Kimi K2.6 designs a bespoke report dynamically.
-            Collapsed by default; the header toggles the options open. */}
-        {isHopper ? (
+            Hidden behind the SHOW_AI_REPORT flag (flip it to re-enable). */}
+        {isHopper && SHOW_AI_REPORT ? (
           <div className="rounded-md border border-[var(--chart-2)]/30 bg-[var(--chart-2)]/[0.06]">
             <button
               type="button"
@@ -314,16 +320,29 @@ export function ExportModal({ open, onOpenChange, activeFile, filters }: Props) 
           >
             Cancel
           </Button>
-          {/* Single primary action: the Detailed PDF for Hopper files, the
-              standard branded PDF otherwise. */}
+          {/* Primary action: the Detailed PDF for Hopper files, the standard
+              branded PDF otherwise. Hopper files also get an Ultra-detailed
+              variant (full register + VP/region breakdowns, denser pages). */}
           <Button
             onClick={() => handleExport(isHopper)}
             disabled={!!busy || aiBusy || !activeFile}
             className="gap-2 bg-[var(--chart-2)] text-[oklch(0.17_0.03_165)] hover:bg-[var(--chart-2)]/90"
           >
-            {busy ? <Spinner className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
-            {busy ? "Generating…" : isHopper ? "Generate Detailed PDF" : "Generate PDF"}
+            {busy === "std" || busy === "detailed" ? <Spinner className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
+            {busy === "std" || busy === "detailed"
+              ? "Generating…"
+              : isHopper ? "Generate Detailed PDF" : "Generate PDF"}
           </Button>
+          {isHopper ? (
+            <Button
+              onClick={() => handleExport(true, true)}
+              disabled={!!busy || aiBusy || !activeFile}
+              className="gap-2 bg-[var(--chart-2)] text-[oklch(0.17_0.03_165)] hover:bg-[var(--chart-2)]/90"
+            >
+              {busy === "ultra" ? <Spinner className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
+              {busy === "ultra" ? "Generating…" : "Ultra-detailed"}
+            </Button>
+          ) : null}
         </DialogFooter>
       </DialogContent>
     </Dialog>

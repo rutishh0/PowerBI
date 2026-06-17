@@ -662,7 +662,10 @@ def export_pdf():
     file_type = data.get("file_type")
     filters = data.get("filters", {})
     # "detailed" -> long-form report with every analysis (charts + tables).
-    detailed = bool(data.get("detailed"))
+    # "ultra"    -> detailed report plus the ultra-detailed appendix (full
+    #               register + VP/region breakdowns). Implies detailed.
+    ultra = bool(data.get("ultra"))
+    detailed = bool(data.get("detailed")) or ultra
 
     # -- selected_files (list) OR filename (single) ---------------------------
     selected_files = data.get("selected_files")
@@ -700,7 +703,8 @@ def export_pdf():
                 pdf_bytes = generate_hopper_detailed_pdf_report(
                     parsed_data=first_parsed,
                     sections_to_include=sections_to_include,
-                    filters=filters
+                    filters=filters,
+                    ultra=ultra,
                 )
             else:
                 from pdf_export import generate_hopper_pdf_report
@@ -709,7 +713,9 @@ def export_pdf():
                     sections_to_include=sections_to_include,
                     filters=filters
                 )
-            filename = "Global_Hopper_Detailed_Report.pdf" if detailed else "Global_Hopper_Report.pdf"
+            filename = ("Global_Hopper_Ultra_Detailed_Report.pdf" if ultra
+                        else "Global_Hopper_Detailed_Report.pdf" if detailed
+                        else "Global_Hopper_Report.pdf")
             return send_file(
                 io.BytesIO(pdf_bytes),
                 mimetype="application/pdf",

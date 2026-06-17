@@ -367,6 +367,10 @@ export interface ExportPayload {
   /** When true, generate the long-form Detailed report (every analysis as a
    * chart + table). Applies to the Global Hopper report. */
   detailed?: boolean
+  /** When true, generate the Ultra-detailed report — the Detailed report plus
+   * the full opportunity register and VP/region breakdown appendix. Implies
+   * `detailed`. Applies to the Global Hopper report. */
+  ultra?: boolean
 }
 
 /**

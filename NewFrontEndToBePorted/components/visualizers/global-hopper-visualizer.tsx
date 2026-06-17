@@ -74,6 +74,43 @@ export function GlobalHopperVisualizer({ data, filename, onFiltersChange }: Glob
     })
   }, [data.opportunities, region, customer, evs, status, maturity, rtype, onerousFilter])
 
+  // Cascading filter options: each dropdown lists only the values that still
+  // exist once the OTHER active filters are applied (so picking Region = MEA
+  // narrows Customer, Engine Value Stream, Status, … to MEA-relevant values).
+  // The original ordering is preserved and any currently-selected value is
+  // always retained so it stays de-selectable.
+  const fopts = useMemo(() => {
+    const match = (o: HopperOpp, exclude: string) => {
+      if (exclude !== "region" && !inSel(region, o.region)) return false
+      if (exclude !== "customer" && !inSel(customer, o.customer)) return false
+      if (exclude !== "evs" && !inSel(evs, o.engine_value_stream)) return false
+      if (exclude !== "status" && !inSel(status, o.status)) return false
+      if (exclude !== "maturity" && !inSel(maturity, o.maturity)) return false
+      if (exclude !== "rtype" && !inSel(rtype, o.restructure_type)) return false
+      if (!inSel(onerousFilter, o.onerous_type)) return false
+      return true
+    }
+    const avail = (exclude: string, get: (o: HopperOpp) => string) => {
+      const s = new Set<string>()
+      for (const o of data.opportunities) {
+        if (match(o, exclude)) {
+          const v = get(o)
+          if (v) s.add(v)
+        }
+      }
+      return s
+    }
+    const narrow = (full: string[], present: Set<string>, selected: string[]) =>
+      full.filter((v) => present.has(v) || selected.includes(v))
+    return {
+      customer: narrow(data.summary.unique_customers, avail("customer", (o) => o.customer), customer),
+      evs: narrow(data.summary.unique_evs, avail("evs", (o) => o.engine_value_stream), evs),
+      status: narrow(data.summary.unique_statuses, avail("status", (o) => o.status), status),
+      maturity: narrow(data.summary.unique_maturities, avail("maturity", (o) => o.maturity), maturity),
+      rtype: narrow(data.summary.unique_restructure_types, avail("rtype", (o) => o.restructure_type), rtype),
+    }
+  }, [data.opportunities, data.summary, region, customer, evs, status, maturity, rtype, onerousFilter])
+
   // Toggle helper for the clickable KPI cards: set the single-value filter,
   // or clear it when it's already the only active value.
   function toggleFilter(cur: string[], set: (v: string[]) => void, val: string) {
@@ -216,11 +253,11 @@ export function GlobalHopperVisualizer({ data, filename, onFiltersChange }: Glob
             <span className="font-medium uppercase tracking-[0.1em]">Filters</span>
           </div>
           <MultiSelect label="Region" value={region} onChange={setRegion} options={data.summary.unique_regions} />
-          <MultiSelect label="Customer" value={customer} onChange={setCustomer} options={data.summary.unique_customers} width="10rem" />
-          <MultiSelect label="Engine Value Stream" value={evs} onChange={setEvs} options={data.summary.unique_evs} width="10rem" />
-          <MultiSelect label="Status" value={status} onChange={setStatus} options={data.summary.unique_statuses} width="10rem" />
-          <MultiSelect label="Maturity" value={maturity} onChange={setMaturity} options={data.summary.unique_maturities} />
-          <MultiSelect label="Restructure" value={rtype} onChange={setRtype} options={data.summary.unique_restructure_types} width="9rem" />
+          <MultiSelect label="Customer" value={customer} onChange={setCustomer} options={fopts.customer} width="10rem" />
+          <MultiSelect label="Engine Value Stream" value={evs} onChange={setEvs} options={fopts.evs} width="10rem" />
+          <MultiSelect label="Status" value={status} onChange={setStatus} options={fopts.status} width="10rem" />
+          <MultiSelect label="Maturity" value={maturity} onChange={setMaturity} options={fopts.maturity} />
+          <MultiSelect label="Restructure" value={rtype} onChange={setRtype} options={fopts.rtype} width="9rem" />
           <HopperCustomizeSheet pinned={pinned} onChange={updatePinned} onReset={resetPinned} />
           {[region, customer, evs, status, maturity, rtype, onerousFilter].some((v) => v.length > 0) ? (
             <button
