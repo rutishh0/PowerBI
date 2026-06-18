@@ -43,7 +43,7 @@ const VIEWS: { id: ViewMode; label: string; icon: React.ElementType; experimenta
   { id: "executive", label: "Executive",    icon: Gauge,        hidden: true },
   { id: "slides",    label: "Slides",       icon: Presentation, hidden: true },
   { id: "compare",   label: "Compare",      icon: GitCompare,   hidden: true },
-  { id: "files",     label: "Files",        icon: FolderOpen,   hidden: false },
+  { id: "files",     label: "Files",        icon: FolderOpen,   hidden: true },
   { id: "ai",        label: "AI Assistant", icon: Sparkles,     hidden: true, experimental: true },
 ]
 
