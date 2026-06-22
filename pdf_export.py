@@ -1258,7 +1258,15 @@ def _style_value_axis(ax, show_y=False, y_money=True):
                        colors=LABEL_DARK, labelsize=8.5)
         if y_money:
             from matplotlib.ticker import FuncFormatter
-            ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"£{v:,.0f}m"))
+            # One decimal for small magnitudes so sub-£1m tick steps don't all
+            # collapse to a redundant "£0m"; whole numbers for larger scales.
+            def _money(v, _):
+                if v == 0:
+                    return "£0m"
+                if abs(v) < 10 and v != int(v):
+                    return f"£{v:.1f}m"
+                return f"£{v:,.0f}m"
+            ax.yaxis.set_major_formatter(FuncFormatter(_money))
     else:
         ax.tick_params(axis='y', left=False, labelleft=False)
     ax.tick_params(axis='x', colors=LABEL_DARK, labelsize=9.5, length=0)
@@ -1511,37 +1519,46 @@ def _generate_evs_charts(filtered, top_n=10):
     fig, (axc, axv) = plt.subplots(1, 2, figsize=(13, 4.4), dpi=160)
     fig.patch.set_facecolor('white')
 
-    def _style(ax):
+    from matplotlib.ticker import FuncFormatter, MaxNLocator
+    # Many engine families squish the x labels — render them vertical so each
+    # reads cleanly (flip from slanted to fully vertical).
+    rot = 90 if len(names) >= 5 else 25
+
+    def _style(ax, money):
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
         ax.spines['left'].set_visible(False)
         ax.spines['bottom'].set_color('#cbd2dc')
         ax.grid(True, axis='y', **GRID_KW)
         ax.set_axisbelow(True)
-        ax.tick_params(axis='y', left=False, labelleft=False)
-        ax.tick_params(axis='x', colors=LABEL_DARK, labelsize=9.5, length=0)
+        ax.tick_params(axis='y', left=False, labelleft=True, colors=LABEL_DARK, labelsize=8.5)
+        if money:
+            ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"£{v:,.0f}m"))
+        else:
+            ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+        ax.tick_params(axis='x', colors=LABEL_DARK, labelsize=9, length=0)
         ax.title.set_color(HOPPER_NAVY)
         ax.title.set_fontsize(11.5)
         ax.title.set_weight('bold')
 
     # COUNT panel (blue)
-    _style(axc)
+    _style(axc, False)
     barsc = axc.bar(names, counts, color=COUNT_HEX, width=0.62)
     for b, c in zip(barsc, counts):
         axc.text(b.get_x() + b.get_width()/2, b.get_height(), str(c),
                  ha='center', va='bottom', fontsize=8.5, color=HOPPER_NAVY, weight='bold')
-    axc.set_xticklabels(names, rotation=20, ha='right')
+    axc.set_xticklabels(names, rotation=rot, ha='center' if rot == 90 else 'right', va='top')
     axc.set_title("By Number of Opportunities", loc='left', pad=8)
     axc.margins(y=0.18)
 
     # VALUE panel (gold)
-    _style(axv)
+    _style(axv, True)
     barsv = axv.bar(names, values, color=VALUE_HEX, width=0.62)
     for b, v in zip(barsv, values):
         if v > 0:
             axv.text(b.get_x() + b.get_width()/2, b.get_height(), f"£{v:,.0f}m",
                      ha='center', va='bottom', fontsize=8, color=HOPPER_NAVY, weight='bold')
-    axv.set_xticklabels(names, rotation=20, ha='right')
+    axv.set_xticklabels(names, rotation=rot, ha='center' if rot == 90 else 'right', va='top')
     axv.set_title("By CRP term benefit (£m)", loc='left', pad=8)
     axv.margins(y=0.18)
 
@@ -1586,8 +1603,9 @@ def _generate_structure_charts(filtered):
     fig, (axv, axc) = plt.subplots(1, 2, figsize=(13, 4.4), dpi=160)
     fig.patch.set_facecolor('white')
 
+    from matplotlib.ticker import MaxNLocator
     # VALUE panel (gold) — vertical bars
-    _style_value_axis(axv)
+    _style_value_axis(axv, show_y=True)
     bv = axv.bar(range(len(names)), vals, color=VALUE_HEX, width=0.6)
     axv.set_xticks(range(len(names)))
     axv.set_xticklabels(labels, fontsize=_fs, color=LABEL_DARK)
@@ -1599,7 +1617,8 @@ def _generate_structure_charts(filtered):
     axv.set_title("By CRP term benefit (£m)", loc='left', pad=8)
 
     # COUNT panel (blue) — vertical bars
-    _style_value_axis(axc)
+    _style_value_axis(axc, show_y=True, y_money=False)
+    axc.yaxis.set_major_locator(MaxNLocator(integer=True))
     bc = axc.bar(range(len(names)), counts, color=COUNT_HEX, width=0.6)
     axc.set_xticks(range(len(names)))
     axc.set_xticklabels(labels, fontsize=_fs, color=LABEL_DARK)
@@ -2635,16 +2654,24 @@ def _generate_status_chart(stages, p_vals, p_counts):
     import matplotlib.pyplot as plt
     if not stages:
         return None
-    labels = ["\n".join(textwrap.wrap(str(s), width=12)) or str(s) for s in stages]
+    from matplotlib.ticker import MaxNLocator
+    # When there are many stages the horizontal labels squish/overlap — flip
+    # them vertical (no wrapping) so each reads cleanly; few stages stay wrapped.
+    many = len(stages) >= 5
+    labels = [str(s) if many else ("\n".join(textwrap.wrap(str(s), width=12)) or str(s)) for s in stages]
+    rot = 90 if many else 0
     fig, (axv, axc) = plt.subplots(1, 2, figsize=(13, 5.3), dpi=160)
     fig.patch.set_facecolor('white')
 
-    def _panel(ax, vals, color, fmt, title):
-        _style_value_axis(ax)
+    def _panel(ax, vals, color, fmt, title, money):
+        _style_value_axis(ax, show_y=True, y_money=money)
+        if not money:
+            ax.yaxis.set_major_locator(MaxNLocator(integer=True))
         xs = list(range(len(stages)))
         bars = ax.bar(xs, vals, color=color, width=0.6, zorder=3)
         ax.set_xticks(xs)
-        ax.set_xticklabels(labels, fontsize=8, color=LABEL_DARK)
+        ax.set_xticklabels(labels, fontsize=8, color=LABEL_DARK, rotation=rot,
+                           ha='center', va='top')
         top = max(vals) if (vals and max(vals) > 0) else 1
         ax.set_ylim(0, top * 1.24)
         for b, v in zip(bars, vals):
@@ -2653,8 +2680,8 @@ def _generate_status_chart(stages, p_vals, p_counts):
                         ha='center', va='bottom', fontsize=8.5, color=HOPPER_NAVY, weight='bold')
         ax.set_title(title, loc='left', pad=8, color=HOPPER_NAVY, fontsize=11, fontweight='bold')
 
-    _panel(axv, p_vals, VALUE_HEX, lambda v: f"£{v:,.0f}m", "By CRP term benefit (£m)")
-    _panel(axc, p_counts, COUNT_HEX, lambda v: f"{int(v)}", "By Number of Opportunities")
+    _panel(axv, p_vals, VALUE_HEX, lambda v: f"£{v:,.0f}m", "By CRP term benefit (£m)", True)
+    _panel(axc, p_counts, COUNT_HEX, lambda v: f"{int(v)}", "By Number of Opportunities", False)
     # Reserve bottom room for the wrapped multi-line stage labels and keep the
     # two panels apart; bbox_inches='tight' then captures everything cleanly.
     fig.subplots_adjust(left=0.03, right=0.97, top=0.9, bottom=0.28, wspace=0.30)
@@ -2724,15 +2751,20 @@ def _segment_charts(seg_rows):
         ax2 = None
     fig.patch.set_facecolor('white')
 
-    # ---------- Panel 1: adaptive value / time view ----------
-    # Prefer the rich profit-by-year shape (the Annual-Profit benchmark) when
-    # profit is spread across the window; otherwise rank opportunities by
-    # whichever metric carries value (CRP, else profit) coloured by maturity;
-    # else fall back to an engine-value-stream count. This keeps the detailed
-    # year chart where it's informative and never renders empty.
-    if abs(prof_total) > 0:
-        # Vertical profit-by-year: X = years, Y = GBP m with ~5m gridlines.
-        from matplotlib.ticker import MultipleLocator, MaxNLocator
+    # ---------- Panel 1: adaptive view ----------
+    from matplotlib.ticker import MaxNLocator
+    nonzero_years = sum(1 for v in yvals if v)
+    n_rows = len(seg_rows)
+    # Profit-by-year only when it reads as a genuine time series: a tiny segment
+    # whose single opportunity timeline IS the story (n<=2), or profit that
+    # actually spans 3+ years. Otherwise the bars are mostly empty year slots
+    # (the "blank spots"), so show a count breakdown on whichever dimension
+    # varies — that never leaves blank gaps and works even when CRP is all zero.
+    use_time = (n_rows <= 2 and abs(prof_total) > 0) or nonzero_years >= 3
+    if use_time:
+        # Vertical profit-by-year: X = years, Y = GBP m. Nice tick steps at ANY
+        # scale (so tiny-value charts still show reference lines + numbers,
+        # rather than just the £0m line).
         _style_value_axis(ax1, show_y=True)
         xs = list(range(len(years)))
         bars = ax1.bar(xs, yvals, color=VALUE_HEX, width=0.6, zorder=3)
@@ -2741,7 +2773,7 @@ def _segment_charts(seg_rows):
         vmax, vmin = max(yvals), min(yvals)
         top = vmax if vmax > 0 else 1
         ax1.set_ylim((vmin * 1.18 if vmin < 0 else 0), top * 1.30)
-        ax1.yaxis.set_major_locator(MultipleLocator(5) if top <= 50 else MaxNLocator(nbins=6))
+        ax1.yaxis.set_major_locator(MaxNLocator(nbins=6, steps=[1, 2, 2.5, 5, 10], min_n_ticks=4))
         if vmin < 0:
             ax1.axhline(0, color='#9aa3af', lw=0.8, zorder=2)
         for b, v in zip(bars, yvals):
@@ -2760,58 +2792,40 @@ def _segment_charts(seg_rows):
         ax1.grid(True, axis='x', **GRID_KW)
         ax1.set_axisbelow(True)
         ax1.tick_params(colors=LABEL_DARK, labelsize=9, length=0)
+        ax1.xaxis.set_major_locator(MaxNLocator(integer=True))   # whole-number counts
 
-        def _lbl(r):
-            cust = (str(r.get('customer', '') or '-').strip() or '-')
-            evs = str(r.get('engine_value_stream', r.get('top_level_evs', '')) or '').strip()
-            return f"{cust[:24]} - {evs[:14]}" if evs else cust[:30]
-
-        if crp_total > 0:
-            items = [(_lbl(r), _val(r.get('crp_term_benefit')), str(r.get('maturity', '') or '')) for r in seg_rows]
-            nz = [it for it in items if it[1]]
-            items = (nz if nz else items)
-            items.sort(key=lambda x: abs(x[1]), reverse=True)
-            items = items[:9][::-1]
-            labels = [it[0] for it in items]
-            vals = [it[1] for it in items]
-            cols = [_maturity_color(it[2]) for it in items]
-            is_val = True
-            if mat_varies:
-                ax1.legend(handles=[Patch(facecolor=HOPPER_GREEN, label='Mature'),
-                                    Patch(facecolor='#c98a2e', label='Immature')],
-                           loc='lower right', fontsize=7.5, frameon=False)
-            title = "Opportunities by CRP term benefit (GBP m)"
-        else:
-            by = {}
+        # Count breakdown on whichever dimension actually varies — engine value
+        # stream first, then customer. Counts never produce empty/zero bars the
+        # way an early-stage CRP ranking would.
+        def _count_by(get):
+            d = {}
             for r in seg_rows:
-                e = str(r.get('engine_value_stream', r.get('top_level_evs', '')) or 'Unknown').strip() or 'Unknown'
-                by[e] = by.get(e, 0) + 1
-            order = sorted(by.items(), key=lambda x: x[1], reverse=True)[:9][::-1]
-            labels = [e[:26] for e, _ in order]
-            vals = [c for _, c in order]
-            cols = [COUNT_HEX] * len(order)
-            is_val = False
-            title = "Opportunities by engine value stream (count)"
-
+                k = str(get(r) or '').strip() or 'Unknown'
+                d[k] = d.get(k, 0) + 1
+            return d
+        evs_counts = _count_by(lambda r: r.get('engine_value_stream', r.get('top_level_evs', '')))
+        cust_counts = _count_by(lambda r: r.get('customer', ''))
+        if len(evs_counts) >= 2:
+            by, title = evs_counts, "Opportunities by engine value stream (count)"
+        elif len(cust_counts) >= 2:
+            by, title = cust_counts, "Opportunities by customer (count)"
+        else:
+            by, title = evs_counts, "Opportunities by engine value stream (count)"
+        order = sorted(by.items(), key=lambda x: x[1], reverse=True)[:10][::-1]
+        labels = [e[:26] for e, _ in order]
+        vals = [c for _, c in order]
         yp = list(range(len(labels)))
-        bars = ax1.barh(yp, vals, color=cols, height=0.62, zorder=3)
+        bars = ax1.barh(yp, vals, color=COUNT_HEX, height=0.62, zorder=3)
         ax1.set_yticks(yp)
         ax1.set_yticklabels(labels, fontsize=9, color=LABEL_DARK)
-        vmax = max(vals) if vals else 1
-        vmin = min(vals) if vals else 0
-        hi = vmax * 1.32 if vmax > 0 else 1
-        lo = vmin * 1.18 if vmin < 0 else 0
-        ax1.set_xlim(lo, hi)
+        hi = (max(vals) if vals else 1) * 1.30
+        ax1.set_xlim(0, hi)
         ax1.set_ylim(-0.8, max(0.8, len(labels) - 0.2))
-        if vmin < 0:
-            ax1.axvline(0, color='#9aa3af', lw=0.8, zorder=2)
-        rng = (hi - lo) or 1
+        rng = hi or 1
         for b, v in zip(bars, vals):
-            txt = (f" GBP {v:,.1f}m" if is_val else f" {int(v)}")
-            ax1.text(b.get_width() + (rng * 0.012 if v >= 0 else -rng * 0.012),
-                     b.get_y() + b.get_height() / 2, txt,
-                     va='center', ha='left' if v >= 0 else 'right',
-                     fontsize=8.5, color=HOPPER_NAVY, weight='bold')
+            ax1.text(b.get_width() + rng * 0.012, b.get_y() + b.get_height() / 2,
+                     f" {int(v)}", va='center', ha='left',
+                     fontsize=9, color=HOPPER_NAVY, weight='bold')
         ax1.set_title(title, loc='left', pad=8, color=HOPPER_NAVY, fontsize=11, fontweight='bold')
 
     # ---------- Panel 2: maturity & onerous risk profile (only when it splits) ----------
@@ -2819,7 +2833,7 @@ def _segment_charts(seg_rows):
         for sp in ('top', 'right', 'left', 'bottom'):
             ax2.spines[sp].set_visible(False)
         ax2.tick_params(left=False, bottom=False, labelbottom=False)
-        onerous_segs = [(oc['not'], HOPPER_GREEN), (oc['on'], HOPPER_RED), (oc['oth'], HOPPER_SLATE)]
+        onerous_segs = [(oc['not'], HOPPER_TEAL), (oc['on'], HOPPER_RED), (oc['oth'], HOPPER_SLATE)]
         maturity_segs = [(mc['mat'], HOPPER_GREEN), (mc['imm'], '#c98a2e'), (mc['oth'], HOPPER_SLATE)]
         n = len(seg_rows)
         for yi, segs in [(0, onerous_segs), (1, maturity_segs)]:
@@ -2835,12 +2849,13 @@ def _segment_charts(seg_rows):
         ax2.set_yticklabels(["Onerous", "Maturity"], fontsize=9, color=HOPPER_NAVY)
         ax2.set_xlim(0, max(1, n) * 1.04)
         ax2.set_ylim(-0.7, 1.7)
-        ax2.set_title("Maturity & onerous profile", loc='left', pad=8,
+        ax2.set_title("Maturity and Onerous Profile", loc='left', pad=8,
                       color=HOPPER_NAVY, fontsize=11, fontweight='bold')
-        ax2.legend(handles=[Patch(facecolor=HOPPER_GREEN, label='Mature / Not onerous'),
+        ax2.legend(handles=[Patch(facecolor=HOPPER_GREEN, label='Mature'),
                             Patch(facecolor='#c98a2e', label='Immature'),
+                            Patch(facecolor=HOPPER_TEAL, label='Not onerous'),
                             Patch(facecolor=HOPPER_RED, label='Onerous')],
-                   loc='lower right', fontsize=6.6, frameon=False)
+                   loc='lower right', fontsize=6.4, frameon=False, ncol=2)
 
     # No inter-panel separator — it used to cut through the risk panel's row labels.
     return _finish_fig(fig, pad=1.8, seps=None)
@@ -2970,11 +2985,13 @@ def _maturity_color(label):
 
 
 def _onerous_color(label):
-    """Onerous status is a risk signal: not-onerous = good (green), onerous =
-    at-risk (red). Check 'not' first — 'Not Onerous' contains 'onerous'."""
+    """Onerous status is a risk signal: not-onerous = good (teal), onerous =
+    at-risk (red). Teal (not green) keeps 'Not onerous' visually distinct from
+    'Mature' (which is green) so the two never share a colour. Check 'not'
+    first — 'Not Onerous' contains 'onerous'."""
     n = str(label).strip().lower()
     if "not" in n:
-        return HOPPER_GREEN
+        return HOPPER_TEAL
     if "onerous" in n:
         return HOPPER_RED
     return HOPPER_SLATE

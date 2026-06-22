@@ -320,29 +320,16 @@ export function ExportModal({ open, onOpenChange, activeFile, filters }: Props) 
           >
             Cancel
           </Button>
-          {/* Primary action: the Detailed PDF for Hopper files, the standard
-              branded PDF otherwise. Hopper files also get an Ultra-detailed
-              variant (full register + VP/region breakdowns, denser pages). */}
+          {/* Single primary action: the Detailed PDF for Hopper files, the
+              standard branded PDF otherwise. */}
           <Button
             onClick={() => handleExport(isHopper)}
             disabled={!!busy || aiBusy || !activeFile}
             className="gap-2 bg-[var(--chart-2)] text-[oklch(0.17_0.03_165)] hover:bg-[var(--chart-2)]/90"
           >
-            {busy === "std" || busy === "detailed" ? <Spinner className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
-            {busy === "std" || busy === "detailed"
-              ? "Generating…"
-              : isHopper ? "Generate Detailed PDF" : "Generate PDF"}
+            {busy ? <Spinner className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
+            {busy ? "Generating…" : isHopper ? "Generate Detailed PDF" : "Generate PDF"}
           </Button>
-          {isHopper ? (
-            <Button
-              onClick={() => handleExport(true, true)}
-              disabled={!!busy || aiBusy || !activeFile}
-              className="gap-2 bg-[var(--chart-2)] text-[oklch(0.17_0.03_165)] hover:bg-[var(--chart-2)]/90"
-            >
-              {busy === "ultra" ? <Spinner className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
-              {busy === "ultra" ? "Generating…" : "Ultra-detailed"}
-            </Button>
-          ) : null}
         </DialogFooter>
       </DialogContent>
     </Dialog>
