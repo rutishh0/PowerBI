@@ -1230,7 +1230,11 @@ def _add_separators(fig, axes):
     try:
         fig.canvas.draw()
         for a, b in zip(axes, axes[1:]):
-            x = (a.get_position().x1 + b.get_position().x0) / 2.0
+            # Sit just right of the left panel's plot edge rather than at the
+            # mid-gap: the right panel's y-axis tick labels occupy the right
+            # side of the gap, so a centred rule would cut through them.
+            pa, pb = a.get_position(), b.get_position()
+            x = pa.x1 + min((pb.x0 - pa.x1) * 0.5, 0.012)
             fig.add_artist(plt.Line2D([x, x], [0.07, 0.93], transform=fig.transFigure,
                                       color='#d3d9e2', linewidth=0.9))
     except Exception:
@@ -1493,7 +1497,7 @@ def _generate_customer_chart(filtered, top_n=20):
     return buf
 
 
-def _generate_evs_charts(filtered, top_n=10):
+def _generate_evs_charts(filtered, top_n=10, is_global=True):
     """Two-panel EVS analysis: opportunity COUNT (blue) and CRP VALUE (gold)
     per engine value stream, side by side with a separator. Showing both is
     the analytical point — where the *activity* is vs where the *value* is."""
@@ -1520,9 +1524,10 @@ def _generate_evs_charts(filtered, top_n=10):
     fig.patch.set_facecolor('white')
 
     from matplotlib.ticker import FuncFormatter, MaxNLocator
-    # Many engine families squish the x labels — render them vertical so each
-    # reads cleanly (flip from slanted to fully vertical).
-    rot = 90 if len(names) >= 5 else 25
+    # Only the unfiltered (global) report has enough engine families to squish
+    # the x labels — there we flip them fully vertical; filtered reports keep
+    # the gentler slanted labels.
+    rot = 90 if (is_global and len(names) >= 5) else 25
 
     def _style(ax, money):
         ax.spines['top'].set_visible(False)
@@ -2404,7 +2409,7 @@ def generate_hopper_pdf_report(
         pdf._page_header("Engine Value Stream Analysis")
         avail_w = pdf.PAGE_W - pdf.MARGIN_L - pdf.MARGIN_R
         try:
-            ebuf = _generate_evs_charts(filtered, top_n=10)
+            ebuf = _generate_evs_charts(filtered, top_n=10, is_global=not (filters or {}))
             if ebuf is not None:
                 pdf.image(ebuf, x=pdf.MARGIN_L, w=avail_w)
                 pdf.ln(3)
@@ -2644,7 +2649,7 @@ def _cumulative_overlay(ax, values, line_color=HOPPER_NAVY):
     return ax2
 
 
-def _generate_status_chart(stages, p_vals, p_counts):
+def _generate_status_chart(stages, p_vals, p_counts, is_global=True):
     """Status overview chart: two panels (CRP value, opportunity count) with a
     value label on every bar. Stage names are wrapped (never truncated) with
     generous bottom spacing so no x-axis label is clipped."""
@@ -2655,11 +2660,12 @@ def _generate_status_chart(stages, p_vals, p_counts):
     if not stages:
         return None
     from matplotlib.ticker import MaxNLocator
-    # When there are many stages the horizontal labels squish/overlap — flip
-    # them vertical (no wrapping) so each reads cleanly; few stages stay wrapped.
-    many = len(stages) >= 5
-    labels = [str(s) if many else ("\n".join(textwrap.wrap(str(s), width=12)) or str(s)) for s in stages]
-    rot = 90 if many else 0
+    # Only the unfiltered (global) report packs in enough stages to squish the
+    # horizontal labels — there we flip them vertical (no wrapping). Filtered
+    # reports keep the wrapped horizontal labels.
+    vertical = is_global and len(stages) >= 5
+    labels = [str(s) if vertical else ("\n".join(textwrap.wrap(str(s), width=12)) or str(s)) for s in stages]
+    rot = 90 if vertical else 0
     fig, (axv, axc) = plt.subplots(1, 2, figsize=(13, 5.3), dpi=160)
     fig.patch.set_facecolor('white')
 
@@ -2846,16 +2852,16 @@ def _segment_charts(seg_rows):
                          color='white', fontsize=8.5, weight='bold')
                 left += cnt
         ax2.set_yticks([0, 1])
-        ax2.set_yticklabels(["Onerous", "Maturity"], fontsize=9, color=HOPPER_NAVY)
+        ax2.set_yticklabels(["Onerous status", "Maturity"], fontsize=9.5, color=HOPPER_NAVY)
         ax2.set_xlim(0, max(1, n) * 1.04)
-        ax2.set_ylim(-0.7, 1.7)
+        ax2.set_ylim(-0.7, 1.8)
         ax2.set_title("Maturity and Onerous Profile", loc='left', pad=8,
                       color=HOPPER_NAVY, fontsize=11, fontweight='bold')
         ax2.legend(handles=[Patch(facecolor=HOPPER_GREEN, label='Mature'),
                             Patch(facecolor='#c98a2e', label='Immature'),
                             Patch(facecolor=HOPPER_TEAL, label='Not onerous'),
                             Patch(facecolor=HOPPER_RED, label='Onerous')],
-                   loc='lower right', fontsize=6.4, frameon=False, ncol=2)
+                   loc='lower right', fontsize=8.5, frameon=False, ncol=2)
 
     # No inter-panel separator — it used to cut through the risk panel's row labels.
     return _finish_fig(fig, pad=1.8, seps=None)
@@ -3393,7 +3399,7 @@ def generate_hopper_detailed_pdf_report(parsed_data: dict, sections_to_include: 
     st_count = _aggregate(filtered, "status", count=True)
     p_counts = [st_count.get(s, 0) for s in stages]
     try:
-        buf = _generate_status_chart(stages, p_vals, p_counts)
+        buf = _generate_status_chart(stages, p_vals, p_counts, is_global=not filters)
         if buf is not None:
             _embed_fit(pdf, buf, pdf.MARGIN_L, avail_w, 96)
             pdf.ln(2)
@@ -3505,7 +3511,7 @@ def generate_hopper_detailed_pdf_report(parsed_data: dict, sections_to_include: 
     pdf.add_page()
     pdf._page_header("Engine Value Stream Analysis")
     try:
-        ebuf = _generate_evs_charts(filtered, top_n=12)
+        ebuf = _generate_evs_charts(filtered, top_n=12, is_global=not filters)
         if ebuf is not None:
             _embed_fit(pdf, ebuf, pdf.MARGIN_L, avail_w, 90)
             pdf.ln(2)
