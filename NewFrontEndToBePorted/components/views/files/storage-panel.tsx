@@ -35,7 +35,7 @@ export function StoragePanel({ onParsed }: StoragePanelProps) {
   const [files, setFiles] = useState<R2FileRecord[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [pendingActions, setPendingActions] = useState<Set<number>>(new Set())
+  const [pendingActions, setPendingActions] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -65,19 +65,19 @@ export function StoragePanel({ onParsed }: StoragePanelProps) {
     if (unlocked) void refetch()
   }, [unlocked, refetch])
 
-  function markPending(id: number, on: boolean) {
+  function markPending(key: string, on: boolean) {
     setPendingActions((prev) => {
       const next = new Set(prev)
-      if (on) next.add(id)
-      else next.delete(id)
+      if (on) next.add(key)
+      else next.delete(key)
       return next
     })
   }
 
   async function handleParse(file: R2FileRecord) {
-    markPending(file.id, true)
+    markPending(file.r2_key, true)
     try {
-      const parsed = await parseR2File(file.id)
+      const parsed = await parseR2File(file.r2_key)
       onParsed(parsed)
       toast.success(`${file.filename} loaded to dashboard`)
     } catch (err) {
@@ -89,20 +89,20 @@ export function StoragePanel({ onParsed }: StoragePanelProps) {
         toast.error(`Parse failed: ${file.filename}`, { description: msg })
       }
     } finally {
-      markPending(file.id, false)
+      markPending(file.r2_key, false)
     }
   }
 
   async function handleDelete(file: R2FileRecord) {
-    markPending(file.id, true)
+    markPending(file.r2_key, true)
     try {
-      await deleteR2File(file.id)
+      await deleteR2File(file.r2_key)
       toast.success(`Removed ${file.filename}`)
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Delete failed"
       toast.error(`Couldn't remove ${file.filename}`, { description: msg })
     } finally {
-      markPending(file.id, false)
+      markPending(file.r2_key, false)
       await refetch()
     }
   }

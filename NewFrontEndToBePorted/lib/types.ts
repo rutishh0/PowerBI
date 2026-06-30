@@ -449,7 +449,9 @@ export interface EmployeeWhereaboutsData {
  * public_url, file_size, upload_date — upload_date is already coerced
  * to an ISO string server-side at storage.py:258-259). */
 export interface R2FileRecord {
-  id: number
+  /** DB row id when a metadata row exists; null for files listed straight
+   * from the R2 bucket. All file actions key off `r2_key`, not `id`. */
+  id: number | null
   filename: string
   r2_key: string
   public_url: string | null

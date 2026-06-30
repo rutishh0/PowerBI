@@ -28,7 +28,7 @@ import {
 
 interface StorageFilesTableProps {
   files: R2FileRecord[]
-  pendingActions: Set<number>
+  pendingActions: Set<string>
   onParse: (file: R2FileRecord) => void
   onDelete: (file: R2FileRecord) => void
 }
@@ -52,9 +52,12 @@ export function StorageFilesTable({
         </TableHeader>
         <TableBody>
           {files.map((f) => {
-            const pending = pendingActions.has(f.id)
+            const pending = pendingActions.has(f.r2_key)
+            // Only workbook types can be re-parsed into the dashboard; other
+            // archived files (PDF/DOCX/ZIP/…) are still listed & downloadable.
+            const parseable = /\.(xlsx|xls|xlsb|xlsm|pptx)$/i.test(f.filename)
             return (
-              <TableRow key={f.id}>
+              <TableRow key={f.r2_key}>
                 <TableCell>
                   <div className="flex items-center gap-2.5 min-w-0">
                     <FileSpreadsheet className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -79,24 +82,26 @@ export function StorageFilesTable({
                       title="Download"
                       disabled={pending}
                     >
-                      <a href={r2FileDownloadUrl(f.id)} download={f.filename}>
+                      <a href={r2FileDownloadUrl(f.r2_key)} download={f.filename}>
                         <Download className="h-3.5 w-3.5" />
                       </a>
                     </Button>
 
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      title="Parse & load to dashboard"
-                      onClick={() => onParse(f)}
-                      disabled={pending}
-                    >
-                      {pending ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Play className="h-3.5 w-3.5" />
-                      )}
-                    </Button>
+                    {parseable ? (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title="Parse & load to dashboard"
+                        onClick={() => onParse(f)}
+                        disabled={pending}
+                      >
+                        {pending ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Play className="h-3.5 w-3.5" />
+                        )}
+                      </Button>
+                    ) : null}
 
                     <AlertDialog>
                       <AlertDialogTrigger asChild>

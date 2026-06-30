@@ -1154,10 +1154,15 @@ def r2_chunk_finalize():
 @app.route("/api/r2/files", methods=["GET"])
 @login_required
 def list_r2_files():
-    """List all R2-stored files (metadata from DB)."""
-    from storage import get_all_r2_files
-    files = get_all_r2_files()
-    return jsonify(files)
+    """List all R2-stored files.
+
+    Lists the R2 bucket DIRECTLY (not the Postgres metadata table) so the
+    archive reflects what is actually in cloud storage even when the DB is
+    empty or unreachable — every file action below works by r2_key, so no DB
+    row is needed.
+    """
+    from storage import list_r2_objects
+    return jsonify(list_r2_objects())
 
 
 @app.route("/api/r2/files/<int:file_id>", methods=["GET"])
@@ -1230,6 +1235,80 @@ def parse_r2_file(file_id):
         import traceback
         traceback.print_exc()
         return jsonify({"error": f"Parse failed: {str(e)}"}), 500
+
+
+# ---- Key-based R2 file actions (work straight off the bucket, no DB id) ------
+# The archive is listed directly from R2, so files identified only by their
+# r2_key (no metadata row) can still be downloaded, parsed and deleted.
+
+def _parse_r2_key_and_store(r2_key, filename):
+    """Download an R2 object by key, parse it, and stash it in the in-memory
+    store for the dashboard. Returns a Flask response tuple."""
+    file_bytes = download_from_r2(r2_key)
+    if not file_bytes:
+        return jsonify({"error": "Failed to download from R2"}), 500
+    sid = _get_session_id()
+    try:
+        parsed = parse_file(io.BytesIO(file_bytes), filename=filename)
+        parsed = _sanitize_for_json(parsed)
+        if sid not in _parsed_store:
+            _parsed_store[sid] = {}
+        _parsed_store[sid][filename] = {
+            "type": "excel",
+            "file_type": parsed.get("file_type", "UNKNOWN"),
+            "parsed": parsed,
+            "file_bytes": file_bytes,
+        }
+        return jsonify({"files": {filename: parsed}})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Parse failed: {str(e)}"}), 500
+
+
+@app.route("/api/r2/download", methods=["GET"])
+@login_required
+def download_r2_by_key():
+    """Download an R2 object by its key (passed as ?key=...)."""
+    from storage import _filename_from_key
+    r2_key = (request.args.get("key") or "").strip()
+    if not r2_key:
+        return jsonify({"error": "Missing key"}), 400
+    file_bytes = download_from_r2(r2_key)
+    if not file_bytes:
+        return jsonify({"error": "File not found"}), 404
+    return send_file(
+        io.BytesIO(file_bytes),
+        as_attachment=True,
+        download_name=_filename_from_key(r2_key),
+    )
+
+
+@app.route("/api/r2/parse", methods=["POST"])
+@login_required
+def parse_r2_by_key():
+    """Parse an R2 object by its key (JSON body: {"r2_key": "..."})."""
+    from storage import _filename_from_key
+    data = request.get_json(silent=True) or {}
+    r2_key = (data.get("r2_key") or "").strip()
+    if not r2_key:
+        return jsonify({"error": "Missing r2_key"}), 400
+    return _parse_r2_key_and_store(r2_key, _filename_from_key(r2_key))
+
+
+@app.route("/api/r2/delete", methods=["DELETE"])
+@login_required
+def delete_r2_by_key():
+    """Delete an R2 object by its key (?key=...) plus any stale metadata row."""
+    from storage import delete_r2_metadata_by_key
+    r2_key = (request.args.get("key") or "").strip()
+    if not r2_key:
+        return jsonify({"error": "Missing key"}), 400
+    ok = delete_from_r2(r2_key)
+    delete_r2_metadata_by_key(r2_key)   # best-effort; no-op if DB is down
+    if not ok:
+        return jsonify({"error": "Failed to delete from R2"}), 500
+    return jsonify({"message": "File deleted from R2"})
 
 
 # ─────────────────────────────────────────────────────────────

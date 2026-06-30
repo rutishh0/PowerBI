@@ -14,6 +14,7 @@ R2:
 """
 
 import os
+import re
 import uuid
 from datetime import datetime
 
@@ -337,6 +338,22 @@ def get_r2_file_by_id(file_id):
     return None
 
 
+def delete_r2_metadata_by_key(r2_key):
+    """Best-effort delete of the metadata row(s) for an r2_key. No-op (and never
+    raises) when the DB is unavailable — the R2 object delete is the real action."""
+    connection = get_db_connection()
+    if not connection:
+        return
+    try:
+        cursor = connection.cursor()
+        cursor.execute("DELETE FROM r2_file_uploads WHERE r2_key = %s", (r2_key,))
+        connection.commit()
+    except Error as e:
+        print(f"Error deleting R2 metadata by key: {e}")
+    finally:
+        return_db_connection(connection)
+
+
 def delete_r2_file_by_id(file_id):
     """Delete R2 file metadata by ID. Returns the r2_key so caller can delete from R2."""
     connection = get_db_connection()
@@ -467,6 +484,48 @@ def generate_r2_key(original_filename):
     unique_id = uuid.uuid4().hex[:12]
     safe_name = original_filename.replace(" ", "_").replace("/", "_").replace("\\", "_")
     return f"{prefix}/{unique_id}_{safe_name}"
+
+
+def _filename_from_key(key):
+    """Recover the original filename from an R2 key, stripping the
+    ``<12-hex>_`` uniqueness prefix that ``generate_r2_key`` prepends."""
+    base = key.rsplit("/", 1)[-1]
+    m = re.match(r"^[0-9a-f]{12}_(.+)$", base)
+    return m.group(1) if m else base
+
+
+def list_r2_objects(prefix="uploads/"):
+    """List objects in the R2 bucket directly (no database involved).
+
+    This is the source of truth for the file archive: it works whenever R2
+    credentials are configured, independent of the Postgres metadata table
+    (which may be empty or unreachable). Returns newest-first dicts shaped like
+    the DB metadata rows so callers can treat them interchangeably.
+    """
+    client = get_r2_client()
+    if not client:
+        return []
+    out = []
+    try:
+        paginator = client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=R2_BUCKET_NAME, Prefix=prefix):
+            for obj in (page.get("Contents") or []):
+                key = obj["Key"]
+                if key.endswith("/") or obj.get("Size", 0) == 0:
+                    continue  # skip folder placeholders
+                lm = obj.get("LastModified")
+                out.append({
+                    "id": None,                       # no DB row — act by r2_key
+                    "r2_key": key,
+                    "filename": _filename_from_key(key),
+                    "public_url": f"{R2_PUBLIC_URL}/{key}" if R2_PUBLIC_URL else None,
+                    "file_size": obj.get("Size", 0),
+                    "upload_date": lm.isoformat() if lm else None,
+                })
+        out.sort(key=lambda f: f["upload_date"] or "", reverse=True)
+    except Exception as e:
+        print(f"R2 list error: {e}")
+    return out
 
 
 def create_multipart_upload(r2_key):

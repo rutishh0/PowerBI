@@ -280,10 +280,14 @@ export async function uploadFileChunked(
   })
   const finalized = await handle<ChunkFinalizeResponse>(finalizeRes)
 
-  // 4. parse — pulls file from R2 server-side and returns the parsed payload
+  // 4. parse — pulls file from R2 server-side and returns the parsed payload.
+  // Keyed by r2_key (not the DB id), so it works even if metadata persistence
+  // was unavailable during finalize.
   onProgress?.({ ratio: 1, phase: "parsing" })
-  const parseRes = await fetch(`/api/r2/files/${finalized.id}/parse`, {
+  const parseRes = await fetch("/api/r2/parse", {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ r2_key: finalized.r2_key }),
   })
   const parseBody = await handle<R2ParseResponse>(parseRes)
 
@@ -465,20 +469,26 @@ export async function listR2Files(): Promise<R2FileRecord[]> {
   return handle<R2FileRecord[]>(res)
 }
 
-/** DELETE /api/r2/files/{id} — remove from R2 AND the metadata row.
- * Tolerates 404 (already gone). */
-export async function deleteR2File(id: number): Promise<void> {
-  const res = await fetch(`/api/r2/files/${id}`, { method: "DELETE" })
+/** DELETE /api/r2/delete?key=… — remove the object from R2 (and any stale
+ * metadata row). Keyed by r2_key so it works without a DB id. Tolerates 404. */
+export async function deleteR2File(r2Key: string): Promise<void> {
+  const res = await fetch(`/api/r2/delete?key=${encodeURIComponent(r2Key)}`, {
+    method: "DELETE",
+  })
   if (!res.ok && res.status !== 404) {
     await handle(res)
   }
 }
 
-/** POST /api/r2/files/{id}/parse — re-parse a stored workbook on the
- * server and return it in the same UploadedFile[] shape uploads produce,
- * so callers can feed it straight into AppShell's `setFiles`. */
-export async function parseR2File(id: number): Promise<UploadedFile[]> {
-  const res = await fetch(`/api/r2/files/${id}/parse`, { method: "POST" })
+/** POST /api/r2/parse — re-parse a stored workbook on the server (by r2_key)
+ * and return it in the same UploadedFile[] shape uploads produce, so callers
+ * can feed it straight into AppShell's `setFiles`. */
+export async function parseR2File(r2Key: string): Promise<UploadedFile[]> {
+  const res = await fetch("/api/r2/parse", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ r2_key: r2Key }),
+  })
   const body = await handle<{ files: Record<string, ParsedFile> }>(res)
   const out: UploadedFile[] = []
   for (const [name, parsed] of Object.entries(body.files ?? {})) {
@@ -491,7 +501,7 @@ export async function parseR2File(id: number): Promise<UploadedFile[]> {
   return out
 }
 
-/** Pure helper — the URL a browser uses to download a stored file. */
-export function r2FileDownloadUrl(id: number): string {
-  return `/api/r2/files/${id}`
+/** Pure helper — the URL a browser uses to download a stored file (by r2_key). */
+export function r2FileDownloadUrl(r2Key: string): string {
+  return `/api/r2/download?key=${encodeURIComponent(r2Key)}`
 }
